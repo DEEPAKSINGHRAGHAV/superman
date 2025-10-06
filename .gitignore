@@ -1,0 +1,226 @@
+# ===========================================
+# Shivik Mart - Top Level .gitignore
+# ===========================================
+# This file consolidates gitignore patterns for:
+# - Mobile (React Native)
+# - Backend (Node.js/Express)
+# - Website (Future web development)
+# ===========================================
+
+# ===========================================
+# NODE.JS / NPM / YARN
+# ===========================================
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+.nyc_output
+
+# Dependency directories
+jspm_packages/
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Yarn v2
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# ===========================================
+# ENVIRONMENT VARIABLES
+# ===========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+config.env
+
+# ===========================================
+# LOGS
+# ===========================================
+logs
+*.log
+
+# ===========================================
+# REACT NATIVE / MOBILE
+# ===========================================
+# OSX
+.DS_Store
+
+# Xcode
+build/
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+xcuserdata
+*.xccheckout
+*.moved-aside
+DerivedData
+*.hmap
+*.ipa
+*.xcuserstate
+**/.xcode.env.local
+
+# Android/IntelliJ
+.idea
+.gradle
+local.properties
+*.iml
+*.hprof
+.cxx/
+*.keystore
+!debug.keystore
+.kotlin/
+
+# Bundle artifact
+*.jsbundle
+
+# Ruby / CocoaPods
+**/Pods/
+/vendor/bundle/
+
+# Temporary files created by Metro to check the health of the file watcher
+.metro-health-check*
+
+# ===========================================
+# WEB DEVELOPMENT
+# ===========================================
+# Next.js
+.next/
+out/
+
+# Nuxt.js
+.nuxt/
+dist/
+
+# Gatsby
+.cache/
+public/
+
+# Vuepress
+.vuepress/dist
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# Parcel-bundler cache
+.cache
+.parcel-cache
+
+# ===========================================
+# BUILD DIRECTORIES
+# ===========================================
+dist/
+build/
+out/
+
+# ===========================================
+# DATABASES
+# ===========================================
+# DynamoDB Local files
+.dynamodb/
+
+# ===========================================
+# IDE & EDITORS
+# ===========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===========================================
+# OPERATING SYSTEM
+# ===========================================
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+
+# ===========================================
+# TEMPORARY FILES
+# ===========================================
+tmp/
+temp/
+*.tmp
+*.temp
+
+# ===========================================
+# TESTING
+# ===========================================
+# Jest
+coverage/
+
+# ===========================================
+# MISC
+# ===========================================
+# TernJS port file
+.tern-port
+
+# Fastlane
+**/fastlane/report.xml
+**/fastlane/Preview.html
+**/fastlane/screenshots
+**/fastlane/test_output
+
+# ===========================================
+# PROJECT SPECIFIC
+# ===========================================
+# Test files
+test-*.json
+*-test.json
+
+# API documentation
+swagger.txt
+
+# Implementation plans
+*_implementation_plan.md
+
+# Features documentation
+features.txt
