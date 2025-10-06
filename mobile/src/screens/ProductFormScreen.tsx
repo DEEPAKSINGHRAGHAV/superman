@@ -11,7 +11,7 @@ import {
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Button, Input, LoadingSpinner } from '../components/ui';
-import { SafeBarcodeScanner } from '../components';
+import { HighQualityBarcodeScanner } from '../components';
 import { ProductFormData } from '../types';
 import apiService from '../services/api';
 
@@ -408,7 +408,7 @@ const ProductFormScreen: React.FC = () => {
                 animationType="slide"
                 presentationStyle="fullScreen"
             >
-                <SafeBarcodeScanner
+                <HighQualityBarcodeScanner
                     onScan={handleBarcodeScan}
                     onClose={handleCloseBarcodeScanner}
                 />
