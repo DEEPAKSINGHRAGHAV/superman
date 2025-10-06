@@ -6,13 +6,13 @@ export const API_BASE_URL = __DEV__
 // Product Categories
 export const PRODUCT_CATEGORIES = [
     'grocery',
+    'snacks',
+    'personal-care',
     'dairy',
     'fruits-vegetables',
     'meat-seafood',
     'bakery',
     'beverages',
-    'snacks',
-    'personal-care',
     'household',
     'electronics',
     'other'

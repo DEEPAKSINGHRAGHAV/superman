@@ -6,10 +6,12 @@ import {
     ScrollView,
     Alert,
     TouchableOpacity,
+    Modal,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
 import { Button, Input, LoadingSpinner } from '../components/ui';
+import { SafeBarcodeScanner } from '../components';
 import { ProductFormData } from '../types';
 import apiService from '../services/api';
 
@@ -46,10 +48,11 @@ const ProductFormScreen: React.FC = () => {
 
     const [isLoading, setIsLoading] = useState(false);
     const [errors, setErrors] = useState<Partial<ProductFormData>>({});
+    const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
 
     const categories = [
-        'grocery', 'dairy', 'fruits-vegetables', 'meat-seafood',
-        'bakery', 'beverages', 'snacks', 'personal-care',
+        'grocery', 'snacks', 'personal-care', 'dairy',
+        'fruits-vegetables', 'meat-seafood', 'bakery', 'beverages',
         'household', 'electronics', 'other'
     ];
 
@@ -102,6 +105,19 @@ const ProductFormScreen: React.FC = () => {
         if (errors[field]) {
             setErrors(prev => ({ ...prev, [field]: undefined }));
         }
+    };
+
+    const handleBarcodeScan = (barcode: string) => {
+        setFormData(prev => ({ ...prev, barcode }));
+        setShowBarcodeScanner(false);
+    };
+
+    const handleOpenBarcodeScanner = () => {
+        setShowBarcodeScanner(true);
+    };
+
+    const handleCloseBarcodeScanner = () => {
+        setShowBarcodeScanner(false);
     };
 
     const validateForm = () => {
@@ -218,170 +234,186 @@ const ProductFormScreen: React.FC = () => {
     }
 
     return (
-        <ScrollView style={getContainerStyle()}>
-            <View style={styles.content}>
-                <Input
-                    label="Product Name"
-                    placeholder="Enter product name"
-                    value={formData.name}
-                    onChangeText={(text) => handleInputChange('name', text)}
-                    error={errors.name}
-                    required
-                />
+        <>
+            <ScrollView style={getContainerStyle()}>
+                <View style={styles.content}>
+                    <Input
+                        label="Product Name"
+                        placeholder="Enter product name"
+                        value={formData.name}
+                        onChangeText={(text) => handleInputChange('name', text)}
+                        error={errors.name}
+                        required
+                    />
 
-                <Input
-                    label="Description"
-                    placeholder="Enter product description"
-                    value={formData.description}
-                    onChangeText={(text) => handleInputChange('description', text)}
-                    multiline
-                    numberOfLines={3}
-                />
+                    <Input
+                        label="Description"
+                        placeholder="Enter product description"
+                        value={formData.description}
+                        onChangeText={(text) => handleInputChange('description', text)}
+                        multiline
+                        numberOfLines={3}
+                    />
 
-                <Input
-                    label="SKU"
-                    placeholder="Enter SKU (A-Z, 0-9, -, _)"
-                    value={formData.sku}
-                    onChangeText={(text) => handleInputChange('sku', text.toUpperCase())}
-                    error={errors.sku}
-                    required
-                />
+                    <Input
+                        label="SKU"
+                        placeholder="Enter SKU (A-Z, 0-9, -, _)"
+                        value={formData.sku}
+                        onChangeText={(text) => handleInputChange('sku', text.toUpperCase())}
+                        error={errors.sku}
+                        required
+                    />
 
-                <View style={styles.categorySection}>
-                    <Text style={[styles.categoryLabel, { color: theme.colors.text }]}>
-                        Category *
-                    </Text>
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        style={styles.categoryScrollView}
-                    >
-                        {categories.map((category) => (
-                            <TouchableOpacity
-                                key={category}
-                                style={[
-                                    styles.categoryChip,
-                                    {
-                                        backgroundColor: formData.category === category
-                                            ? theme.colors.primary[500]
-                                            : theme.colors.surface,
-                                        borderColor: formData.category === category
-                                            ? theme.colors.primary[500]
-                                            : theme.colors.border,
-                                        borderWidth: formData.category === category ? 2 : 1,
-                                    }
-                                ]}
-                                onPress={() => {
-                                    console.log('Selected category:', category);
-                                    handleInputChange('category', category);
-                                }}
-                            >
-                                <Text style={[
-                                    styles.categoryChipText,
-                                    {
-                                        color: formData.category === category
-                                            ? theme.colors.white
-                                            : theme.colors.text,
-                                        fontWeight: formData.category === category ? 'bold' : '500'
-                                    }
-                                ]}>
-                                    {formData.category === category ? '✓ ' : ''}
-                                    {category.charAt(0).toUpperCase() + category.slice(1).replace('-', ' ')}
-                                </Text>
-                            </TouchableOpacity>
-                        ))}
-                    </ScrollView>
+                    <View style={styles.categorySection}>
+                        <Text style={[styles.categoryLabel, { color: theme.colors.text }]}>
+                            Category *
+                        </Text>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            style={styles.categoryScrollView}
+                        >
+                            {categories.map((category) => (
+                                <TouchableOpacity
+                                    key={category}
+                                    style={[
+                                        styles.categoryChip,
+                                        {
+                                            backgroundColor: formData.category === category
+                                                ? theme.colors.primary[500]
+                                                : theme.colors.surface,
+                                            borderColor: formData.category === category
+                                                ? theme.colors.primary[500]
+                                                : theme.colors.border,
+                                            borderWidth: formData.category === category ? 2 : 1,
+                                        }
+                                    ]}
+                                    onPress={() => {
+                                        console.log('Selected category:', category);
+                                        handleInputChange('category', category);
+                                    }}
+                                >
+                                    <Text style={[
+                                        styles.categoryChipText,
+                                        {
+                                            color: formData.category === category
+                                                ? theme.colors.white
+                                                : theme.colors.text,
+                                            fontWeight: formData.category === category ? 'bold' : '500'
+                                        }
+                                    ]}>
+                                        {formData.category === category ? '✓ ' : ''}
+                                        {category.charAt(0).toUpperCase() + category.slice(1).replace('-', ' ')}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    </View>
+
+                    <Input
+                        label="Barcode (Optional)"
+                        placeholder="Enter barcode (8-20 digits)"
+                        value={formData.barcode}
+                        onChangeText={(text) => handleInputChange('barcode', text.trim())}
+                        keyboardType="numeric"
+                        error={errors.barcode}
+                        rightIcon="camera-alt"
+                        onRightIconPress={handleOpenBarcodeScanner}
+                    />
+
+                    <Input
+                        label="Cost Price"
+                        placeholder="Enter cost price"
+                        value={formData.costPrice.toString()}
+                        onChangeText={(text) => handleInputChange('costPrice', parseFloat(text) || 0)}
+                        keyboardType="numeric"
+                        error={errors.costPrice}
+                        required
+                    />
+
+                    <Input
+                        label="MRP"
+                        placeholder="Enter MRP"
+                        value={formData.mrp.toString()}
+                        onChangeText={(text) => handleInputChange('mrp', parseFloat(text) || 0)}
+                        keyboardType="numeric"
+                        error={errors.mrp}
+                        required
+                    />
+
+                    <Input
+                        label="Selling Price"
+                        placeholder="Enter selling price"
+                        value={formData.sellingPrice.toString()}
+                        onChangeText={(text) => handleInputChange('sellingPrice', parseFloat(text) || 0)}
+                        keyboardType="numeric"
+                        error={errors.sellingPrice}
+                        required
+                    />
+
+                    <Input
+                        label="Current Stock"
+                        placeholder="Enter current stock"
+                        value={formData.currentStock.toString()}
+                        onChangeText={(text) => handleInputChange('currentStock', parseInt(text) || 0)}
+                        keyboardType="numeric"
+                    />
+
+                    <Input
+                        label="Minimum Stock Level"
+                        placeholder="Enter minimum stock level"
+                        value={formData.minStockLevel.toString()}
+                        onChangeText={(text) => handleInputChange('minStockLevel', parseInt(text) || 0)}
+                        keyboardType="numeric"
+                    />
+
+                    <Input
+                        label="Maximum Stock Level"
+                        placeholder="Enter maximum stock level"
+                        value={formData.maxStockLevel.toString()}
+                        onChangeText={(text) => handleInputChange('maxStockLevel', parseInt(text) || 0)}
+                        keyboardType="numeric"
+                    />
+
+                    <Input
+                        label="Brand"
+                        placeholder="Enter brand name"
+                        value={formData.brand}
+                        onChangeText={(text) => handleInputChange('brand', text)}
+                    />
+
+                    <Input
+                        label="Unit"
+                        placeholder="Enter unit (pcs, kg, liter, etc.)"
+                        value={formData.unit}
+                        onChangeText={(text) => handleInputChange('unit', text)}
+                        error={errors.unit}
+                    />
+
+                    <Button
+                        title={productId ? 'Update Product' : 'Create Product'}
+                        onPress={handleSubmit}
+                        variant="primary"
+                        size="lg"
+                        fullWidth
+                        loading={isLoading}
+                        style={styles.submitButton}
+                    />
                 </View>
+            </ScrollView>
 
-                <Input
-                    label="Barcode (Optional)"
-                    placeholder="Enter barcode (8-20 digits)"
-                    value={formData.barcode}
-                    onChangeText={(text) => handleInputChange('barcode', text.trim())}
-                    keyboardType="numeric"
-                    error={errors.barcode}
+            {/* Barcode Scanner Modal */}
+            <Modal
+                visible={showBarcodeScanner}
+                animationType="slide"
+                presentationStyle="fullScreen"
+            >
+                <SafeBarcodeScanner
+                    onScan={handleBarcodeScan}
+                    onClose={handleCloseBarcodeScanner}
                 />
-
-                <Input
-                    label="Cost Price"
-                    placeholder="Enter cost price"
-                    value={formData.costPrice.toString()}
-                    onChangeText={(text) => handleInputChange('costPrice', parseFloat(text) || 0)}
-                    keyboardType="numeric"
-                    error={errors.costPrice}
-                    required
-                />
-
-                <Input
-                    label="MRP"
-                    placeholder="Enter MRP"
-                    value={formData.mrp.toString()}
-                    onChangeText={(text) => handleInputChange('mrp', parseFloat(text) || 0)}
-                    keyboardType="numeric"
-                    error={errors.mrp}
-                    required
-                />
-
-                <Input
-                    label="Selling Price"
-                    placeholder="Enter selling price"
-                    value={formData.sellingPrice.toString()}
-                    onChangeText={(text) => handleInputChange('sellingPrice', parseFloat(text) || 0)}
-                    keyboardType="numeric"
-                    error={errors.sellingPrice}
-                    required
-                />
-
-                <Input
-                    label="Current Stock"
-                    placeholder="Enter current stock"
-                    value={formData.currentStock.toString()}
-                    onChangeText={(text) => handleInputChange('currentStock', parseInt(text) || 0)}
-                    keyboardType="numeric"
-                />
-
-                <Input
-                    label="Minimum Stock Level"
-                    placeholder="Enter minimum stock level"
-                    value={formData.minStockLevel.toString()}
-                    onChangeText={(text) => handleInputChange('minStockLevel', parseInt(text) || 0)}
-                    keyboardType="numeric"
-                />
-
-                <Input
-                    label="Maximum Stock Level"
-                    placeholder="Enter maximum stock level"
-                    value={formData.maxStockLevel.toString()}
-                    onChangeText={(text) => handleInputChange('maxStockLevel', parseInt(text) || 0)}
-                    keyboardType="numeric"
-                />
-
-                <Input
-                    label="Brand"
-                    placeholder="Enter brand name"
-                    value={formData.brand}
-                    onChangeText={(text) => handleInputChange('brand', text)}
-                />
-
-                <Input
-                    label="Unit"
-                    placeholder="Enter unit (pcs, kg, liter, etc.)"
-                    value={formData.unit}
-                    onChangeText={(text) => handleInputChange('unit', text)}
-                    error={errors.unit}
-                />
-
-                <Button
-                    title={productId ? 'Update Product' : 'Create Product'}
-                    onPress={handleSubmit}
-                    variant="primary"
-                    size="lg"
-                    fullWidth
-                    loading={isLoading}
-                    style={styles.submitButton}
-                />
-            </View>
-        </ScrollView>
+            </Modal>
+        </>
     );
 };
 

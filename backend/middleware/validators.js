@@ -63,7 +63,7 @@ const productValidation = {
         body('category')
             .notEmpty()
             .withMessage('Category is required')
-            .isIn(['grocery', 'dairy', 'fruits-vegetables', 'meat-seafood', 'bakery', 'beverages', 'snacks', 'personal-care', 'household', 'electronics', 'other'])
+            .isIn(['grocery', 'snacks', 'personal-care', 'dairy', 'fruits-vegetables', 'meat-seafood', 'bakery', 'beverages', 'household', 'electronics', 'other'])
             .withMessage('Invalid category'),
 
         body('unit')
