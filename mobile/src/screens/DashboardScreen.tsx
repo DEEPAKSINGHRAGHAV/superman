@@ -94,7 +94,7 @@ const DashboardScreen: React.FC = () => {
     };
 
     const handleScanBarcode = () => {
-        navigation.navigate(SCREEN_NAMES.BARCODE_SCANNER, { onScan: () => { } });
+        navigation.navigate(SCREEN_NAMES.BARCODE_SCANNER);
     };
 
     const handleNewOrder = () => {

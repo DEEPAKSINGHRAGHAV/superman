@@ -24,7 +24,7 @@ react {
     //   The list of variants to that are debuggable. For those we're going to
     //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
     //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
-    debuggableVariants = ["generalDebug"]
+    debuggableVariants = ["debug"]
 
     /* Bundling */
     //   A list containing the node command and its flags. Default is just 'node'.
@@ -82,7 +82,15 @@ android {
 
     namespace "com.shivikmart"
     
-    flavorDimensions "react-native-camera"
+    // Build optimizations
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    
+    kotlinOptions {
+        jvmTarget = '17'
+    }
     
     defaultConfig {
         applicationId "com.shivikmart"
@@ -90,13 +98,6 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
-    }
-    
-    productFlavors {
-        general {
-            dimension "react-native-camera"
-            matchingFallbacks = ["general", "mlkit"]
-        }
     }
     
     signingConfigs {
@@ -124,6 +125,7 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
+
 
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")

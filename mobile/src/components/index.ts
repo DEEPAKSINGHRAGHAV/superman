@@ -11,5 +11,9 @@ export { SearchBar } from './SearchBar';
 export { FilterChips } from './FilterChips';
 export { EmptyState } from './EmptyState';
 export { ErrorBoundary } from './ErrorBoundary';
-export { BarcodeScanner } from './BarcodeScanner';
+export { SafeBarcodeScanner } from './SafeBarcodeScanner';
+export { ManualBarcodeInput } from './ManualBarcodeInput';
+export { SimpleBarcodeScanner } from './SimpleBarcodeScanner';
+export { RobustBarcodeScanner } from './RobustBarcodeScanner';
+export { HighQualityBarcodeScanner } from './HighQualityBarcodeScanner';
 

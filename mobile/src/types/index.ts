@@ -233,7 +233,7 @@ export type RootStackParamList = {
     PurchaseOrderForm: { orderId?: string };
     InventoryTracking: undefined;
     StockMovements: undefined;
-    BarcodeScanner: { onScan: (data: string) => void };
+    BarcodeScanner: undefined;
     BulkUpload: undefined;
 };
 

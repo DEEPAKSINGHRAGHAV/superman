@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -7,23 +7,26 @@ import {
     Alert,
     PermissionsAndroid,
     Platform,
+    Dimensions,
 } from 'react-native';
-import { RNCamera } from 'react-native-camera';
+import { Camera } from 'react-native-camera-kit';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useTheme } from '../contexts/ThemeContext';
 
-interface BarcodeScannerProps {
+interface HighQualityBarcodeScannerProps {
     onScan: (data: string) => void;
     onClose: () => void;
 }
 
-export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
+export const HighQualityBarcodeScanner: React.FC<HighQualityBarcodeScannerProps> = ({
     onScan,
     onClose,
 }) => {
     const { theme } = useTheme();
     const [hasPermission, setHasPermission] = useState<boolean | null>(null);
     const [scanned, setScanned] = useState(false);
+    const [torchEnabled, setTorchEnabled] = useState(false);
+    const cameraRef = useRef<any>(null);
 
     useEffect(() => {
         requestCameraPermission();
@@ -52,16 +55,24 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
         }
     };
 
-    const handleBarCodeRead = ({ data }: { data: string }) => {
-        if (!scanned) {
+    const handleBarcodeRead = (event: any) => {
+        if (!scanned && event.nativeEvent.codeStringValue) {
             setScanned(true);
-            onScan(data);
-            onClose();
+            console.log('Barcode detected:', event.nativeEvent.codeStringValue);
+            onScan(event.nativeEvent.codeStringValue);
         }
+    };
+
+    const toggleTorch = () => {
+        setTorchEnabled(!torchEnabled);
     };
 
     const handleClose = () => {
         onClose();
+    };
+
+    const handleReset = () => {
+        setScanned(false);
     };
 
     if (hasPermission === null) {
@@ -108,26 +119,39 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
 
     return (
         <View style={styles.container}>
-            <RNCamera
+            <Camera
+                ref={cameraRef}
                 style={styles.camera}
-                type={RNCamera.Constants.Type.back}
-                flashMode={RNCamera.Constants.FlashMode.auto}
-                onBarCodeRead={handleBarCodeRead}
-                barCodeTypes={[
-                    RNCamera.Constants.BarCodeType.qr,
-                    RNCamera.Constants.BarCodeType.ean13,
-                    RNCamera.Constants.BarCodeType.ean8,
-                    RNCamera.Constants.BarCodeType.code128,
-                    RNCamera.Constants.BarCodeType.upc_a,
-                    RNCamera.Constants.BarCodeType.upc_e,
-                ]}
-            >
-                <View style={styles.overlay}>
-                    {/* Header */}
-                    <View style={[styles.header, { backgroundColor: theme.colors.overlay }]}>
-                        <Text style={[styles.headerTitle, { color: theme.colors.white }]}>
-                            Scan Barcode
-                        </Text>
+                showFrame={true}
+                scanBarcode={!scanned}
+                laserColor={theme.colors.primary[500]}
+                frameColor={theme.colors.primary[500]}
+                onReadCode={handleBarcodeRead}
+                torchMode={torchEnabled ? 'on' : 'off'}
+                cameraType="back"
+                focusMode="on"
+                zoomMode="off"
+            />
+
+            {/* Custom Overlay */}
+            <View style={styles.overlay}>
+                {/* Header */}
+                <View style={[styles.header, { backgroundColor: theme.colors.overlay }]}>
+                    <Text style={[styles.headerTitle, { color: theme.colors.white }]}>
+                        High Quality Scanner
+                    </Text>
+                    <View style={styles.headerButtons}>
+                        <TouchableOpacity
+                            style={styles.torchButton}
+                            onPress={toggleTorch}
+                            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                            <Icon
+                                name={torchEnabled ? "flash-on" : "flash-off"}
+                                size={24}
+                                color={torchEnabled ? theme.colors.warning[500] : theme.colors.white}
+                            />
+                        </TouchableOpacity>
                         <TouchableOpacity
                             style={styles.closeButton}
                             onPress={handleClose}
@@ -136,31 +160,31 @@ export const BarcodeScanner: React.FC<BarcodeScannerProps> = ({
                             <Icon name="close" size={24} color={theme.colors.white} />
                         </TouchableOpacity>
                     </View>
-
-                    {/* Scanning Area */}
-                    <View style={styles.scanningArea}>
-                        <View style={styles.scanningFrame}>
-                            <View style={[styles.corner, styles.topLeft, { borderColor: theme.colors.primary[500] }]} />
-                            <View style={[styles.corner, styles.topRight, { borderColor: theme.colors.primary[500] }]} />
-                            <View style={[styles.corner, styles.bottomLeft, { borderColor: theme.colors.primary[500] }]} />
-                            <View style={[styles.corner, styles.bottomRight, { borderColor: theme.colors.primary[500] }]} />
-                        </View>
-                    </View>
-
-                    {/* Instructions */}
-                    <View style={[styles.instructions, { backgroundColor: theme.colors.overlay }]}>
-                        <Text style={[styles.instructionText, { color: theme.colors.white }]}>
-                            Position the barcode within the frame
-                        </Text>
-                        <Text style={[styles.instructionSubtext, { color: theme.colors.white }]}>
-                            The barcode will be scanned automatically
-                        </Text>
-                    </View>
                 </View>
-            </RNCamera>
+
+                {/* Instructions */}
+                <View style={[styles.instructions, { backgroundColor: theme.colors.overlay }]}>
+                    <Text style={[styles.instructionText, { color: theme.colors.white }]}>
+                        {scanned ? 'Barcode scanned successfully!' : 'Position the barcode within the frame'}
+                    </Text>
+                    <Text style={[styles.instructionSubtext, { color: theme.colors.white }]}>
+                        {scanned ? 'Tap "Scan Again" to scan another barcode' : 'This scanner uses native camera quality'}
+                    </Text>
+                    {scanned && (
+                        <TouchableOpacity
+                            style={[styles.resetButton, { backgroundColor: theme.colors.primary[500] }]}
+                            onPress={handleReset}
+                        >
+                            <Text style={styles.resetButtonText}>Scan Again</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
+            </View>
         </View>
     );
 };
+
+const { width, height } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
     container: {
@@ -168,9 +192,15 @@ const styles = StyleSheet.create({
     },
     camera: {
         flex: 1,
+        width: width,
+        height: height,
     },
     overlay: {
-        flex: 1,
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         backgroundColor: 'transparent',
     },
     header: {
@@ -185,50 +215,22 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '600',
     },
+    headerButtons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    torchButton: {
+        padding: 8,
+    },
     closeButton: {
         padding: 8,
     },
-    scanningArea: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    scanningFrame: {
-        width: 250,
-        height: 250,
-        position: 'relative',
-    },
-    corner: {
-        position: 'absolute',
-        width: 30,
-        height: 30,
-        borderWidth: 3,
-    },
-    topLeft: {
-        top: 0,
-        left: 0,
-        borderRightWidth: 0,
-        borderBottomWidth: 0,
-    },
-    topRight: {
-        top: 0,
-        right: 0,
-        borderLeftWidth: 0,
-        borderBottomWidth: 0,
-    },
-    bottomLeft: {
-        bottom: 0,
-        left: 0,
-        borderRightWidth: 0,
-        borderTopWidth: 0,
-    },
-    bottomRight: {
-        bottom: 0,
-        right: 0,
-        borderLeftWidth: 0,
-        borderTopWidth: 0,
-    },
     instructions: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
         paddingVertical: 20,
         paddingHorizontal: 20,
         alignItems: 'center',
@@ -242,6 +244,19 @@ const styles = StyleSheet.create({
     instructionSubtext: {
         fontSize: 14,
         opacity: 0.8,
+        textAlign: 'center',
+        marginBottom: 16,
+    },
+    resetButton: {
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 8,
+        marginTop: 12,
+    },
+    resetButtonText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: '600',
         textAlign: 'center',
     },
     permissionContainer: {
@@ -279,5 +294,3 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
 });
-
-

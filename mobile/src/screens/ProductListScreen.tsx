@@ -125,8 +125,7 @@ const ProductListScreen: React.FC = () => {
     };
 
     const handleScanBarcode = () => {
-        // Navigate to barcode scanner
-        console.log('Scan barcode');
+        navigation.navigate(SCREEN_NAMES.BARCODE_SCANNER);
     };
 
     const getContainerStyle = () => ({
