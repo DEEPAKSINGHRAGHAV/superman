@@ -7,62 +7,60 @@ import {
     TouchableOpacity,
 } from 'react-native';
 import { useTheme } from '../contexts/ThemeContext';
-import { PRODUCT_CATEGORIES } from '../constants';
+
+interface FilterOption {
+    label: string;
+    value: any;
+}
 
 interface FilterChipsProps {
-    selectedCategory: string | null;
-    onCategorySelect: (category: string | null) => void;
+    title?: string;
+    options: FilterOption[];
+    selectedValue: any;
+    onValueChange: (value: any) => void;
+    style?: any;
 }
 
 export const FilterChips: React.FC<FilterChipsProps> = ({
-    selectedCategory,
-    onCategorySelect,
+    title,
+    options,
+    selectedValue,
+    onValueChange,
+    style
 }) => {
     const { theme } = useTheme();
 
-    const formatCategoryName = (category: string) => {
-        return category.split('-').map(word =>
-            word.charAt(0).toUpperCase() + word.slice(1)
-        ).join(' ');
-    };
-
     const getChipStyle = (isSelected: boolean) => ({
         ...styles.chip,
-        backgroundColor: isSelected ? theme.colors.primary[500] : theme.colors.surface,
-        borderColor: isSelected ? theme.colors.primary[500] : theme.colors.border,
+        backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface,
+        borderColor: isSelected ? theme.colors.primary : theme.colors.border,
     });
 
     const getChipTextStyle = (isSelected: boolean) => ({
         ...styles.chipText,
-        color: isSelected ? theme.colors.white : theme.colors.text,
+        color: isSelected ? '#FFFFFF' : theme.colors.text,
     });
 
     return (
-        <View style={styles.container}>
+        <View style={[styles.container, style]}>
+            {title && (
+                <Text style={[styles.title, { color: theme.colors.text }]}>
+                    {title}
+                </Text>
+            )}
             <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
             >
-                {/* All Categories Chip */}
-                <TouchableOpacity
-                    style={getChipStyle(selectedCategory === null)}
-                    onPress={() => onCategorySelect(null)}
-                >
-                    <Text style={getChipTextStyle(selectedCategory === null)}>
-                        All
-                    </Text>
-                </TouchableOpacity>
-
-                {/* Category Chips */}
-                {PRODUCT_CATEGORIES.map((category) => (
+                {options.map((option, index) => (
                     <TouchableOpacity
-                        key={category}
-                        style={getChipStyle(selectedCategory === category)}
-                        onPress={() => onCategorySelect(category)}
+                        key={index}
+                        style={getChipStyle(selectedValue === option.value)}
+                        onPress={() => onValueChange(option.value)}
                     >
-                        <Text style={getChipTextStyle(selectedCategory === category)}>
-                            {formatCategoryName(category)}
+                        <Text style={getChipTextStyle(selectedValue === option.value)}>
+                            {option.label}
                         </Text>
                     </TouchableOpacity>
                 ))}
@@ -73,8 +71,13 @@ export const FilterChips: React.FC<FilterChipsProps> = ({
 
 const styles = StyleSheet.create({
     container: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        marginBottom: 12,
+    },
+    title: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 8,
+        marginLeft: 4,
     },
     scrollContent: {
         paddingRight: 16,
@@ -91,5 +94,3 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
 });
-
-

@@ -22,6 +22,14 @@ import PurchaseOrderFormScreen from '../screens/PurchaseOrderFormScreen';
 import InventoryTrackingScreen from '../screens/InventoryTrackingScreen';
 import BarcodeScannerScreen from '../screens/BarcodeScannerScreen';
 import BulkUploadScreen from '../screens/BulkUploadScreen';
+// Admin Screens
+import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
+import BrandListScreen from '../screens/admin/BrandListScreen';
+import BrandDetailScreen from '../screens/admin/BrandDetailScreen';
+import BrandFormScreen from '../screens/admin/BrandFormScreen';
+import CategoryListScreen from '../screens/admin/CategoryListScreen';
+import CategoryDetailScreen from '../screens/admin/CategoryDetailScreen';
+import CategoryFormScreen from '../screens/admin/CategoryFormScreen';
 
 import { RootStackParamList } from '../types';
 import { COLORS, SCREEN_NAMES } from '../constants';
@@ -52,6 +60,9 @@ const MainTabNavigator = () => {
                             break;
                         case SCREEN_NAMES.INVENTORY_TRACKING:
                             iconName = 'track-changes';
+                            break;
+                        case 'Admin':
+                            iconName = 'admin-panel-settings';
                             break;
                         default:
                             iconName = 'help';
@@ -95,6 +106,11 @@ const MainTabNavigator = () => {
                 name={SCREEN_NAMES.INVENTORY_TRACKING}
                 component={InventoryTrackingScreen}
                 options={{ title: 'Tracking' }}
+            />
+            <Tab.Screen
+                name="Admin"
+                component={AdminDashboardScreen}
+                options={{ title: 'Admin' }}
             />
         </Tab.Navigator>
     );
@@ -182,6 +198,43 @@ const AppNavigator = () => {
                             name={SCREEN_NAMES.BULK_UPLOAD}
                             component={BulkUploadScreen}
                             options={{ title: 'Bulk Upload' }}
+                        />
+
+                        {/* Admin Screens */}
+                        <Stack.Screen
+                            name={SCREEN_NAMES.ADMIN_DASHBOARD}
+                            component={AdminDashboardScreen}
+                            options={{ title: 'Admin Dashboard' }}
+                        />
+                        <Stack.Screen
+                            name={SCREEN_NAMES.BRAND_LIST}
+                            component={BrandListScreen}
+                            options={{ title: 'Brands' }}
+                        />
+                        <Stack.Screen
+                            name={SCREEN_NAMES.BRAND_DETAIL}
+                            component={BrandDetailScreen}
+                            options={{ title: 'Brand Details' }}
+                        />
+                        <Stack.Screen
+                            name={SCREEN_NAMES.BRAND_FORM}
+                            component={BrandFormScreen}
+                            options={{ title: 'Add/Edit Brand' }}
+                        />
+                        <Stack.Screen
+                            name={SCREEN_NAMES.CATEGORY_LIST}
+                            component={CategoryListScreen}
+                            options={{ title: 'Categories' }}
+                        />
+                        <Stack.Screen
+                            name={SCREEN_NAMES.CATEGORY_DETAIL}
+                            component={CategoryDetailScreen}
+                            options={{ title: 'Category Details' }}
+                        />
+                        <Stack.Screen
+                            name={SCREEN_NAMES.CATEGORY_FORM}
+                            component={CategoryFormScreen}
+                            options={{ title: 'Add/Edit Category' }}
                         />
                     </>
                 )}

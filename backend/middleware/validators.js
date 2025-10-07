@@ -389,11 +389,225 @@ const queryValidation = {
     ]
 };
 
+// Brand validation rules
+const brandValidation = {
+    create: [
+        body('name')
+            .trim()
+            .notEmpty()
+            .withMessage('Brand name is required')
+            .isLength({ min: 2, max: 100 })
+            .withMessage('Brand name must be between 2 and 100 characters'),
+
+        body('description')
+            .optional()
+            .trim()
+            .isLength({ max: 500 })
+            .withMessage('Description cannot exceed 500 characters'),
+
+        body('logo')
+            .optional()
+            .isURL()
+            .withMessage('Logo must be a valid URL'),
+
+        body('website')
+            .optional()
+            .isURL()
+            .withMessage('Website must be a valid URL'),
+
+        body('contactEmail')
+            .optional()
+            .isEmail()
+            .withMessage('Please provide a valid email address')
+            .normalizeEmail(),
+
+        body('contactPhone')
+            .optional()
+            .matches(/^[\+]?[1-9][\d]{0,15}$/)
+            .withMessage('Please provide a valid phone number'),
+
+        body('country')
+            .optional()
+            .trim()
+            .isLength({ max: 50 })
+            .withMessage('Country name cannot exceed 50 characters'),
+
+        body('foundedYear')
+            .optional()
+            .isInt({ min: 1800, max: new Date().getFullYear() })
+            .withMessage('Founded year must be between 1800 and current year'),
+
+        body('category')
+            .optional()
+            .isIn(['food-beverage', 'personal-care', 'household', 'electronics', 'clothing', 'automotive', 'pharmaceutical', 'other'])
+            .withMessage('Invalid brand category')
+    ],
+
+    update: [
+        param('id').isMongoId().withMessage('Invalid brand ID'),
+
+        body('name')
+            .optional()
+            .trim()
+            .isLength({ min: 2, max: 100 })
+            .withMessage('Brand name must be between 2 and 100 characters'),
+
+        body('description')
+            .optional()
+            .trim()
+            .isLength({ max: 500 })
+            .withMessage('Description cannot exceed 500 characters'),
+
+        body('logo')
+            .optional()
+            .isURL()
+            .withMessage('Logo must be a valid URL'),
+
+        body('website')
+            .optional()
+            .isURL()
+            .withMessage('Website must be a valid URL'),
+
+        body('contactEmail')
+            .optional()
+            .isEmail()
+            .withMessage('Please provide a valid email address')
+            .normalizeEmail(),
+
+        body('contactPhone')
+            .optional()
+            .matches(/^[\+]?[1-9][\d]{0,15}$/)
+            .withMessage('Please provide a valid phone number'),
+
+        body('category')
+            .optional()
+            .isIn(['food-beverage', 'personal-care', 'household', 'electronics', 'clothing', 'automotive', 'pharmaceutical', 'other'])
+            .withMessage('Invalid brand category')
+    ]
+};
+
+// Category validation rules
+const categoryValidation = {
+    create: [
+        body('name')
+            .trim()
+            .notEmpty()
+            .withMessage('Category name is required')
+            .isLength({ min: 2, max: 100 })
+            .withMessage('Category name must be between 2 and 100 characters'),
+
+        body('slug')
+            .optional()
+            .trim()
+            .matches(/^[a-z0-9-]+$/)
+            .withMessage('Slug can only contain lowercase letters, numbers, and hyphens'),
+
+        body('description')
+            .optional()
+            .trim()
+            .isLength({ max: 500 })
+            .withMessage('Description cannot exceed 500 characters'),
+
+        body('icon')
+            .optional()
+            .trim()
+            .isLength({ max: 50 })
+            .withMessage('Icon name cannot exceed 50 characters'),
+
+        body('color')
+            .optional()
+            .matches(/^#[0-9A-F]{6}$/i)
+            .withMessage('Color must be a valid hex color code'),
+
+        body('image')
+            .optional()
+            .isURL()
+            .withMessage('Image must be a valid URL'),
+
+        body('parentCategory')
+            .optional()
+            .isMongoId()
+            .withMessage('Invalid parent category ID'),
+
+        body('sortOrder')
+            .optional()
+            .isInt({ min: 0 })
+            .withMessage('Sort order must be a non-negative integer'),
+
+        body('metaTitle')
+            .optional()
+            .trim()
+            .isLength({ max: 60 })
+            .withMessage('Meta title cannot exceed 60 characters'),
+
+        body('metaDescription')
+            .optional()
+            .trim()
+            .isLength({ max: 160 })
+            .withMessage('Meta description cannot exceed 160 characters'),
+
+        body('keywords')
+            .optional()
+            .isArray()
+            .withMessage('Keywords must be an array')
+    ],
+
+    update: [
+        param('id').isMongoId().withMessage('Invalid category ID'),
+
+        body('name')
+            .optional()
+            .trim()
+            .isLength({ min: 2, max: 100 })
+            .withMessage('Category name must be between 2 and 100 characters'),
+
+        body('slug')
+            .optional()
+            .trim()
+            .matches(/^[a-z0-9-]+$/)
+            .withMessage('Slug can only contain lowercase letters, numbers, and hyphens'),
+
+        body('description')
+            .optional()
+            .trim()
+            .isLength({ max: 500 })
+            .withMessage('Description cannot exceed 500 characters'),
+
+        body('icon')
+            .optional()
+            .trim()
+            .isLength({ max: 50 })
+            .withMessage('Icon name cannot exceed 50 characters'),
+
+        body('color')
+            .optional()
+            .matches(/^#[0-9A-F]{6}$/i)
+            .withMessage('Color must be a valid hex color code'),
+
+        body('image')
+            .optional()
+            .isURL()
+            .withMessage('Image must be a valid URL'),
+
+        body('parentCategory')
+            .optional()
+            .isMongoId()
+            .withMessage('Invalid parent category ID'),
+
+        body('sortOrder')
+            .optional()
+            .isInt({ min: 0 })
+            .withMessage('Sort order must be a non-negative integer')
+    ]
+};
+
 module.exports = {
     productValidation,
     supplierValidation,
     purchaseOrderValidation,
     userValidation,
     stockMovementValidation,
+    brandValidation,
+    categoryValidation,
     queryValidation
 };

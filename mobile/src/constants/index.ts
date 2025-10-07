@@ -1,4 +1,6 @@
 // API Configuration
+// For USB Connection (recommended): Use localhost with adb reverse
+// For WiFi Connection: Use your computer's IP (192.168.86.13 or 192.168.137.1)
 export const API_BASE_URL = __DEV__
     ? 'http://localhost:8000/api/v1'
     : 'https://your-production-api.com/api/v1';
@@ -16,6 +18,42 @@ export const PRODUCT_CATEGORIES = [
     'household',
     'electronics',
     'other'
+] as const;
+
+// Brand Categories
+export const BRAND_CATEGORIES = [
+    'food-beverage',
+    'personal-care',
+    'household',
+    'electronics',
+    'clothing',
+    'automotive',
+    'pharmaceutical',
+    'other'
+] as const;
+
+// Category Icons
+export const CATEGORY_ICONS = [
+    'category',
+    'shopping-bag',
+    'local-grocery-store',
+    'restaurant',
+    'home',
+    'phone-android',
+    'face',
+    'pets',
+    'sports',
+    'toys',
+    'book',
+    'music-note',
+    'movie',
+    'games',
+    'fitness-center',
+    'spa',
+    'beach-access',
+    'pool',
+    'golf-course',
+    'casino'
 ] as const;
 
 // Product Units
@@ -88,7 +126,17 @@ export const SCREEN_NAMES = {
     PURCHASE_ORDER_FORM: 'PurchaseOrderForm',
     INVENTORY_TRACKING: 'InventoryTracking',
     BARCODE_SCANNER: 'BarcodeScanner',
-    BULK_UPLOAD: 'BulkUpload'
+    BULK_UPLOAD: 'BulkUpload',
+    // Admin Screens
+    ADMIN_DASHBOARD: 'AdminDashboard',
+    BRAND_LIST: 'BrandList',
+    BRAND_DETAIL: 'BrandDetail',
+    BRAND_FORM: 'BrandForm',
+    CATEGORY_LIST: 'CategoryList',
+    CATEGORY_DETAIL: 'CategoryDetail',
+    CATEGORY_FORM: 'CategoryForm',
+    SUBCATEGORY_LIST: 'SubcategoryList',
+    SUBCATEGORY_FORM: 'SubcategoryForm'
 };
 
 // API Endpoints
@@ -126,6 +174,24 @@ export const API_ENDPOINTS = {
     },
     DASHBOARD: {
         STATS: '/dashboard/stats'
+    },
+    BRANDS: {
+        LIST: '/brands',
+        CREATE: '/brands',
+        UPDATE: '/brands',
+        DELETE: '/brands',
+        SEARCH: '/brands/search',
+        STATS: '/brands/stats/overview'
+    },
+    CATEGORIES: {
+        LIST: '/categories',
+        CREATE: '/categories',
+        UPDATE: '/categories',
+        DELETE: '/categories',
+        SEARCH: '/categories/search',
+        TREE: '/categories/tree',
+        MAIN: '/categories/main',
+        STATS: '/categories/stats/overview'
     }
 };
 
