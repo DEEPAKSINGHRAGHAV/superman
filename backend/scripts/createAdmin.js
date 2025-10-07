@@ -31,7 +31,8 @@ async function createAdminUser() {
                 'read_purchase_orders', 'write_purchase_orders', 'approve_purchase_orders',
                 'read_inventory', 'write_inventory', 'adjust_inventory',
                 'read_reports', 'write_reports',
-                'manage_users', 'manage_settings'
+                'manage_users', 'manage_settings',
+                'manage_brands', 'manage_categories', 'manage_subcategories'
             ],
             isActive: true
         });

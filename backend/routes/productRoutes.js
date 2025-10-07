@@ -158,6 +158,61 @@ router.get('/inventory-summary',
     })
 );
 
+// @desc    Get product statistics overview
+// @route   GET /api/v1/products/stats/overview
+// @access  Private (requires read_reports permission)
+router.get('/stats/overview',
+    protect,
+    requirePermission('read_reports'),
+    asyncHandler(async (req, res) => {
+        const [inventorySummary, categoryStats, brandStats] = await Promise.all([
+            Product.getInventorySummary(),
+            Product.aggregate([
+                { $match: { isActive: true } },
+                {
+                    $group: {
+                        _id: '$category',
+                        count: { $sum: 1 },
+                        totalStock: { $sum: '$currentStock' },
+                        totalValue: { $sum: { $multiply: ['$currentStock', '$costPrice'] } }
+                    }
+                },
+                { $sort: { count: -1 } },
+                { $limit: 10 }
+            ]),
+            Product.aggregate([
+                { $match: { isActive: true, brand: { $exists: true, $ne: '' } } },
+                {
+                    $group: {
+                        _id: '$brand',
+                        count: { $sum: 1 },
+                        totalStock: { $sum: '$currentStock' },
+                        totalValue: { $sum: { $multiply: ['$currentStock', '$costPrice'] } }
+                    }
+                },
+                { $sort: { count: -1 } },
+                { $limit: 10 }
+            ])
+        ]);
+
+        const overview = inventorySummary[0] || {
+            totalProducts: 0,
+            totalStock: 0,
+            totalValue: 0,
+            lowStockCount: 0
+        };
+
+        res.status(200).json({
+            success: true,
+            data: {
+                overview,
+                categoryStats,
+                brandStats
+            }
+        });
+    })
+);
+
 // @desc    Get single product
 // @route   GET /api/v1/products/:id
 // @access  Private (requires read_products permission)

@@ -235,6 +235,16 @@ export type RootStackParamList = {
     StockMovements: undefined;
     BarcodeScanner: undefined;
     BulkUpload: undefined;
+    // Admin Screens
+    AdminDashboard: undefined;
+    BrandList: undefined;
+    BrandDetail: { brandId: string };
+    BrandForm: { brandId?: string };
+    CategoryList: undefined;
+    CategoryDetail: { categoryId: string };
+    CategoryForm: { categoryId?: string };
+    SubcategoryList: { parentCategoryId: string };
+    SubcategoryForm: { categoryId?: string; parentCategoryId?: string };
 };
 
 export type MainTabParamList = {
@@ -243,6 +253,7 @@ export type MainTabParamList = {
     Suppliers: undefined;
     PurchaseOrders: undefined;
     Inventory: undefined;
+    Admin: undefined;
 };
 
 export type ProductsStackParamList = {
@@ -268,6 +279,18 @@ export type InventoryStackParamList = {
     InventoryTracking: undefined;
     StockMovements: undefined;
     BulkUpload: undefined;
+};
+
+export type AdminStackParamList = {
+    AdminDashboard: undefined;
+    BrandList: undefined;
+    BrandDetail: { brandId: string };
+    BrandForm: { brandId?: string };
+    CategoryList: undefined;
+    CategoryDetail: { categoryId: string };
+    CategoryForm: { categoryId?: string };
+    SubcategoryList: { parentCategoryId: string };
+    SubcategoryForm: { categoryId?: string; parentCategoryId?: string };
 };
 
 // Form Types
@@ -412,4 +435,127 @@ export interface AsyncState<T> {
     data: T | null;
     loading: LoadingState;
     error: string | null;
+}
+
+// Brand Types
+export interface Brand {
+    _id: string;
+    name: string;
+    description?: string;
+    logo?: string;
+    website?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    country?: string;
+    foundedYear?: number;
+    category: 'food-beverage' | 'personal-care' | 'household' | 'electronics' | 'clothing' | 'automotive' | 'pharmaceutical' | 'other';
+    isActive: boolean;
+    isVerified: boolean;
+    rating: {
+        average: number;
+        count: number;
+    };
+    productCount: number;
+    totalSales: number;
+    createdBy: {
+        _id: string;
+        name: string;
+        email: string;
+    };
+    updatedBy?: {
+        _id: string;
+        name: string;
+        email: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+    // Virtual fields
+    status?: string;
+    formattedRating?: string;
+    age?: number;
+}
+
+// Category Types
+export interface Category {
+    _id: string;
+    name: string;
+    slug: string;
+    description?: string;
+    icon?: string;
+    color?: string;
+    image?: string;
+    parentCategory?: string | Category;
+    level: number;
+    path?: string;
+    isActive: boolean;
+    isFeatured: boolean;
+    sortOrder: number;
+    productCount: number;
+    subcategoryCount: number;
+    metaTitle?: string;
+    metaDescription?: string;
+    keywords?: string[];
+    createdBy: {
+        _id: string;
+        name: string;
+        email: string;
+    };
+    updatedBy?: {
+        _id: string;
+        name: string;
+        email: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+    // Virtual fields
+    status?: string;
+    fullPath?: string;
+    subcategories?: Category[];
+}
+
+// Admin Form Types
+export interface BrandFormData {
+    name: string;
+    description?: string;
+    logo?: string;
+    website?: string;
+    contactEmail?: string;
+    contactPhone?: string;
+    country?: string;
+    foundedYear?: number;
+    category: string;
+}
+
+export interface CategoryFormData {
+    name: string;
+    slug?: string;
+    description?: string;
+    icon?: string;
+    color?: string;
+    image?: string;
+    parentCategory?: string;
+    sortOrder?: number;
+    metaTitle?: string;
+    metaDescription?: string;
+    keywords?: string[];
+}
+
+// Admin Filter Types
+export interface BrandFilters {
+    search?: string;
+    category?: string;
+    isActive?: boolean;
+    isVerified?: boolean;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+}
+
+export interface CategoryFilters {
+    search?: string;
+    level?: number;
+    parentCategory?: string;
+    isActive?: boolean;
+    isFeatured?: boolean;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
 }

@@ -21,7 +21,7 @@ import {
     StockAdjustmentFormData,
 } from '../types';
 
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+import { API_BASE_URL } from '../constants';
 
 class ApiService {
     private baseURL: string;
@@ -77,6 +77,8 @@ class ApiService {
         };
 
         try {
+            console.log('API Request:', { url, method: config.method || 'GET' });
+
             const response = await fetch(url, config);
             const data = await response.json();
 
@@ -97,8 +99,29 @@ class ApiService {
             }
 
             return data;
-        } catch (error) {
+        } catch (error: any) {
             console.error('API Error:', error);
+            console.error('API Error Details:', {
+                url,
+                method: config.method || 'GET',
+                baseURL: this.baseURL,
+                endpoint,
+                errorName: error.name,
+                errorMessage: error.message,
+            });
+
+            // Handle network errors more clearly
+            if (error.message === 'Network request failed' || error.name === 'TypeError') {
+                throw new Error(
+                    `Cannot connect to server at ${this.baseURL}. ` +
+                    `Please check:\n` +
+                    `1. Backend server is running\n` +
+                    `2. Correct IP address and port\n` +
+                    `3. Network connectivity\n` +
+                    `Original error: ${error.message}`
+                );
+            }
+
             throw error;
         }
     }
@@ -456,6 +479,125 @@ class ApiService {
 
     async getInventoryAnalytics(period = 30): Promise<ApiResponse<any>> {
         return this.request(`/inventory/analytics?period=${period}`);
+    }
+
+    // Brands
+    async getBrands(filters?: any, page = 1, limit = 20): Promise<PaginatedResponse<any>> {
+        const params = new URLSearchParams({
+            page: page.toString(),
+            limit: limit.toString(),
+        });
+
+        // Add filters only if they have values
+        if (filters) {
+            Object.entries(filters).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    params.append(key, value.toString());
+                }
+            });
+        }
+
+        const url = `/brands?${params.toString()}`;
+        return this.request(url);
+    }
+
+    async getBrand(id: string): Promise<ApiResponse<any>> {
+        return this.request(`/brands/${id}`);
+    }
+
+    async createBrand(brandData: any): Promise<ApiResponse<any>> {
+        return this.request('/brands', {
+            method: 'POST',
+            body: JSON.stringify(brandData),
+        });
+    }
+
+    async updateBrand(id: string, brandData: any): Promise<ApiResponse<any>> {
+        return this.request(`/brands/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(brandData),
+        });
+    }
+
+    async deleteBrand(id: string): Promise<ApiResponse<any>> {
+        return this.request(`/brands/${id}`, {
+            method: 'DELETE',
+        });
+    }
+
+    async toggleBrandStatus(id: string): Promise<ApiResponse<any>> {
+        return this.request(`/brands/${id}/toggle-status`, {
+            method: 'PATCH',
+        });
+    }
+
+    // Categories
+    async getCategories(filters?: any, page = 1, limit = 20): Promise<PaginatedResponse<any>> {
+        const params = new URLSearchParams({
+            page: page.toString(),
+            limit: limit.toString(),
+        });
+
+        // Add filters only if they have values
+        if (filters) {
+            Object.entries(filters).forEach(([key, value]) => {
+                if (value !== undefined && value !== null && value !== '') {
+                    params.append(key, value.toString());
+                }
+            });
+        }
+
+        const url = `/categories?${params.toString()}`;
+        return this.request(url);
+    }
+
+    async getCategory(id: string): Promise<ApiResponse<any>> {
+        return this.request(`/categories/${id}`);
+    }
+
+    async createCategory(categoryData: any): Promise<ApiResponse<any>> {
+        return this.request('/categories', {
+            method: 'POST',
+            body: JSON.stringify(categoryData),
+        });
+    }
+
+    async updateCategory(id: string, categoryData: any): Promise<ApiResponse<any>> {
+        return this.request(`/categories/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(categoryData),
+        });
+    }
+
+    async deleteCategory(id: string): Promise<ApiResponse<any>> {
+        return this.request(`/categories/${id}`, {
+            method: 'DELETE',
+        });
+    }
+
+    async toggleCategoryStatus(id: string): Promise<ApiResponse<any>> {
+        return this.request(`/categories/${id}/toggle-status`, {
+            method: 'PATCH',
+        });
+    }
+
+    async toggleCategoryFeatured(id: string): Promise<ApiResponse<any>> {
+        return this.request(`/categories/${id}/toggle-featured`, {
+            method: 'PATCH',
+        });
+    }
+
+    // Admin statistics methods
+    async getBrandStats(): Promise<ApiResponse<any>> {
+        return this.request('/brands/stats/overview');
+    }
+
+    async getCategoryStats(): Promise<ApiResponse<any>> {
+        return this.request('/categories/stats/overview');
+    }
+
+    async getProductStats(): Promise<ApiResponse<any>> {
+        return this.request('/products/stats/overview');
     }
 }
 
