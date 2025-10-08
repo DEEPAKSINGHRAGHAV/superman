@@ -105,6 +105,10 @@ const DashboardScreen: React.FC = () => {
         navigation.navigate(SCREEN_NAMES.BATCH_VALUATION);
     };
 
+    const handleExpiringProducts = () => {
+        navigation.navigate(SCREEN_NAMES.EXPIRING_PRODUCTS);
+    };
+
     const handleBilling = () => {
         navigation.navigate(SCREEN_NAMES.BILLING);
     };
@@ -278,6 +282,27 @@ const DashboardScreen: React.FC = () => {
                                     </Text>
                                 </View>
                                 <Icon name="chevron-right" size={24} color={theme.colors.primary[500]} />
+                            </View>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[styles.batchValuationCard, { backgroundColor: theme.colors.warning[50] }]}
+                            onPress={handleExpiringProducts}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.batchValuationContent}>
+                                <View style={[styles.batchValuationIcon, { backgroundColor: theme.colors.warning[500] }]}>
+                                    <Icon name="warning" size={28} color={theme.colors.white} />
+                                </View>
+                                <View style={styles.batchValuationText}>
+                                    <Text style={[styles.batchValuationTitle, { color: theme.colors.text }]}>
+                                        Expiring Products
+                                    </Text>
+                                    <Text style={[styles.batchValuationSubtitle, { color: theme.colors.textSecondary }]}>
+                                        Check expired & expiring items
+                                    </Text>
+                                </View>
+                                <Icon name="chevron-right" size={24} color={theme.colors.warning[500]} />
                             </View>
                         </TouchableOpacity>
                     </View>

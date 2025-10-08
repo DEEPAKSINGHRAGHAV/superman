@@ -217,7 +217,7 @@ const ProductDetailScreen: React.FC = () => {
                             <View style={styles.batchHeaderLeft}>
                                 <Icon name="layers" size={20} color={theme.colors.primary[500]} />
                                 <Text style={[styles.batchHeaderTitle, { color: theme.colors.text }]}>
-                                    Batch Tracking
+                                    Active Batches
                                 </Text>
                                 <View style={[styles.batchCountBadge, { backgroundColor: theme.colors.primary[100] }]}>
                                     <Text style={[styles.batchCountText, { color: theme.colors.primary[700] }]}>
@@ -244,6 +244,18 @@ const ProductDetailScreen: React.FC = () => {
                                 )}
                             </View>
                         )}
+
+                        {/* View All Batches Button */}
+                        <TouchableOpacity
+                            style={[styles.viewHistoryButton, { borderTopColor: theme.colors.gray[200] }]}
+                            onPress={() => navigation.navigate('BatchHistory', { productId })}
+                        >
+                            <Icon name="history" size={18} color={theme.colors.primary[500]} />
+                            <Text style={[styles.viewHistoryText, { color: theme.colors.primary[500] }]}>
+                                View All Batches (Including History)
+                            </Text>
+                            <Icon name="chevron-right" size={18} color={theme.colors.primary[500]} />
+                        </TouchableOpacity>
                     </Card>
                 )}
 
@@ -348,6 +360,19 @@ const styles = StyleSheet.create({
     batchContent: {
         marginTop: 12,
         minHeight: 200,
+    },
+    viewHistoryButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        borderTopWidth: 1,
+        marginTop: 12,
+        gap: 8,
+    },
+    viewHistoryText: {
+        fontSize: 14,
+        fontWeight: '600',
     },
     infoCard: {
         marginBottom: 16,

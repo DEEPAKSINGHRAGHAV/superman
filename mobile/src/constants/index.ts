@@ -128,6 +128,8 @@ export const SCREEN_NAMES = {
     BARCODE_SCANNER: 'BarcodeScanner',
     BULK_UPLOAD: 'BulkUpload',
     BATCH_VALUATION: 'BatchValuation',
+    BATCH_HISTORY: 'BatchHistory',
+    EXPIRING_PRODUCTS: 'ExpiringProducts',
     BILLING: 'Billing',
     // Admin Screens
     ADMIN_DASHBOARD: 'AdminDashboard',

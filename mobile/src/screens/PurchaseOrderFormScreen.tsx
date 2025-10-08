@@ -22,19 +22,20 @@ const PurchaseOrderFormScreen: React.FC = () => {
     const navigation = useNavigation();
     const { orderId } = route.params as { orderId?: string };
 
-    // Get today's date in YYYY-MM-DD format
-    const getTodayDate = () => {
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = String(today.getMonth() + 1).padStart(2, '0');
-        const day = String(today.getDate()).padStart(2, '0');
+    // Get tomorrow's date in YYYY-MM-DD format (current date + 1)
+    const getTomorrowDate = () => {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1); // Add 1 day
+        const year = tomorrow.getFullYear();
+        const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+        const day = String(tomorrow.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
     };
 
     const [formData, setFormData] = useState<PurchaseOrderFormData>({
         supplier: '',
         items: [],
-        expectedDeliveryDate: getTodayDate(),
+        expectedDeliveryDate: getTomorrowDate(),
         notes: '',
         paymentMethod: 'cash',
     });
@@ -43,8 +44,10 @@ const PurchaseOrderFormScreen: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
     const [selectedProduct, setSelectedProduct] = useState('');
     const [itemQuantity, setItemQuantity] = useState('');
+    const [itemMRP, setItemMRP] = useState('');
     const [itemCostPrice, setItemCostPrice] = useState('');
     const [itemSellingPrice, setItemSellingPrice] = useState('');
+    const [itemExpiryDate, setItemExpiryDate] = useState('');
     const [defaultMarkup] = useState(0.20); // 20% default markup
 
     const [isLoading, setIsLoading] = useState(false);
@@ -52,6 +55,7 @@ const PurchaseOrderFormScreen: React.FC = () => {
     const [isLoadingProducts, setIsLoadingProducts] = useState(false);
     const [errors, setErrors] = useState<Partial<PurchaseOrderFormData>>({});
     const [showDatePicker, setShowDatePicker] = useState(false);
+    const [showExpiryDatePicker, setShowExpiryDatePicker] = useState(false);
 
     useEffect(() => {
         loadSuppliers();
@@ -103,6 +107,7 @@ const PurchaseOrderFormScreen: React.FC = () => {
                         quantity: item.quantity,
                         costPrice: item.costPrice,
                         sellingPrice: item.sellingPrice || item.costPrice * 1.2, // Use saved or calculate with 20% markup
+                        mrp: item.mrp,
                     })),
                     expectedDeliveryDate: order.expectedDeliveryDate || '',
                     notes: order.notes || '',
@@ -141,6 +146,21 @@ const PurchaseOrderFormScreen: React.FC = () => {
         }
     };
 
+    const handleExpiryDateChange = (event: any, selectedDate?: Date) => {
+        // On Android, the picker closes automatically
+        if (Platform.OS === 'android') {
+            setShowExpiryDatePicker(false);
+        }
+
+        if (selectedDate) {
+            const year = selectedDate.getFullYear();
+            const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
+            const day = String(selectedDate.getDate()).padStart(2, '0');
+            const formattedDate = `${year}-${month}-${day}`;
+            setItemExpiryDate(formattedDate);
+        }
+    };
+
     const formatDisplayDate = (dateString: string) => {
         if (!dateString) return 'Select date';
 
@@ -160,9 +180,10 @@ const PurchaseOrderFormScreen: React.FC = () => {
         // Find the selected product
         const product = products.find(p => p._id === productId);
         if (product) {
-            // Auto-fill cost price and selling price from product
+            // Auto-fill cost price, selling price, and MRP from product
             setItemCostPrice(product.costPrice.toString());
             setItemSellingPrice(product.sellingPrice.toString());
+            setItemMRP(product.mrp.toString());
         }
     };
 
@@ -222,20 +243,29 @@ const PurchaseOrderFormScreen: React.FC = () => {
                 return;
             }
 
-            addItemToList(selectedProduct, quantity, costPrice, sellingPrice);
+            const mrp = itemMRP ? parseFloat(itemMRP) : undefined;
+            addItemToList(selectedProduct, quantity, costPrice, sellingPrice, mrp, itemExpiryDate);
         } catch (error) {
             console.error('Error adding item:', error);
             Alert.alert('Error', 'Failed to add item. Please try again.');
         }
     };
 
-    const addItemToList = (productId: string, quantity: number, costPrice: number, sellingPrice: number) => {
-        const newItem = {
+    const addItemToList = (productId: string, quantity: number, costPrice: number, sellingPrice: number, mrp?: number, expiryDate?: string) => {
+        const newItem: any = {
             product: productId,
             quantity: quantity,
-            costPrice: costPrice,
-            sellingPrice: sellingPrice,
+            costPrice: parseFloat(costPrice.toFixed(2)), // Round to 2 decimals
+            sellingPrice: parseFloat(sellingPrice.toFixed(2)), // Round to 2 decimals
         };
+
+        if (mrp) {
+            newItem.mrp = parseFloat(mrp.toFixed(2)); // Round to 2 decimals
+        }
+
+        if (expiryDate) {
+            newItem.expiryDate = expiryDate;
+        }
 
         setFormData(prev => ({
             ...prev,
@@ -245,8 +275,10 @@ const PurchaseOrderFormScreen: React.FC = () => {
         // Reset item form
         setSelectedProduct('');
         setItemQuantity('');
+        setItemMRP('');
         setItemCostPrice('');
         setItemSellingPrice('');
+        setItemExpiryDate('');
 
         // Clear items error
         if (errors.items) {
@@ -453,6 +485,18 @@ const PurchaseOrderFormScreen: React.FC = () => {
                         </View>
                         <View style={styles.itemInputHalf}>
                             <Input
+                                label="MRP (₹)"
+                                placeholder="0.00"
+                                value={itemMRP}
+                                onChangeText={setItemMRP}
+                                keyboardType="decimal-pad"
+                            />
+                        </View>
+                    </View>
+
+                    <View style={styles.itemInputRow}>
+                        <View style={styles.itemInputHalf}>
+                            <Input
                                 label="Cost Price (₹)"
                                 placeholder="0.00"
                                 value={itemCostPrice}
@@ -460,9 +504,6 @@ const PurchaseOrderFormScreen: React.FC = () => {
                                 keyboardType="decimal-pad"
                             />
                         </View>
-                    </View>
-
-                    <View style={styles.itemInputRow}>
                         <View style={styles.itemInputHalf}>
                             <Input
                                 label="Selling Price (₹)"
@@ -472,26 +513,69 @@ const PurchaseOrderFormScreen: React.FC = () => {
                                 keyboardType="decimal-pad"
                             />
                         </View>
-                        <View style={styles.itemInputHalf}>
-                            {itemCostPrice && itemSellingPrice && (
-                                <View style={styles.marginIndicator}>
-                                    <Text style={[styles.marginLabel, { color: theme.colors.textSecondary }]}>
-                                        Profit Margin
-                                    </Text>
-                                    <Text style={[
-                                        styles.marginValue,
-                                        {
-                                            color: calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)) < 0
-                                                ? theme.colors.error['500']
-                                                : theme.colors.success['500']
-                                        }
-                                    ]}>
-                                        {calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)).toFixed(1)}%
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
                     </View>
+
+                    <View style={styles.profitMarginRow}>
+                        {itemCostPrice && itemSellingPrice && (
+                            <View style={styles.marginIndicator}>
+                                <Text style={[styles.marginLabel, { color: theme.colors.textSecondary }]}>
+                                    Profit Margin
+                                </Text>
+                                <Text style={[
+                                    styles.marginValue,
+                                    {
+                                        color: calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)) < 0
+                                            ? theme.colors.error['500']
+                                            : theme.colors.success['500']
+                                    }
+                                ]}>
+                                    {calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)).toFixed(1)}%
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+
+                    {/* Expiry Date Picker */}
+                    <View style={styles.expiryDateContainer}>
+                        <Text style={[styles.expiryDateLabel, { color: theme.colors.text }]}>
+                            Expiry Date (Optional)
+                        </Text>
+                        <TouchableOpacity
+                            style={[styles.expiryDateButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                            onPress={() => setShowExpiryDatePicker(true)}
+                        >
+                            <Icon name="event" size={20} color={theme.colors.textSecondary} />
+                            <Text style={[styles.expiryDateText, { color: itemExpiryDate ? theme.colors.text : theme.colors.textSecondary }]}>
+                                {itemExpiryDate ? formatDisplayDate(itemExpiryDate) : 'Select expiry date'}
+                            </Text>
+                            {itemExpiryDate && (
+                                <TouchableOpacity onPress={() => setItemExpiryDate('')} style={styles.clearDateButton}>
+                                    <Icon name="close" size={18} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+
+                    {showExpiryDatePicker && (
+                        <DateTimePicker
+                            value={itemExpiryDate ? new Date(itemExpiryDate + 'T00:00:00') : new Date()}
+                            mode="date"
+                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                            onChange={handleExpiryDateChange}
+                            minimumDate={new Date()}
+                        />
+                    )}
+
+                    {Platform.OS === 'ios' && showExpiryDatePicker && (
+                        <View style={styles.datePickerButtons}>
+                            <Button
+                                title="Done"
+                                onPress={() => setShowExpiryDatePicker(false)}
+                                variant="primary"
+                                size="sm"
+                            />
+                        </View>
+                    )}
 
                     <Button
                         title="Add Item"
@@ -518,6 +602,16 @@ const PurchaseOrderFormScreen: React.FC = () => {
                                         <Text style={[styles.itemDetailText, { color: theme.colors.textSecondary }]}>
                                             Qty: {item.quantity}
                                         </Text>
+                                        {item.mrp && (
+                                            <>
+                                                <Text style={[styles.itemDetailText, { color: theme.colors.textSecondary }]}>
+                                                    •
+                                                </Text>
+                                                <Text style={[styles.itemDetailText, { color: theme.colors.textSecondary }]}>
+                                                    MRP: ₹{item.mrp.toFixed(2)}
+                                                </Text>
+                                            </>
+                                        )}
                                         <Text style={[styles.itemDetailText, { color: theme.colors.textSecondary }]}>
                                             •
                                         </Text>
@@ -542,6 +636,14 @@ const PurchaseOrderFormScreen: React.FC = () => {
                                             Margin: {calculateMargin(item.costPrice, item.sellingPrice).toFixed(1)}%
                                         </Text>
                                     </View>
+                                    {item.expiryDate && (
+                                        <View style={styles.expiryInfo}>
+                                            <Icon name="schedule" size={14} color={theme.colors.warning['500']} />
+                                            <Text style={[styles.expiryText, { color: theme.colors.warning['600'] }]}>
+                                                Expires: {formatDisplayDate(item.expiryDate)}
+                                            </Text>
+                                        </View>
+                                    )}
                                 </View>
                                 <TouchableOpacity
                                     onPress={() => handleRemoveItem(index)}
@@ -664,6 +766,42 @@ const styles = StyleSheet.create({
     marginValue: {
         fontSize: 20,
         fontWeight: 'bold',
+    },
+    profitMarginRow: {
+        marginBottom: 16,
+    },
+    expiryDateContainer: {
+        marginBottom: 16,
+    },
+    expiryDateLabel: {
+        fontSize: 14,
+        fontWeight: '500',
+        marginBottom: 8,
+    },
+    expiryDateButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderWidth: 1,
+        borderRadius: 8,
+        gap: 8,
+    },
+    expiryDateText: {
+        flex: 1,
+        fontSize: 14,
+    },
+    clearDateButton: {
+        padding: 4,
+    },
+    expiryInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        marginTop: 6,
+    },
+    expiryText: {
+        fontSize: 12,
+        fontWeight: '500',
     },
     itemsList: {
         marginBottom: 16,

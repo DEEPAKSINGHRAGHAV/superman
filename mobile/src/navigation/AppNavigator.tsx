@@ -24,6 +24,8 @@ import BarcodeScannerScreen from '../screens/BarcodeScannerScreen';
 import BulkUploadScreen from '../screens/BulkUploadScreen';
 import BatchValuationScreen from '../screens/BatchValuationScreen';
 import BillingScreen from '../screens/BillingScreen';
+import BatchHistoryScreen from '../screens/BatchHistoryScreen';
+import ExpiringProductsScreen from '../screens/ExpiringProductsScreen';
 // Admin Screens
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import BrandListScreen from '../screens/admin/BrandListScreen';
@@ -199,6 +201,16 @@ const AppNavigator = () => {
                             name={SCREEN_NAMES.BATCH_VALUATION}
                             component={BatchValuationScreen}
                             options={{ title: 'Inventory Valuation' }}
+                        />
+                        <Stack.Screen
+                            name={SCREEN_NAMES.BATCH_HISTORY}
+                            component={BatchHistoryScreen}
+                            options={{ headerShown: false }}
+                        />
+                        <Stack.Screen
+                            name={SCREEN_NAMES.EXPIRING_PRODUCTS}
+                            component={ExpiringProductsScreen}
+                            options={{ headerShown: false }}
                         />
                         <Stack.Screen
                             name={SCREEN_NAMES.BILLING}

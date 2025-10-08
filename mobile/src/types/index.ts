@@ -123,7 +123,9 @@ export interface PurchaseOrderItem {
     quantity: number;
     costPrice: number;
     sellingPrice?: number;
+    mrp?: number;
     totalAmount: number;
+    expiryDate?: string;
 }
 
 export interface PurchaseOrder {
@@ -353,6 +355,8 @@ export type RootStackParamList = {
     BarcodeScanner: undefined;
     BulkUpload: undefined;
     BatchValuation: undefined;
+    BatchHistory: { productId?: string };
+    ExpiringProducts: undefined;
     Billing: undefined;
     // Admin Screens
     AdminDashboard: undefined;
@@ -470,6 +474,8 @@ export interface PurchaseOrderFormData {
         quantity: number;
         costPrice: number;
         sellingPrice: number;
+        mrp?: number;
+        expiryDate?: string;
     }[];
     expectedDeliveryDate?: string;
     notes?: string;

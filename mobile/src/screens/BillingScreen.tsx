@@ -125,7 +125,7 @@ const BillingScreen: React.FC = () => {
                 }
 
                 updatedCart[existingItemIndex].quantity = newQuantity;
-                updatedCart[existingItemIndex].totalPrice = newQuantity * updatedCart[existingItemIndex].unitPrice;
+                updatedCart[existingItemIndex].totalPrice = parseFloat((newQuantity * updatedCart[existingItemIndex].unitPrice).toFixed(2));
                 setCart(updatedCart);
             } else {
                 // Add new item - fetch batch info for accurate FIFO pricing
@@ -145,17 +145,39 @@ const BillingScreen: React.FC = () => {
                     if (batchResponse.success && batchResponse.data?.batches?.length > 0) {
                         // Get oldest (FIFO) batch - first batch in the array
                         const oldestBatch = batchResponse.data.batches[0];
-                        unitPrice = oldestBatch.sellingPrice;
-                        costPrice = oldestBatch.costPrice;
+
+                        // Check if batch is expired
+                        const isExpired = oldestBatch.expiryDate && new Date(oldestBatch.expiryDate) < new Date();
+                        if (isExpired) {
+                            Alert.alert(
+                                'Expired Product',
+                                `This product has expired batches and cannot be sold. Please remove expired batches from inventory.`
+                            );
+                            return;
+                        }
+
+                        unitPrice = parseFloat(oldestBatch.sellingPrice.toFixed(2));
+                        costPrice = parseFloat(oldestBatch.costPrice.toFixed(2));
                         batchInfo = {
                             batchNumber: oldestBatch.batchNumber,
                             availableQuantity: oldestBatch.currentQuantity || oldestBatch.availableQuantity
                         };
+                    } else if (batchResponse.success && batchResponse.data?.batches?.length === 0) {
+                        // No non-expired batches available
+                        Alert.alert(
+                            'No Valid Batches',
+                            `This product has no available non-expired batches. Please check inventory.`
+                        );
+                        return;
                     }
                 } catch (error) {
                     console.log('Could not fetch batch info, using product prices:', error);
                     // Continue with product's default prices
                 }
+
+                // Round prices to 2 decimals
+                unitPrice = parseFloat(unitPrice.toFixed(2));
+                costPrice = parseFloat(costPrice.toFixed(2));
 
                 const newItem: CartItem = {
                     product,
@@ -194,7 +216,7 @@ const BillingScreen: React.FC = () => {
                 return {
                     ...item,
                     quantity: newQuantity,
-                    totalPrice: newQuantity * item.unitPrice,
+                    totalPrice: parseFloat((newQuantity * item.unitPrice).toFixed(2)), // Round to 2 decimals
                 };
             }
             return item;
@@ -219,7 +241,7 @@ const BillingScreen: React.FC = () => {
 
     // Update selling price
     const updateSellingPrice = (productId: string, newPrice: string) => {
-        const price = parseFloat(newPrice);
+        const price = parseFloat(parseFloat(newPrice).toFixed(2)); // Round to 2 decimals
 
         if (isNaN(price) || price < 0) {
             return;
@@ -241,7 +263,7 @@ const BillingScreen: React.FC = () => {
                 return {
                     ...item,
                     unitPrice: price,
-                    totalPrice: item.quantity * price,
+                    totalPrice: parseFloat((item.quantity * price).toFixed(2)), // Round total to 2 decimals
                     isEditingPrice: false,
                 };
             }

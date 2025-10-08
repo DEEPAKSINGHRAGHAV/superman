@@ -128,11 +128,19 @@ class BatchService {
 
         productId = product._id;
 
-        const batches = await InventoryBatch.find({
+        const batchQuery = {
             product: productId,
             status: 'active',
-            currentQuantity: { $gt: 0 }
-        })
+            currentQuantity: { $gt: 0 },
+            // Exclude expired batches
+            $or: [
+                { expiryDate: { $exists: false } },
+                { expiryDate: null },
+                { expiryDate: { $gt: new Date() } }
+            ]
+        };
+
+        const batches = await InventoryBatch.find(batchQuery)
             .sort({ purchaseDate: 1 }) // FIFO order
             .populate('supplier', 'name code')
             .populate('purchaseOrder', 'orderNumber')
@@ -157,7 +165,8 @@ class BatchService {
                 availableQuantity: batch.currentQuantity - (batch.reservedQuantity || 0),
                 daysUntilExpiry: batch.expiryDate
                     ? Math.ceil((new Date(batch.expiryDate) - new Date()) / (1000 * 60 * 60 * 24))
-                    : null
+                    : null,
+                isExpired: batch.expiryDate && new Date() > new Date(batch.expiryDate)
             }))
         };
 
@@ -179,17 +188,23 @@ class BatchService {
         try {
             const { referenceNumber = '', notes = '' } = options;
 
-            // Get active batches in FIFO order (oldest first)
+            // Get active batches in FIFO order (oldest first), excluding expired batches
             const batches = await InventoryBatch.find({
                 product: productId,
                 status: 'active',
-                currentQuantity: { $gt: 0 }
+                currentQuantity: { $gt: 0 },
+                // Exclude expired batches
+                $or: [
+                    { expiryDate: { $exists: false } },
+                    { expiryDate: null },
+                    { expiryDate: { $gt: new Date() } }
+                ]
             })
                 .sort({ purchaseDate: 1, createdAt: 1 })
                 .session(session);
 
             if (batches.length === 0) {
-                throw new Error('No active batches available for this product');
+                throw new Error('No active non-expired batches available for this product');
             }
 
             // Calculate total available quantity

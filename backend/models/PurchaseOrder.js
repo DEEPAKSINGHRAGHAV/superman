@@ -31,10 +31,21 @@ const purchaseOrderSchema = new mongoose.Schema({
             required: [true, 'Cost price is required'],
             min: [0, 'Cost price cannot be negative']
         },
+        sellingPrice: {
+            type: Number,
+            min: [0, 'Selling price cannot be negative']
+        },
+        mrp: {
+            type: Number,
+            min: [0, 'MRP cannot be negative']
+        },
         totalAmount: {
             type: Number,
             required: [true, 'Total amount is required'],
             min: [0, 'Total amount cannot be negative']
+        },
+        expiryDate: {
+            type: Date
         }
     }],
 

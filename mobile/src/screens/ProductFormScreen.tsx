@@ -210,10 +210,10 @@ const ProductFormScreen: React.FC = () => {
             // Ensure all required fields are properly set
             const submitData = {
                 ...formData,
-                // Ensure numeric fields are properly converted
-                mrp: Number(formData.mrp),
-                costPrice: Number(formData.costPrice),
-                sellingPrice: Number(formData.sellingPrice),
+                // Ensure numeric fields are properly converted and rounded to 2 decimals
+                mrp: parseFloat(Number(formData.mrp).toFixed(2)),
+                costPrice: parseFloat(Number(formData.costPrice).toFixed(2)),
+                sellingPrice: parseFloat(Number(formData.sellingPrice).toFixed(2)),
                 currentStock: Number(formData.currentStock),
                 minStockLevel: Number(formData.minStockLevel),
                 maxStockLevel: Number(formData.maxStockLevel),
