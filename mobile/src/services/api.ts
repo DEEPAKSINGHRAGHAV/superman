@@ -467,14 +467,18 @@ class ApiService {
         });
     }
 
-    async processSale(saleData: {
-        saleItems: { productId: string; quantity: number }[];
-        referenceNumber?: string;
-    }): Promise<ApiResponse<any>> {
+    async processSale(
+        saleItems: { productId: string; quantity: number; notes?: string }[],
+        referenceNumber?: string
+    ): Promise<ApiResponse<any>> {
         return this.request('/inventory/sales', {
             method: 'POST',
-            body: JSON.stringify(saleData),
+            body: JSON.stringify({ saleItems, referenceNumber }),
         });
+    }
+
+    async getProductByBarcode(barcode: string): Promise<ApiResponse<Product>> {
+        return this.request(`/products/barcode/${encodeURIComponent(barcode)}`);
     }
 
     async getInventoryAnalytics(period = 30): Promise<ApiResponse<any>> {

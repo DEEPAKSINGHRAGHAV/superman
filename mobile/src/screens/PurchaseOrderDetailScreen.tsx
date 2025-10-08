@@ -50,6 +50,71 @@ const PurchaseOrderDetailScreen: React.FC = () => {
         navigation.navigate('PurchaseOrderForm', { orderId });
     };
 
+    const handleApprove = () => {
+        Alert.alert(
+            'Approve Purchase Order',
+            'Are you sure you want to approve this purchase order?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Approve',
+                    onPress: async () => {
+                        try {
+                            const response = await apiService.approvePurchaseOrder(orderId);
+                            if (response.success) {
+                                Alert.alert('Success', 'Purchase order approved successfully');
+                                loadOrder(); // Reload to show updated status
+                            }
+                        } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to approve purchase order');
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    const handleReceive = () => {
+        Alert.alert(
+            'Receive Stock',
+            'Mark this purchase order as received? This will create batches and update inventory.',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Receive',
+                    onPress: async () => {
+                        try {
+                            // Prepare received items from order items with correct field names
+                            const receivedItems = order?.items.map(item => {
+                                const productId = typeof item.product === 'string' ? item.product : item.product._id;
+                                // Use selling price from order if available, otherwise calculate with 20% markup
+                                const sellingPrice = (item as any).sellingPrice || item.costPrice * 1.2;
+
+                                return {
+                                    productId: productId,
+                                    quantity: item.quantity,
+                                    costPrice: item.costPrice,
+                                    sellingPrice: sellingPrice,
+                                };
+                            }) || [];
+
+                            const response = await apiService.receivePurchaseOrder(orderId, receivedItems);
+                            if (response.success) {
+                                Alert.alert(
+                                    'Success',
+                                    `Stock received successfully! ${response.data?.batchCount || 'Batches have been'} batch(es) created and inventory updated.`,
+                                    [{ text: 'OK', onPress: () => loadOrder() }]
+                                );
+                            }
+                        } catch (error: any) {
+                            Alert.alert('Error', error.message || 'Failed to receive purchase order');
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
     const handleDelete = () => {
         Alert.alert(
             'Delete Purchase Order',
@@ -85,7 +150,7 @@ const PurchaseOrderDetailScreen: React.FC = () => {
         return (
             <View style={getContainerStyle()}>
                 <View style={styles.errorContainer}>
-                    <Icon name="error" size={64} color={theme.colors.error[500]} />
+                    <Icon name="error" size={64} color={theme.colors.error['500']} />
                     <Text style={[styles.errorText, { color: theme.colors.text }]}>
                         {error || 'Purchase order not found'}
                     </Text>
@@ -111,12 +176,31 @@ const PurchaseOrderDetailScreen: React.FC = () => {
                     </Text>
 
                     <View style={styles.details}>
+                        {/* Supplier Info */}
+                        <View style={styles.detailRow}>
+                            <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>
+                                Supplier:
+                            </Text>
+                            <Text style={[styles.detailValue, { color: theme.colors.text }]}>
+                                {typeof order.supplier === 'string' ? order.supplier : order.supplier.name}
+                            </Text>
+                        </View>
+
                         <View style={styles.detailRow}>
                             <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>
                                 Total Amount:
                             </Text>
                             <Text style={[styles.detailValue, { color: theme.colors.text }]}>
                                 ₹{order.totalAmount.toLocaleString()}
+                            </Text>
+                        </View>
+
+                        <View style={styles.detailRow}>
+                            <Text style={[styles.detailLabel, { color: theme.colors.textSecondary }]}>
+                                Items:
+                            </Text>
+                            <Text style={[styles.detailValue, { color: theme.colors.text }]}>
+                                {order.items.length} product(s)
                             </Text>
                         </View>
 
@@ -161,20 +245,49 @@ const PurchaseOrderDetailScreen: React.FC = () => {
                 </Card>
 
                 <View style={styles.actions}>
-                    <Button
-                        title="Edit Order"
-                        onPress={handleEdit}
-                        variant="primary"
-                        leftIcon={<Icon name="edit" size={16} color="white" />}
-                        style={styles.actionButton}
-                    />
-                    <Button
-                        title="Delete Order"
-                        onPress={handleDelete}
-                        variant="danger"
-                        leftIcon={<Icon name="delete" size={16} color="white" />}
-                        style={styles.actionButton}
-                    />
+                    {/* Show Approve button only for pending orders */}
+                    {order.status === 'pending' && (
+                        <Button
+                            title="Approve Order"
+                            onPress={handleApprove}
+                            variant="primary"
+                            leftIcon={<Icon name="check-circle" size={16} color="white" />}
+                            style={styles.actionButton}
+                        />
+                    )}
+
+                    {/* Show Receive button only for approved/ordered */}
+                    {(order.status === 'approved' || order.status === 'ordered') && (
+                        <Button
+                            title="Receive Stock"
+                            onPress={handleReceive}
+                            variant="primary"
+                            leftIcon={<Icon name="inventory" size={16} color="white" />}
+                            style={styles.actionButton}
+                        />
+                    )}
+
+                    {/* Show Edit only for pending/approved (not for received) */}
+                    {order.status !== 'received' && order.status !== 'cancelled' && (
+                        <Button
+                            title="Edit Order"
+                            onPress={handleEdit}
+                            variant="secondary"
+                            leftIcon={<Icon name="edit" size={16} color="white" />}
+                            style={styles.actionButton}
+                        />
+                    )}
+
+                    {/* Show Delete only for pending/cancelled */}
+                    {(order.status === 'pending' || order.status === 'cancelled') && (
+                        <Button
+                            title="Delete Order"
+                            onPress={handleDelete}
+                            variant="danger"
+                            leftIcon={<Icon name="delete" size={16} color="white" />}
+                            style={styles.actionButton}
+                        />
+                    )}
                 </View>
             </View>
         </ScrollView>

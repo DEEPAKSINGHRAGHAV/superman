@@ -23,6 +23,7 @@ import InventoryTrackingScreen from '../screens/InventoryTrackingScreen';
 import BarcodeScannerScreen from '../screens/BarcodeScannerScreen';
 import BulkUploadScreen from '../screens/BulkUploadScreen';
 import BatchValuationScreen from '../screens/BatchValuationScreen';
+import BillingScreen from '../screens/BillingScreen';
 // Admin Screens
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import BrandListScreen from '../screens/admin/BrandListScreen';
@@ -151,6 +152,11 @@ const AppNavigator = () => {
 
                         {/* Supplier Screens */}
                         <Stack.Screen
+                            name={SCREEN_NAMES.SUPPLIER_LIST}
+                            component={SupplierListScreen}
+                            options={{ title: 'Suppliers' }}
+                        />
+                        <Stack.Screen
                             name={SCREEN_NAMES.SUPPLIER_DETAIL}
                             component={SupplierDetailScreen}
                             options={{ title: 'Supplier Details' }}
@@ -162,6 +168,11 @@ const AppNavigator = () => {
                         />
 
                         {/* Purchase Order Screens */}
+                        <Stack.Screen
+                            name={SCREEN_NAMES.PURCHASE_ORDER_LIST}
+                            component={PurchaseOrderListScreen}
+                            options={{ title: 'Purchase Orders' }}
+                        />
                         <Stack.Screen
                             name={SCREEN_NAMES.PURCHASE_ORDER_DETAIL}
                             component={PurchaseOrderDetailScreen}
@@ -188,6 +199,11 @@ const AppNavigator = () => {
                             name={SCREEN_NAMES.BATCH_VALUATION}
                             component={BatchValuationScreen}
                             options={{ title: 'Inventory Valuation' }}
+                        />
+                        <Stack.Screen
+                            name={SCREEN_NAMES.BILLING}
+                            component={BillingScreen}
+                            options={{ headerShown: false }}
                         />
 
                         {/* Admin Screens */}

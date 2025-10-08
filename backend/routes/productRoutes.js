@@ -111,7 +111,7 @@ router.get('/search',
         })
             .sort({ score: { $meta: 'textScore' } })
             .limit(parseInt(limit))
-            .select('name sku barcode category currentStock sellingPrice');
+            .select('name sku barcode category currentStock costPrice sellingPrice mrp');
 
         res.status(200).json({
             success: true,
@@ -221,6 +221,46 @@ router.get('/stats/overview',
                 categoryStats,
                 brandStats
             }
+        });
+    })
+);
+
+// @desc    Get product by barcode
+// @route   GET /api/v1/products/barcode/:barcode
+// @access  Private (requires read_products permission)
+router.get('/barcode/:barcode',
+    protect,
+    requirePermission('read_products'),
+    asyncHandler(async (req, res) => {
+        const product = await Product.findOne({
+            barcode: req.params.barcode,
+            isActive: true
+        })
+            .populate('createdBy', 'name email')
+            .lean();
+
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product not found with this barcode'
+            });
+        }
+
+        // Ensure all required fields have default values
+        const sanitizedProduct = {
+            ...product,
+            rating: product.rating || { average: 0, count: 0 },
+            images: product.images || [],
+            tags: product.tags || [],
+            featured: product.featured || false,
+            currentStock: product.currentStock || 0,
+            minStockLevel: product.minStockLevel || 0,
+            maxStockLevel: product.maxStockLevel || 1000
+        };
+
+        res.status(200).json({
+            success: true,
+            data: sanitizedProduct
         });
     })
 );

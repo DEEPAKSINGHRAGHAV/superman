@@ -105,6 +105,10 @@ const DashboardScreen: React.FC = () => {
         navigation.navigate(SCREEN_NAMES.BATCH_VALUATION);
     };
 
+    const handleBilling = () => {
+        navigation.navigate(SCREEN_NAMES.BILLING);
+    };
+
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-IN', {
             style: 'currency',
@@ -214,11 +218,21 @@ const DashboardScreen: React.FC = () => {
                     <View style={styles.quickActions}>
                         <View style={getResponsiveStyles().actionButtonContainer}>
                             <Button
-                                title="Add Product"
-                                onPress={handleAddProduct}
+                                title="Billing"
+                                onPress={handleBilling}
                                 variant="primary"
                                 size="sm"
-                                leftIcon={<Icon name="add" size={16} color="white" />}
+                                leftIcon={<Icon name="point-of-sale" size={16} color="white" />}
+                                style={styles.actionButton}
+                            />
+                        </View>
+                        <View style={getResponsiveStyles().actionButtonContainer}>
+                            <Button
+                                title="Add Product"
+                                onPress={handleAddProduct}
+                                variant="outline"
+                                size="sm"
+                                leftIcon={<Icon name="add" size={16} color={theme.colors.primary[500]} />}
                                 style={styles.actionButton}
                             />
                         </View>
@@ -232,6 +246,8 @@ const DashboardScreen: React.FC = () => {
                                 style={styles.actionButton}
                             />
                         </View>
+                    </View>
+                    <View style={styles.quickActions}>
                         <View style={getResponsiveStyles().actionButtonContainer}>
                             <Button
                                 title="New Order"

@@ -7,16 +7,21 @@ import {
     RefreshControl,
     TouchableOpacity,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useTheme } from '../contexts/ThemeContext';
 import { SupplierCard, SearchBar, EmptyState } from '../components';
 import { Button, LoadingSpinner } from '../components/ui';
-import { Supplier, SupplierFilters } from '../types';
+import { Supplier, SupplierFilters, RootStackParamList } from '../types';
+import { SCREEN_NAMES } from '../constants';
 import apiService from '../services/api';
+
+type NavigationProp = StackNavigationProp<RootStackParamList>;
 
 const SupplierListScreen: React.FC = () => {
     const { theme } = useTheme();
+    const navigation = useNavigation<NavigationProp>();
 
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -105,23 +110,21 @@ const SupplierListScreen: React.FC = () => {
     };
 
     const handleSupplierPress = (supplierId: string) => {
-        // Navigate to supplier detail
-        console.log('Navigate to supplier:', supplierId);
+        navigation.navigate(SCREEN_NAMES.SUPPLIER_DETAIL as any, { supplierId });
     };
 
     const handleEditSupplier = (supplierId: string) => {
-        // Navigate to edit supplier
-        console.log('Edit supplier:', supplierId);
+        navigation.navigate(SCREEN_NAMES.SUPPLIER_FORM as any, { supplierId });
     };
 
     const handleDeleteSupplier = async (supplierId: string) => {
         // Show confirmation and delete
         console.log('Delete supplier:', supplierId);
+        // TODO: Implement delete with confirmation
     };
 
     const handleAddSupplier = () => {
-        // Navigate to add supplier
-        console.log('Add new supplier');
+        navigation.navigate(SCREEN_NAMES.SUPPLIER_FORM as any);
     };
 
     const getContainerStyle = () => ({
@@ -195,7 +198,7 @@ const SupplierListScreen: React.FC = () => {
                     <Text style={getHeaderTitleStyle()}>Suppliers</Text>
                     <TouchableOpacity
                         onPress={handleAddSupplier}
-                        style={[styles.headerButton, { backgroundColor: theme.colors.primary[500] }]}
+                        style={[styles.headerButton, { backgroundColor: theme.colors.primary['500'] }]}
                     >
                         <Icon name="add" size={20} color={theme.colors.white} />
                     </TouchableOpacity>
@@ -225,7 +228,7 @@ const SupplierListScreen: React.FC = () => {
                     <RefreshControl
                         refreshing={isRefreshing}
                         onRefresh={handleRefresh}
-                        tintColor={theme.colors.primary[500]}
+                        tintColor={theme.colors.primary['500']}
                     />
                 }
                 onEndReached={handleLoadMore}

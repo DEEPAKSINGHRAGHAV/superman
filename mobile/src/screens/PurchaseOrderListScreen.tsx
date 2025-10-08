@@ -8,16 +8,21 @@ import {
     TouchableOpacity,
     ScrollView,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useTheme } from '../contexts/ThemeContext';
 import { PurchaseOrderCard, SearchBar, EmptyState } from '../components';
 import { Button, LoadingSpinner } from '../components/ui';
-import { PurchaseOrder, PurchaseOrderFilters } from '../types';
+import { PurchaseOrder, PurchaseOrderFilters, RootStackParamList } from '../types';
+import { SCREEN_NAMES } from '../constants';
 import apiService from '../services/api';
+
+type NavigationProp = StackNavigationProp<RootStackParamList>;
 
 const PurchaseOrderListScreen: React.FC = () => {
     const { theme } = useTheme();
+    const navigation = useNavigation<NavigationProp>();
 
     const [orders, setOrders] = useState<PurchaseOrder[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -112,23 +117,21 @@ const PurchaseOrderListScreen: React.FC = () => {
     }, [loadOrders]);
 
     const handleOrderPress = (orderId: string) => {
-        // Navigate to order detail
-        console.log('Navigate to order:', orderId);
+        navigation.navigate(SCREEN_NAMES.PURCHASE_ORDER_DETAIL as any, { orderId });
     };
 
     const handleEditOrder = (orderId: string) => {
-        // Navigate to edit order
-        console.log('Edit order:', orderId);
+        navigation.navigate(SCREEN_NAMES.PURCHASE_ORDER_FORM as any, { orderId });
     };
 
     const handleDeleteOrder = async (orderId: string) => {
         // Show confirmation and delete
         console.log('Delete order:', orderId);
+        // TODO: Implement delete with confirmation
     };
 
     const handleAddOrder = () => {
-        // Navigate to add order
-        console.log('Add new order');
+        navigation.navigate(SCREEN_NAMES.PURCHASE_ORDER_FORM as any);
     };
 
     const getContainerStyle = () => ({
@@ -202,7 +205,7 @@ const PurchaseOrderListScreen: React.FC = () => {
                     <Text style={getHeaderTitleStyle()}>Purchase Orders</Text>
                     <TouchableOpacity
                         onPress={handleAddOrder}
-                        style={[styles.headerButton, { backgroundColor: theme.colors.primary[500] }]}
+                        style={[styles.headerButton, { backgroundColor: theme.colors.primary['500'] }]}
                     >
                         <Icon name="add" size={20} color={theme.colors.white} />
                     </TouchableOpacity>
@@ -233,8 +236,8 @@ const PurchaseOrderListScreen: React.FC = () => {
                             style={[
                                 styles.statusChip,
                                 {
-                                    backgroundColor: selectedStatus === null ? theme.colors.primary[500] : theme.colors.surface,
-                                    borderColor: selectedStatus === null ? theme.colors.primary[500] : theme.colors.border,
+                                    backgroundColor: selectedStatus === null ? theme.colors.primary['500'] : theme.colors.surface,
+                                    borderColor: selectedStatus === null ? theme.colors.primary['500'] : theme.colors.border,
                                 }
                             ]}
                             onPress={() => handleStatusFilter(null)}
@@ -253,8 +256,8 @@ const PurchaseOrderListScreen: React.FC = () => {
                                 style={[
                                     styles.statusChip,
                                     {
-                                        backgroundColor: selectedStatus === status ? theme.colors.primary[500] : theme.colors.surface,
-                                        borderColor: selectedStatus === status ? theme.colors.primary[500] : theme.colors.border,
+                                        backgroundColor: selectedStatus === status ? theme.colors.primary['500'] : theme.colors.surface,
+                                        borderColor: selectedStatus === status ? theme.colors.primary['500'] : theme.colors.border,
                                     }
                                 ]}
                                 onPress={() => handleStatusFilter(status)}
@@ -280,7 +283,7 @@ const PurchaseOrderListScreen: React.FC = () => {
                     <RefreshControl
                         refreshing={isRefreshing}
                         onRefresh={handleRefresh}
-                        tintColor={theme.colors.primary[500]}
+                        tintColor={theme.colors.primary['500']}
                     />
                 }
                 onEndReached={handleLoadMore}

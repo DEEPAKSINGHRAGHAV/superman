@@ -82,7 +82,7 @@ export const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                 {
                     backgroundColor:
                         item[optionValueKey] === value
-                            ? theme.colors.primary[50]
+                            ? theme.colors.primary['50']
                             : theme.colors.surface,
                     borderBottomColor: theme.colors.border,
                 },
@@ -96,25 +96,26 @@ export const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                         {
                             color:
                                 item[optionValueKey] === value
-                                    ? theme.colors.primary[600]
+                                    ? theme.colors.primary['600']
                                     : theme.colors.text,
                             fontWeight: item[optionValueKey] === value ? '600' : '400',
                         },
                     ]}
+                    numberOfLines={4}
                 >
                     {item[optionLabelKey]}
                 </Text>
                 {item.description && (
                     <Text
                         style={[styles.optionDescription, { color: theme.colors.textSecondary }]}
-                        numberOfLines={1}
+                        numberOfLines={2}
                     >
                         {item.description}
                     </Text>
                 )}
             </View>
             {item[optionValueKey] === value && (
-                <Icon name="check" size={20} color={theme.colors.primary[600]} />
+                <Icon name="check" size={22} color={theme.colors.primary['600']} style={styles.checkIcon} />
             )}
         </TouchableOpacity>
     );
@@ -124,7 +125,7 @@ export const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
             <View style={styles.labelContainer}>
                 <Text style={[styles.label, { color: theme.colors.text }]}>
                     {label}
-                    {required && <Text style={{ color: theme.colors.error[500] }}> *</Text>}
+                    {required && <Text style={{ color: theme.colors.error['500'] }}> *</Text>}
                 </Text>
             </View>
 
@@ -133,7 +134,7 @@ export const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                     styles.inputContainer,
                     {
                         backgroundColor: theme.colors.surface,
-                        borderColor: error ? theme.colors.error[500] : theme.colors.border,
+                        borderColor: error ? theme.colors.error['500'] : theme.colors.border,
                         opacity: disabled ? 0.6 : 1,
                     },
                 ]}
@@ -147,7 +148,8 @@ export const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                             color: value ? theme.colors.text : theme.colors.textSecondary,
                         },
                     ]}
-                    numberOfLines={1}
+                    numberOfLines={4}
+                    ellipsizeMode="tail"
                 >
                     {getDisplayValue()}
                 </Text>
@@ -155,11 +157,12 @@ export const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                     name="arrow-drop-down"
                     size={24}
                     color={theme.colors.textSecondary}
+                    style={{ marginTop: 0 }}
                 />
             </TouchableOpacity>
 
             {error && (
-                <Text style={[styles.errorText, { color: theme.colors.error[500] }]}>
+                <Text style={[styles.errorText, { color: theme.colors.error['500'] }]}>
                     {error}
                 </Text>
             )}
@@ -236,7 +239,7 @@ export const SearchableDropdown: React.FC<SearchableDropdownProps> = ({
                             <View style={styles.loadingContainer}>
                                 <ActivityIndicator
                                     size="large"
-                                    color={theme.colors.primary[500]}
+                                    color={theme.colors.primary['500']}
                                 />
                                 <Text
                                     style={[styles.loadingText, { color: theme.colors.textSecondary }]}
@@ -288,17 +291,18 @@ const styles = StyleSheet.create({
     },
     inputContainer: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         justifyContent: 'space-between',
         borderWidth: 1,
         borderRadius: 8,
         paddingHorizontal: 12,
-        paddingVertical: 12,
+        paddingVertical: 10,
         minHeight: 48,
     },
     inputText: {
         fontSize: 16,
         flex: 1,
+        lineHeight: 20,
     },
     errorText: {
         fontSize: 12,
@@ -312,8 +316,8 @@ const styles = StyleSheet.create({
     modalContent: {
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
-        maxHeight: '80%',
-        minHeight: '50%',
+        maxHeight: '85%',
+        minHeight: '60%',
     },
     modalHeader: {
         flexDirection: 'row',
@@ -358,21 +362,28 @@ const styles = StyleSheet.create({
     },
     optionItem: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         justifyContent: 'space-between',
         paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingVertical: 14,
         borderBottomWidth: 1,
+        minHeight: 56,
     },
     optionContent: {
         flex: 1,
-        marginRight: 8,
+        marginRight: 12,
+        paddingRight: 8,
     },
     optionLabel: {
         fontSize: 16,
+        lineHeight: 22,
+        flexWrap: 'wrap',
     },
     optionDescription: {
         fontSize: 12,
+        marginTop: 2,
+    },
+    checkIcon: {
         marginTop: 2,
     },
     loadingContainer: {

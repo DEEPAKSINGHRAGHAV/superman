@@ -17,4 +17,5 @@ export { ManualBarcodeInput } from './ManualBarcodeInput';
 export { SimpleBarcodeScanner } from './SimpleBarcodeScanner';
 export { RobustBarcodeScanner } from './RobustBarcodeScanner';
 export { HighQualityBarcodeScanner } from './HighQualityBarcodeScanner';
+export { CameraKitBarcodeScanner } from './CameraKitBarcodeScanner';
 

@@ -122,6 +122,7 @@ export interface PurchaseOrderItem {
     product: string | Product;
     quantity: number;
     costPrice: number;
+    sellingPrice?: number;
     totalAmount: number;
 }
 
@@ -351,6 +352,8 @@ export type RootStackParamList = {
     StockMovements: undefined;
     BarcodeScanner: undefined;
     BulkUpload: undefined;
+    BatchValuation: undefined;
+    Billing: undefined;
     // Admin Screens
     AdminDashboard: undefined;
     BrandList: undefined;
@@ -466,6 +469,7 @@ export interface PurchaseOrderFormData {
         product: string;
         quantity: number;
         costPrice: number;
+        sellingPrice: number;
     }[];
     expectedDeliveryDate?: string;
     notes?: string;
