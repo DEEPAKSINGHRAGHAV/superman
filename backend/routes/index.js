@@ -6,6 +6,7 @@ const productRoutes = require('./productRoutes');
 const supplierRoutes = require('./supplierRoutes');
 const purchaseOrderRoutes = require('./purchaseOrderRoutes');
 const inventoryRoutes = require('./inventoryRoutes');
+const batchRoutes = require('./batchRoutes');
 const brandRoutes = require('./brandRoutes');
 const categoryRoutes = require('./categoryRoutes');
 
@@ -22,6 +23,7 @@ router.use(`/api/${apiVersion}/products`, productRoutes);
 router.use(`/api/${apiVersion}/suppliers`, supplierRoutes);
 router.use(`/api/${apiVersion}/purchase-orders`, purchaseOrderRoutes);
 router.use(`/api/${apiVersion}/inventory`, inventoryRoutes);
+router.use(`/api/${apiVersion}/batches`, batchRoutes);
 router.use(`/api/${apiVersion}/brands`, brandRoutes);
 router.use(`/api/${apiVersion}/categories`, categoryRoutes);
 
@@ -38,6 +40,7 @@ router.get('/', (req, res) => {
             suppliers: `/api/${process.env.API_VERSION || 'v1'}/suppliers`,
             purchaseOrders: `/api/${process.env.API_VERSION || 'v1'}/purchase-orders`,
             inventory: `/api/${process.env.API_VERSION || 'v1'}/inventory`,
+            batches: `/api/${process.env.API_VERSION || 'v1'}/batches`,
             brands: `/api/${process.env.API_VERSION || 'v1'}/brands`,
             categories: `/api/${process.env.API_VERSION || 'v1'}/categories`
         },
@@ -46,6 +49,7 @@ router.get('/', (req, res) => {
             'Supplier Management with Contact and Business Information',
             'Purchase Order Management with Approval Workflow',
             'Real-time Inventory Tracking with Stock Movements',
+            'Batch/Lot Tracking with FIFO Inventory Management',
             'Brand Management with Verification and Statistics',
             'Category and Subcategory Management with Hierarchical Structure',
             'Authentication and Authorization System',

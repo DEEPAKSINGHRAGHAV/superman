@@ -406,17 +406,17 @@ const brandValidation = {
             .withMessage('Description cannot exceed 500 characters'),
 
         body('logo')
-            .optional()
+            .optional({ checkFalsy: true })
             .isURL()
             .withMessage('Logo must be a valid URL'),
 
         body('website')
-            .optional()
+            .optional({ checkFalsy: true })
             .isURL()
             .withMessage('Website must be a valid URL'),
 
         body('contactEmail')
-            .optional()
+            .optional({ checkFalsy: true })
             .isEmail()
             .withMessage('Please provide a valid email address')
             .normalizeEmail(),
@@ -459,17 +459,17 @@ const brandValidation = {
             .withMessage('Description cannot exceed 500 characters'),
 
         body('logo')
-            .optional()
+            .optional({ checkFalsy: true })
             .isURL()
             .withMessage('Logo must be a valid URL'),
 
         body('website')
-            .optional()
+            .optional({ checkFalsy: true })
             .isURL()
             .withMessage('Website must be a valid URL'),
 
         body('contactEmail')
-            .optional()
+            .optional({ checkFalsy: true })
             .isEmail()
             .withMessage('Please provide a valid email address')
             .normalizeEmail(),

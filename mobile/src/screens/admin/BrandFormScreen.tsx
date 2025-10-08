@@ -20,7 +20,7 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
-import { api } from '../../services/api';
+import api from '../../services/api';
 
 type BrandFormNavigationProp = StackNavigationProp<RootStackParamList>;
 type BrandFormRouteProp = RouteProp<RootStackParamList, 'BrandForm'>;
@@ -29,7 +29,7 @@ const BrandFormScreen: React.FC = () => {
     const navigation = useNavigation<BrandFormNavigationProp>();
     const route = useRoute<BrandFormRouteProp>();
     const { theme, isDark } = useTheme();
-    
+
     const { brandId } = route.params || {};
     const isEditing = !!brandId;
 
@@ -58,9 +58,9 @@ const BrandFormScreen: React.FC = () => {
     const loadBrand = async () => {
         try {
             setInitialLoading(true);
-            const response = await api.get(`/brands/${brandId}`);
-            const brand: Brand = response.data.data;
-            
+            const response = await api.getBrand(brandId);
+            const brand: Brand = response.data;
+
             setFormData({
                 name: brand.name,
                 description: brand.description || '',
@@ -113,31 +113,48 @@ const BrandFormScreen: React.FC = () => {
 
         try {
             setLoading(true);
-            
-            const submitData = {
-                ...formData,
+
+            // Clean up data - remove empty strings and ensure proper types
+            const submitData: any = {
                 name: formData.name.trim(),
-                description: formData.description?.trim() || undefined,
-                logo: formData.logo?.trim() || undefined,
-                website: formData.website?.trim() || undefined,
-                contactEmail: formData.contactEmail?.trim() || undefined,
-                contactPhone: formData.contactPhone?.trim() || undefined,
-                country: formData.country?.trim() || undefined,
-                foundedYear: formData.foundedYear || undefined
+                category: formData.category
             };
 
+            // Add optional fields only if they have values
+            if (formData.description?.trim()) {
+                submitData.description = formData.description.trim();
+            }
+            if (formData.logo?.trim()) {
+                submitData.logo = formData.logo.trim();
+            }
+            if (formData.website?.trim()) {
+                submitData.website = formData.website.trim();
+            }
+            if (formData.contactEmail?.trim()) {
+                submitData.contactEmail = formData.contactEmail.trim();
+            }
+            if (formData.contactPhone?.trim()) {
+                submitData.contactPhone = formData.contactPhone.trim();
+            }
+            if (formData.country?.trim()) {
+                submitData.country = formData.country.trim();
+            }
+            if (formData.foundedYear) {
+                submitData.foundedYear = formData.foundedYear;
+            }
+
             if (isEditing) {
-                await api.put(`/brands/${brandId}`, submitData);
+                await api.updateBrand(brandId, submitData);
                 Alert.alert('Success', 'Brand updated successfully');
             } else {
-                await api.post('/brands', submitData);
+                await api.createBrand(submitData);
                 Alert.alert('Success', 'Brand created successfully');
             }
 
             navigation.goBack();
         } catch (error: any) {
             console.error('Error saving brand:', error);
-            const errorMessage = error.response?.data?.message || 'Failed to save brand';
+            const errorMessage = error.message || 'Failed to save brand';
             Alert.alert('Error', errorMessage);
         } finally {
             setLoading(false);
@@ -155,23 +172,6 @@ const BrandFormScreen: React.FC = () => {
         container: {
             flex: 1,
             backgroundColor: theme.colors.background,
-        },
-        header: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: 16,
-            backgroundColor: theme.colors.surface,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.colors.border,
-        },
-        headerTitle: {
-            fontSize: 20,
-            fontWeight: 'bold',
-            color: theme.colors.text,
-        },
-        backButton: {
-            padding: 8,
         },
         content: {
             flex: 1,
@@ -248,29 +248,16 @@ const BrandFormScreen: React.FC = () => {
     }
 
     return (
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
             style={styles.container}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-            <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <Icon name="arrow-back" size={24} color={theme.colors.text} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>
-                    {isEditing ? 'Edit Brand' : 'Add Brand'}
-                </Text>
-                <View style={{ width: 40 }} />
-            </View>
-
             <ScrollView style={styles.content}>
                 <View style={styles.form}>
                     {/* Basic Information */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Basic Information</Text>
-                        
+
                         <Input
                             label="Brand Name *"
                             value={formData.name}
@@ -318,7 +305,7 @@ const BrandFormScreen: React.FC = () => {
                     {/* Contact Information */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Contact Information</Text>
-                        
+
                         <Input
                             label="Website"
                             value={formData.website}
@@ -356,7 +343,7 @@ const BrandFormScreen: React.FC = () => {
                     {/* Additional Information */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Additional Information</Text>
-                        
+
                         <Input
                             label="Logo URL"
                             value={formData.logo}
@@ -381,7 +368,10 @@ const BrandFormScreen: React.FC = () => {
                                 <Input
                                     label="Founded Year"
                                     value={formData.foundedYear?.toString() || ''}
-                                    onChangeText={(value) => handleInputChange('foundedYear', parseInt(value) || undefined)}
+                                    onChangeText={(value) => {
+                                        const year = value.trim() ? parseInt(value, 10) : undefined;
+                                        handleInputChange('foundedYear', !isNaN(year!) && year ? year : undefined);
+                                    }}
                                     error={errors.foundedYear}
                                     placeholder="2020"
                                     keyboardType="numeric"

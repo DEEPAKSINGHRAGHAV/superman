@@ -17,7 +17,7 @@ import { RootStackParamList, Category } from '../../types';
 import { SCREEN_NAMES } from '../../constants';
 import { Card } from '../../components/ui/Card';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
-import { api } from '../../services/api';
+import api from '../../services/api';
 
 type CategoryDetailNavigationProp = StackNavigationProp<RootStackParamList>;
 type CategoryDetailRouteProp = RouteProp<RootStackParamList, 'CategoryDetail'>;
@@ -26,17 +26,41 @@ const CategoryDetailScreen: React.FC = () => {
     const navigation = useNavigation<CategoryDetailNavigationProp>();
     const route = useRoute<CategoryDetailRouteProp>();
     const { theme, isDark } = useTheme();
-    
+
     const { categoryId } = route.params;
     const [category, setCategory] = useState<Category | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
+    // Set up navigation header with edit button
+    React.useLayoutEffect(() => {
+        if (category) {
+            navigation.setOptions({
+                headerRight: () => (
+                    <TouchableOpacity
+                        onPress={() => navigation.navigate(SCREEN_NAMES.CATEGORY_FORM as any, { categoryId: category._id })}
+                        style={{
+                            marginRight: 12,
+                            backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                            borderRadius: 8,
+                            padding: 8,
+                            borderWidth: 1,
+                            borderColor: 'rgba(255, 255, 255, 0.3)',
+                        }}
+                        activeOpacity={0.7}
+                    >
+                        <Icon name="edit" size={24} color="#FFFFFF" />
+                    </TouchableOpacity>
+                ),
+            });
+        }
+    }, [navigation, category]);
+
     const loadCategory = async () => {
         try {
             setLoading(true);
-            const response = await api.get(`/categories/${categoryId}`);
-            setCategory(response.data.data);
+            const response = await api.getCategory(categoryId);
+            setCategory(response.data);
         } catch (error) {
             console.error('Error loading category:', error);
             Alert.alert('Error', 'Failed to load category details');
@@ -56,7 +80,7 @@ const CategoryDetailScreen: React.FC = () => {
         if (!category) return;
 
         try {
-            await api.patch(`/categories/${categoryId}/toggle-status`);
+            await api.toggleCategoryStatus(categoryId);
             setCategory(prev => prev ? { ...prev, isActive: !prev.isActive } : null);
             Alert.alert('Success', `Category ${category.isActive ? 'deactivated' : 'activated'} successfully`);
         } catch (error) {
@@ -69,7 +93,7 @@ const CategoryDetailScreen: React.FC = () => {
         if (!category) return;
 
         try {
-            await api.patch(`/categories/${categoryId}/toggle-featured`);
+            await api.toggleCategoryFeatured(categoryId);
             setCategory(prev => prev ? { ...prev, isFeatured: !prev.isFeatured } : null);
             Alert.alert('Success', `Category ${category.isFeatured ? 'unfeatured' : 'featured'} successfully`);
         } catch (error) {
@@ -91,7 +115,7 @@ const CategoryDetailScreen: React.FC = () => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await api.delete(`/categories/${categoryId}`);
+                            await api.deleteCategory(categoryId);
                             Alert.alert('Success', 'Category deleted successfully');
                             navigation.goBack();
                         } catch (error) {
@@ -112,37 +136,6 @@ const CategoryDetailScreen: React.FC = () => {
         container: {
             flex: 1,
             backgroundColor: theme.colors.background,
-        },
-        header: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: 16,
-            backgroundColor: theme.colors.surface,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.colors.border,
-        },
-        headerLeft: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            flex: 1,
-        },
-        backButton: {
-            padding: 8,
-            marginRight: 8,
-        },
-        headerTitle: {
-            fontSize: 20,
-            fontWeight: 'bold',
-            color: theme.colors.text,
-            flex: 1,
-        },
-        headerActions: {
-            flexDirection: 'row',
-            gap: 8,
-        },
-        actionButton: {
-            padding: 8,
         },
         content: {
             flex: 1,
@@ -358,26 +351,6 @@ const CategoryDetailScreen: React.FC = () => {
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <View style={styles.headerLeft}>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => navigation.goBack()}
-                    >
-                        <Icon name="arrow-back" size={24} color={theme.colors.text} />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>{category.name}</Text>
-                </View>
-                <View style={styles.headerActions}>
-                    <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => navigation.navigate(SCREEN_NAMES.CATEGORY_FORM as any, { categoryId: category._id })}
-                    >
-                        <Icon name="edit" size={24} color={theme.colors.text} />
-                    </TouchableOpacity>
-                </View>
-            </View>
-
             <ScrollView
                 style={styles.content}
                 refreshControl={
@@ -387,10 +360,10 @@ const CategoryDetailScreen: React.FC = () => {
                 {/* Category Header */}
                 <View style={styles.categoryHeader}>
                     <View style={[styles.categoryIcon, { borderColor: category.color || theme.colors.primary }]}>
-                        <Icon 
-                            name={category.icon || 'category'} 
-                            size={32} 
-                            color={category.color || theme.colors.primary} 
+                        <Icon
+                            name={category.icon || 'category'}
+                            size={32}
+                            color={category.color || theme.colors.primary}
                         />
                     </View>
                     <Text style={styles.categoryName}>{category.name}</Text>
@@ -403,7 +376,7 @@ const CategoryDetailScreen: React.FC = () => {
                             </View>
                         )}
                         <View style={[
-                            styles.statusBadge, 
+                            styles.statusBadge,
                             { backgroundColor: category.isActive ? '#4CAF50' : '#F44336' }
                         ]}>
                             <Text style={styles.statusText}>
@@ -446,11 +419,11 @@ const CategoryDetailScreen: React.FC = () => {
                         <View style={styles.infoRow}>
                             <Text style={styles.infoLabel}>Color</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                                <View style={{ 
-                                    width: 20, 
-                                    height: 20, 
-                                    borderRadius: 10, 
-                                    backgroundColor: category.color || theme.colors.primary 
+                                <View style={{
+                                    width: 20,
+                                    height: 20,
+                                    borderRadius: 10,
+                                    backgroundColor: category.color || theme.colors.primary
                                 }} />
                                 <Text style={styles.infoValue}>{category.color || '#3B82F6'}</Text>
                             </View>
@@ -485,10 +458,10 @@ const CategoryDetailScreen: React.FC = () => {
                                     onPress={() => navigation.navigate(SCREEN_NAMES.CATEGORY_DETAIL as any, { categoryId: subcategory._id })}
                                 >
                                     <View style={[styles.subcategoryIcon, { backgroundColor: subcategory.color || theme.colors.primary }]}>
-                                        <Icon 
-                                            name={subcategory.icon || 'category'} 
-                                            size={12} 
-                                            color="#FFFFFF" 
+                                        <Icon
+                                            name={subcategory.icon || 'category'}
+                                            size={12}
+                                            color="#FFFFFF"
                                         />
                                     </View>
                                     <Text style={styles.subcategoryName}>{subcategory.name}</Text>
@@ -550,15 +523,15 @@ const CategoryDetailScreen: React.FC = () => {
                         <Icon name="edit" size={16} color="#FFFFFF" />
                         <Text style={styles.buttonText}>Edit Category</Text>
                     </TouchableOpacity>
-                    
+
                     <TouchableOpacity
                         style={styles.secondaryButton}
                         onPress={handleToggleStatus}
                     >
-                        <Icon 
-                            name={category.isActive ? 'pause' : 'play-arrow'} 
-                            size={16} 
-                            color={theme.colors.text} 
+                        <Icon
+                            name={category.isActive ? 'pause' : 'play-arrow'}
+                            size={16}
+                            color={theme.colors.text}
                         />
                         <Text style={styles.secondaryButtonText}>
                             {category.isActive ? 'Deactivate' : 'Activate'}
@@ -571,16 +544,16 @@ const CategoryDetailScreen: React.FC = () => {
                         style={styles.secondaryButton}
                         onPress={handleToggleFeatured}
                     >
-                        <Icon 
-                            name={category.isFeatured ? 'star' : 'star-border'} 
-                            size={16} 
-                            color={theme.colors.text} 
+                        <Icon
+                            name={category.isFeatured ? 'star' : 'star-border'}
+                            size={16}
+                            color={theme.colors.text}
                         />
                         <Text style={styles.secondaryButtonText}>
                             {category.isFeatured ? 'Unfeature' : 'Feature'}
                         </Text>
                     </TouchableOpacity>
-                    
+
                     <TouchableOpacity
                         style={styles.dangerButton}
                         onPress={handleDelete}

@@ -127,6 +127,7 @@ export const SCREEN_NAMES = {
     INVENTORY_TRACKING: 'InventoryTracking',
     BARCODE_SCANNER: 'BarcodeScanner',
     BULK_UPLOAD: 'BulkUpload',
+    BATCH_VALUATION: 'BatchValuation',
     // Admin Screens
     ADMIN_DASHBOARD: 'AdminDashboard',
     BRAND_LIST: 'BrandList',
@@ -192,6 +193,14 @@ export const API_ENDPOINTS = {
         TREE: '/categories/tree',
         MAIN: '/categories/main',
         STATS: '/categories/stats/overview'
+    },
+    BATCHES: {
+        LIST: '/batches',
+        CREATE: '/batches',
+        BY_PRODUCT: '/batches/product',
+        EXPIRING: '/batches/expiring',
+        VALUATION: '/batches/valuation',
+        SALE: '/batches/sale'
     }
 };
 

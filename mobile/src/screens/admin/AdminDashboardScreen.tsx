@@ -116,6 +116,20 @@ const AdminDashboardScreen: React.FC = () => {
             onPress: () => navigation.navigate(SCREEN_NAMES.CATEGORY_LIST as any)
         },
         {
+            title: 'Manage Suppliers',
+            description: 'Add, edit, and manage suppliers',
+            icon: 'local-shipping',
+            color: '#FF5722',
+            onPress: () => navigation.navigate(SCREEN_NAMES.SUPPLIER_LIST as any)
+        },
+        {
+            title: 'Purchase Orders',
+            description: 'View and manage purchase orders',
+            icon: 'shopping-cart',
+            color: '#00BCD4',
+            onPress: () => navigation.navigate(SCREEN_NAMES.PURCHASE_ORDER_LIST as any)
+        },
+        {
             title: 'User Management',
             description: 'Manage user accounts and permissions',
             icon: 'people',

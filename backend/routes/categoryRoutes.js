@@ -126,7 +126,7 @@ router.get('/', asyncHandler(async (req, res) => {
     }
 
     if (search) {
-        query.$text = { $search: search };
+        query.name = { $regex: search, $options: 'i' }; // Case-insensitive partial match
     }
 
     // Build sort object

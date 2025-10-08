@@ -30,10 +30,15 @@ export const FilterChips: React.FC<FilterChipsProps> = ({
 }) => {
     const { theme } = useTheme();
 
+    // Safety check for options
+    if (!options || !Array.isArray(options) || options.length === 0) {
+        return null;
+    }
+
     const getChipStyle = (isSelected: boolean) => ({
         ...styles.chip,
-        backgroundColor: isSelected ? theme.colors.primary : theme.colors.surface,
-        borderColor: isSelected ? theme.colors.primary : theme.colors.border,
+        backgroundColor: isSelected ? theme.colors.primary[500] : theme.colors.surface,
+        borderColor: isSelected ? theme.colors.primary[500] : theme.colors.border,
     });
 
     const getChipTextStyle = (isSelected: boolean) => ({

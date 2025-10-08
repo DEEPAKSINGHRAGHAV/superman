@@ -84,7 +84,8 @@ const InventoryTrackingScreen: React.FC = () => {
         useCallback(() => {
             loadMovements(1, true);
             loadSummary();
-        }, [loadMovements, loadSummary])
+        }, [filters, selectedType])
+        // Note: searchQuery is NOT in dependencies - search is handled by debounced handleSearch
     );
 
     const handleRefresh = useCallback(() => {
@@ -98,6 +99,24 @@ const InventoryTrackingScreen: React.FC = () => {
             loadMovements(currentPage + 1, false);
         }
     }, [isLoadingMore, hasMore, currentPage, loadMovements]);
+
+    // Use ref for debounce timeout
+    const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    const handleSearch = (query: string) => {
+        setSearchQuery(query);
+
+        // Clear existing timeout
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        // Debounce search - reload after user stops typing
+        searchTimeoutRef.current = setTimeout(() => {
+            setCurrentPage(1);
+            loadMovements(1, true);
+        }, 800); // 800ms delay for better UX
+    };
 
     const handleTypeFilter = useCallback((type: string | null) => {
         setSelectedType(type);
@@ -231,7 +250,7 @@ const InventoryTrackingScreen: React.FC = () => {
                 <SearchBar
                     placeholder="Search movements..."
                     value={searchQuery}
-                    onChangeText={setSearchQuery}
+                    onChangeText={handleSearch}
                     showFilter={true}
                     onFilterPress={() => {
                         // Show filter modal
@@ -305,6 +324,8 @@ const InventoryTrackingScreen: React.FC = () => {
                 ListFooterComponent={renderFooter}
                 ListEmptyComponent={renderEmpty}
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
                 contentContainerStyle={styles.listContent}
             />
         </View>

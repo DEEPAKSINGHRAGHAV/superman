@@ -7,7 +7,7 @@ import {
     TouchableOpacity,
     RefreshControl,
     Alert,
-    TextInput
+    ScrollView,
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -19,6 +19,7 @@ import { RootStackParamList, Brand, BrandFilters } from '../../types';
 import { SCREEN_NAMES, COLORS, BRAND_CATEGORIES } from '../../constants';
 import { Card } from '../../components/ui/Card';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { SkeletonList } from '../../components/ui/SkeletonLoader';
 import { SearchBar } from '../../components/SearchBar';
 import { FilterChips } from '../../components/FilterChips';
 import { EmptyState } from '../../components/EmptyState';
@@ -35,44 +36,58 @@ const BrandListScreen: React.FC = () => {
     const [refreshing, setRefreshing] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [filters, setFilters] = useState<BrandFilters>({
-        isActive: undefined, // Show all brands by default
+        isActive: undefined,
         sortBy: 'name',
         sortOrder: 'asc'
     });
     const [page, setPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
+    const [isSearching, setIsSearching] = useState(false);
+    const [totalResults, setTotalResults] = useState(0);
+    const [initialLoading, setInitialLoading] = useState(true);
 
-    const loadBrands = async (pageNum = 1, reset = false) => {
+    const loadBrands = async (pageNum = 1, reset = false, customSearch?: string | null) => {
         try {
-            if (pageNum === 1) setLoading(true);
+            // Only show searching indicator if we already have data
+            if (pageNum === 1 && brands.length > 0) {
+                setIsSearching(true);
+            }
+
+            // Use custom search if provided, otherwise use state
+            const searchTerm = customSearch !== undefined && customSearch !== null ? customSearch : searchQuery;
 
             const filterParams = {
-                search: searchQuery || undefined,
+                search: searchTerm || undefined,
                 isActive: filters.isActive,
                 category: filters.category,
                 sortBy: filters.sortBy,
                 sortOrder: filters.sortOrder
             };
 
-            console.log('Loading brands with params:', filterParams);
             const response = await apiService.getBrands(filterParams, pageNum, 20);
-            console.log('API response:', response);
             const newBrands = response.data;
-            console.log('Brands data:', newBrands);
 
             if (reset || pageNum === 1) {
                 setBrands(newBrands);
+                setTotalResults(newBrands.length);
             } else {
                 setBrands(prev => [...prev, ...newBrands]);
+                setTotalResults(prev => prev + newBrands.length);
             }
 
             setHasMore(newBrands.length === 20);
+
+            // After first successful load, mark initial loading as complete
+            if (initialLoading) {
+                setInitialLoading(false);
+            }
         } catch (error) {
             console.error('Error loading brands:', error);
             Alert.alert('Error', 'Failed to load brands');
         } finally {
             setLoading(false);
             setRefreshing(false);
+            setIsSearching(false);
         }
     };
 
@@ -82,10 +97,33 @@ const BrandListScreen: React.FC = () => {
         await loadBrands(1, true);
     };
 
+    const searchTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
     const onSearch = (query: string) => {
         setSearchQuery(query);
+
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        // Optimized debounce for better perceived performance
+        searchTimeoutRef.current = setTimeout(() => {
+            setPage(1);
+            loadBrands(1, true);
+        }, 400);
+    };
+
+    const onClearSearch = () => {
+        setSearchQuery('');
+
+        // Clear any pending search
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        // Immediately reload with empty search (pass '' explicitly to override state)
         setPage(1);
-        loadBrands(1, true);
+        loadBrands(1, true, '');
     };
 
     const onFilterChange = (newFilters: Partial<BrandFilters>) => {
@@ -142,7 +180,8 @@ const BrandListScreen: React.FC = () => {
     useFocusEffect(
         useCallback(() => {
             loadBrands(1, true);
-        }, [searchQuery, filters.isActive, filters.category, filters.sortBy, filters.sortOrder])
+        }, [filters.isActive, filters.category, filters.sortBy, filters.sortOrder])
+        // Note: searchQuery is NOT in dependencies - search is handled by debounced onSearch
     );
 
     const renderBrandCard = ({ item }: { item: Brand }) => (
@@ -151,27 +190,29 @@ const BrandListScreen: React.FC = () => {
                 onPress={() => navigation.navigate(SCREEN_NAMES.BRAND_DETAIL as any, { brandId: item._id })}
                 activeOpacity={0.7}
             >
-                <View style={styles.brandHeader}>
-                    <View style={styles.brandInfo}>
-                        <Text style={styles.brandName}>{item.name}</Text>
-                        <Text style={styles.brandCategory}>
-                            {BRAND_CATEGORIES.find(cat => cat === item.category) || item.category}
-                        </Text>
-                    </View>
-                    <View style={styles.brandStatus}>
-                        {item.isVerified && (
-                            <View style={[styles.statusBadge, { backgroundColor: '#4CAF50' }]}>
-                                <Icon name="verified" size={12} color="#FFFFFF" />
-                                <Text style={styles.statusText}>Verified</Text>
-                            </View>
-                        )}
-                        <View style={[
-                            styles.statusBadge,
-                            { backgroundColor: item.isActive ? '#4CAF50' : '#F44336' }
-                        ]}>
-                            <Text style={styles.statusText}>
-                                {item.isActive ? 'Active' : 'Inactive'}
+                <View style={styles.cardHeader}>
+                    <View style={styles.brandTitleRow}>
+                        <View style={styles.brandIconContainer}>
+                            <Icon
+                                name={item.isVerified ? "verified" : "business"}
+                                size={24}
+                                color={item.isVerified ? '#4CAF50' : theme.colors.primary[500]}
+                            />
+                        </View>
+                        <View style={styles.brandMainInfo}>
+                            <Text style={styles.brandName}>{item.name}</Text>
+                            <Text style={styles.brandCategory}>
+                                {item.category.replace('-', ' ').toUpperCase()}
                             </Text>
+                        </View>
+                        <View style={[
+                            styles.statusIndicator,
+                            { backgroundColor: item.isActive ? '#E8F5E9' : '#FFEBEE' }
+                        ]}>
+                            <View style={[
+                                styles.statusDot,
+                                { backgroundColor: item.isActive ? '#4CAF50' : '#F44336' }
+                            ]} />
                         </View>
                     </View>
                 </View>
@@ -182,57 +223,77 @@ const BrandListScreen: React.FC = () => {
                     </Text>
                 )}
 
-                <View style={styles.brandStats}>
-                    <View style={styles.statItem}>
-                        <Icon name="inventory" size={16} color={theme.colors.textSecondary} />
-                        <Text style={styles.statText}>{item.productCount} products</Text>
+                <View style={styles.statsRow}>
+                    <View style={styles.statBox}>
+                        <Icon name="inventory-2" size={18} color={theme.colors.primary[500]} />
+                        <Text style={styles.statValue}>{item.productCount}</Text>
+                        <Text style={styles.statLabel}>Products</Text>
                     </View>
-                    <View style={styles.statItem}>
-                        <Icon name="star" size={16} color={theme.colors.textSecondary} />
-                        <Text style={styles.statText}>
-                            {item.rating.average.toFixed(1)} ({item.rating.count})
-                        </Text>
+                    <View style={styles.statBox}>
+                        <Icon name="star" size={18} color="#FFB300" />
+                        <Text style={styles.statValue}>{item.rating.average.toFixed(1)}</Text>
+                        <Text style={styles.statLabel}>Rating</Text>
+                    </View>
+                    <View style={styles.statBox}>
+                        <Icon name="reviews" size={18} color={theme.colors.primary[500]} />
+                        <Text style={styles.statValue}>{item.rating.count}</Text>
+                        <Text style={styles.statLabel}>Reviews</Text>
                     </View>
                 </View>
 
-                <View style={styles.brandActions}>
+                <View style={styles.actionRow}>
                     <TouchableOpacity
-                        style={[styles.actionButton, { backgroundColor: theme.colors.primary }]}
-                        onPress={() => navigation.navigate(SCREEN_NAMES.BRAND_FORM as any, { brandId: item._id })}
+                        style={styles.quickAction}
+                        onPress={(e) => {
+                            e.stopPropagation();
+                            navigation.navigate(SCREEN_NAMES.BRAND_FORM as any, { brandId: item._id });
+                        }}
+                        activeOpacity={0.7}
                     >
-                        <Icon name="edit" size={16} color="#FFFFFF" />
-                        <Text style={styles.actionButtonText}>Edit</Text>
+                        <Icon name="edit" size={20} color={theme.colors.primary[500]} />
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={[
-                            styles.actionButton,
-                            { backgroundColor: item.isActive ? '#F44336' : '#4CAF50' }
-                        ]}
-                        onPress={() => handleToggleStatus(item._id, item.isActive)}
+                        style={styles.quickAction}
+                        onPress={(e) => {
+                            e.stopPropagation();
+                            handleToggleStatus(item._id, item.isActive);
+                        }}
+                        activeOpacity={0.7}
                     >
                         <Icon
-                            name={item.isActive ? 'pause' : 'play-arrow'}
-                            size={16}
-                            color="#FFFFFF"
+                            name={item.isActive ? 'toggle-on' : 'toggle-off'}
+                            size={20}
+                            color={item.isActive ? '#4CAF50' : '#9E9E9E'}
                         />
-                        <Text style={styles.actionButtonText}>
-                            {item.isActive ? 'Deactivate' : 'Activate'}
-                        </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={[styles.actionButton, { backgroundColor: '#FF5722' }]}
-                        onPress={() => handleDeleteBrand(item._id, item.name)}
+                        style={styles.quickAction}
+                        onPress={(e) => {
+                            e.stopPropagation();
+                            handleDeleteBrand(item._id, item.name);
+                        }}
+                        activeOpacity={0.7}
                     >
-                        <Icon name="delete" size={16} color="#FFFFFF" />
-                        <Text style={styles.actionButtonText}>Delete</Text>
+                        <Icon name="delete-outline" size={20} color="#F44336" />
+                    </TouchableOpacity>
+
+                    <View style={{ flex: 1 }} />
+
+                    <TouchableOpacity
+                        style={styles.viewDetailsButton}
+                        onPress={() => navigation.navigate(SCREEN_NAMES.BRAND_DETAIL as any, { brandId: item._id })}
+                        activeOpacity={0.7}
+                    >
+                        <Text style={styles.viewDetailsText} numberOfLines={1}>Detail</Text>
                     </TouchableOpacity>
                 </View>
             </TouchableOpacity>
         </Card>
     );
 
+    /* FILTER OPTIONS - Keep for future use
     const filterOptions = [
         { label: 'All', value: undefined },
         { label: 'Active', value: true },
@@ -246,167 +307,313 @@ const BrandListScreen: React.FC = () => {
             value: cat
         }))
     ];
+    */
 
     const styles = StyleSheet.create({
         container: {
             flex: 1,
             backgroundColor: theme.colors.background,
         },
-        header: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: 16,
-            backgroundColor: theme.colors.surface,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.colors.border,
-        },
-        headerTitle: {
-            fontSize: 20,
-            fontWeight: 'bold',
-            color: theme.colors.text,
-        },
-        addButton: {
-            backgroundColor: theme.colors.primary,
+        headerSection: {
             paddingHorizontal: 16,
-            paddingVertical: 8,
-            borderRadius: 8,
-            flexDirection: 'row',
-            alignItems: 'center',
-        },
-        addButtonText: {
-            color: '#FFFFFF',
-            fontWeight: '600',
-            marginLeft: 4,
-        },
-        content: {
-            flex: 1,
-            padding: 16,
+            paddingTop: 12,
+            paddingBottom: 8,
+            backgroundColor: theme.colors.background,
         },
         searchContainer: {
-            marginBottom: 16,
-        },
-        filtersContainer: {
-            marginBottom: 16,
-        },
-        brandCard: {
             marginBottom: 12,
-            padding: 16,
         },
-        brandHeader: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
+        filterSection: {
             marginBottom: 8,
         },
-        brandInfo: {
+        sortSection: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingVertical: 8,
+            paddingHorizontal: 4,
+        },
+        sortLabel: {
+            fontSize: 14,
+            fontWeight: '500',
+            color: theme.colors.text,
+        },
+        sortButtons: {
+            flexDirection: 'row',
+            gap: 8,
+        },
+        sortButton: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+            backgroundColor: theme.colors.surface,
+        },
+        sortButtonActive: {
+            backgroundColor: theme.colors.primary[500],
+            borderColor: theme.colors.primary[500],
+        },
+        sortButtonText: {
+            fontSize: 13,
+            color: theme.colors.text,
+            marginRight: 4,
+        },
+        sortButtonTextActive: {
+            color: '#FFFFFF',
+        },
+        activeFiltersContainer: {
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            gap: 8,
+            marginTop: 8,
+        },
+        activeFilterChip: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: theme.colors.primary[500],
+            paddingHorizontal: 10,
+            paddingVertical: 5,
+            borderRadius: 16,
+            gap: 4,
+        },
+        activeFilterText: {
+            fontSize: 12,
+            color: '#FFFFFF',
+            fontWeight: '500',
+        },
+        listContainer: {
+            paddingHorizontal: 16,
+            paddingBottom: 100,
+        },
+        brandCard: {
+            marginBottom: 16,
+            padding: 16,
+            elevation: 2,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.1,
+            shadowRadius: 4,
+        },
+        cardHeader: {
+            marginBottom: 12,
+        },
+        brandTitleRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+        },
+        brandIconContainer: {
+            width: 48,
+            height: 48,
+            borderRadius: 24,
+            backgroundColor: theme.colors.surface,
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderWidth: 2,
+            borderColor: theme.colors.border,
+        },
+        brandMainInfo: {
             flex: 1,
         },
         brandName: {
             fontSize: 18,
-            fontWeight: '600',
+            fontWeight: '700',
             color: theme.colors.text,
             marginBottom: 4,
         },
         brandCategory: {
-            fontSize: 14,
+            fontSize: 11,
             color: theme.colors.textSecondary,
-            textTransform: 'capitalize',
+            fontWeight: '600',
+            letterSpacing: 0.5,
         },
-        brandStatus: {
-            flexDirection: 'row',
-            gap: 8,
-        },
-        statusBadge: {
-            flexDirection: 'row',
+        statusIndicator: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            justifyContent: 'center',
             alignItems: 'center',
-            paddingHorizontal: 8,
-            paddingVertical: 4,
-            borderRadius: 12,
-            gap: 4,
         },
-        statusText: {
-            fontSize: 12,
-            color: '#FFFFFF',
-            fontWeight: '500',
+        statusDot: {
+            width: 12,
+            height: 12,
+            borderRadius: 6,
         },
         brandDescription: {
             fontSize: 14,
             color: theme.colors.textSecondary,
-            marginBottom: 12,
             lineHeight: 20,
-        },
-        brandStats: {
-            flexDirection: 'row',
             marginBottom: 16,
-            gap: 16,
         },
-        statItem: {
+        statsRow: {
             flexDirection: 'row',
+            backgroundColor: theme.colors.surface,
+            borderRadius: 12,
+            padding: 12,
+            marginBottom: 12,
+            gap: 8,
+        },
+        statBox: {
+            flex: 1,
             alignItems: 'center',
             gap: 4,
         },
-        statText: {
-            fontSize: 14,
+        statValue: {
+            fontSize: 16,
+            fontWeight: '700',
+            color: theme.colors.text,
+        },
+        statLabel: {
+            fontSize: 11,
             color: theme.colors.textSecondary,
+            textAlign: 'center',
         },
-        brandActions: {
+        actionRow: {
             flexDirection: 'row',
-            gap: 8,
+            alignItems: 'center',
+            paddingTop: 12,
+            borderTopWidth: 1,
+            borderTopColor: theme.colors.border,
+            gap: 12,
         },
-        actionButton: {
-            flex: 1,
+        quickAction: {
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: theme.colors.surface,
+            justifyContent: 'center',
+            alignItems: 'center',
+            borderWidth: 1,
+            borderColor: theme.colors.border,
+        },
+        viewDetailsButton: {
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',
+            backgroundColor: theme.colors.surface,
+            paddingHorizontal: 16,
             paddingVertical: 8,
-            paddingHorizontal: 12,
-            borderRadius: 6,
-            gap: 4,
+            borderRadius: 20,
+            borderWidth: 1,
+            borderColor: theme.colors.primary[500],
+            flexShrink: 1,
+            minWidth: 70,
         },
-        actionButtonText: {
-            color: '#FFFFFF',
-            fontSize: 12,
-            fontWeight: '500',
+        viewDetailsText: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: theme.colors.primary[500],
+            flexShrink: 1,
         },
         loadingContainer: {
             flex: 1,
             justifyContent: 'center',
             alignItems: 'center',
         },
+        loadingOverlay: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 10,
+        },
+        loadingCard: {
+            backgroundColor: theme.colors.surface,
+            paddingVertical: 24,
+            paddingHorizontal: 32,
+            borderRadius: 16,
+            alignItems: 'center',
+            elevation: 4,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 8,
+        },
+        loadingText: {
+            marginTop: 12,
+            fontSize: 14,
+            fontWeight: '500',
+        },
+        fab: {
+            position: 'absolute',
+            right: 20,
+            bottom: 20,
+            width: 56,
+            height: 56,
+            borderRadius: 28,
+            backgroundColor: theme.colors.primary[500],
+            justifyContent: 'center',
+            alignItems: 'center',
+            elevation: 8,
+            shadowColor: theme.colors.primary[500],
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 8,
+        },
     });
 
-    if (loading && brands.length === 0) {
-        return (
-            <View style={styles.loadingContainer}>
-                <LoadingSpinner size="large" />
-            </View>
-        );
-    }
+    /* FILTER FUNCTIONS - Keep for future use
+    const getActiveFilterCount = () => {
+        let count = 0;
+        if (filters.isActive !== undefined) count++;
+        if (filters.category) count++;
+        return count;
+    };
+    */
+
+    const clearAllFilters = () => {
+        // Clear any pending search
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        setSearchQuery('');
+        setFilters({
+            isActive: undefined,
+            category: undefined,
+            sortBy: 'name',
+            sortOrder: 'asc'
+        });
+        setPage(1);
+
+        // Immediately reload with empty search (pass '' explicitly to override state)
+        loadBrands(1, true, '');
+    };
+
+    const toggleSort = (field: 'name' | 'createdAt') => {
+        if (filters.sortBy === field) {
+            onFilterChange({ sortOrder: filters.sortOrder === 'asc' ? 'desc' : 'asc' });
+        } else {
+            onFilterChange({ sortBy: field, sortOrder: 'asc' });
+        }
+    };
+
+    // const activeFilterCount = getActiveFilterCount(); // Commented out with filters
+    const hasActiveSearch = searchQuery.length > 0; // Only check search now
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.headerTitle}>Brands</Text>
-                <TouchableOpacity
-                    style={styles.addButton}
-                    onPress={() => navigation.navigate(SCREEN_NAMES.BRAND_FORM as any)}
-                >
-                    <Icon name="add" size={20} color="#FFFFFF" />
-                    <Text style={styles.addButtonText}>Add Brand</Text>
-                </TouchableOpacity>
-            </View>
-
-            <View style={styles.content}>
+            {/* Search bar and filters - ALWAYS visible */}
+            <View style={styles.headerSection}>
                 <View style={styles.searchContainer}>
                     <SearchBar
-                        placeholder="Search brands..."
+                        placeholder="Search brands by name..."
                         value={searchQuery}
                         onChangeText={onSearch}
+                        onClear={onClearSearch}
+                        resultCount={hasActiveSearch ? totalResults : undefined}
                     />
                 </View>
 
-                <View style={styles.filtersContainer}>
+                {/* FILTERS COMMENTED OUT - Keep for future use
+                <View style={styles.filterSection}>
                     <FilterChips
                         title="Status"
                         options={filterOptions}
@@ -420,28 +627,133 @@ const BrandListScreen: React.FC = () => {
                         onValueChange={(value) => onFilterChange({ category: value })}
                     />
                 </View>
+                */}
 
-                <FlatList
-                    data={brands}
-                    renderItem={renderBrandCard}
-                    keyExtractor={(item) => item._id}
-                    refreshControl={
-                        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-                    }
-                    onEndReached={loadMore}
-                    onEndReachedThreshold={0.1}
-                    ListEmptyComponent={
-                        <EmptyState
-                            icon="business"
-                            title="No Brands Found"
-                            message="No brands match your current filters. Try adjusting your search or filters."
-                        />
-                    }
-                    showsVerticalScrollIndicator={false}
-                />
+                <View style={styles.sortSection}>
+                    <Text style={styles.sortLabel}>Sort by:</Text>
+                    <View style={styles.sortButtons}>
+                        <TouchableOpacity
+                            style={[
+                                styles.sortButton,
+                                filters.sortBy === 'name' && styles.sortButtonActive
+                            ]}
+                            onPress={() => toggleSort('name')}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={[
+                                styles.sortButtonText,
+                                filters.sortBy === 'name' && styles.sortButtonTextActive
+                            ]}>
+                                Name
+                            </Text>
+                            {filters.sortBy === 'name' && (
+                                <Icon
+                                    name={filters.sortOrder === 'asc' ? 'arrow-upward' : 'arrow-downward'}
+                                    size={14}
+                                    color="#FFFFFF"
+                                />
+                            )}
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            style={[
+                                styles.sortButton,
+                                filters.sortBy === 'createdAt' && styles.sortButtonActive
+                            ]}
+                            onPress={() => toggleSort('createdAt')}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={[
+                                styles.sortButtonText,
+                                filters.sortBy === 'createdAt' && styles.sortButtonTextActive
+                            ]}>
+                                Date
+                            </Text>
+                            {filters.sortBy === 'createdAt' && (
+                                <Icon
+                                    name={filters.sortOrder === 'asc' ? 'arrow-upward' : 'arrow-downward'}
+                                    size={14}
+                                    color="#FFFFFF"
+                                />
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </View>
+
+                {hasActiveSearch && (
+                    <View style={styles.activeFiltersContainer}>
+                        <TouchableOpacity
+                            style={styles.activeFilterChip}
+                            onPress={clearAllFilters}
+                            activeOpacity={0.7}
+                        >
+                            <Icon name="clear-all" size={14} color="#FFFFFF" />
+                            <Text style={styles.activeFilterText}>Clear All</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
             </View>
+
+            {/* List area - shows initial loader OR list with search overlay */}
+            <View style={{ flex: 1, position: 'relative' }}>
+                {initialLoading ? (
+                    // Initial page load - show centered spinner
+                    <View style={styles.loadingContainer}>
+                        <LoadingSpinner size="lg" />
+                    </View>
+                ) : (
+                    // Data loaded - show list
+                    <>
+                        <FlatList
+                            data={brands}
+                            renderItem={renderBrandCard}
+                            keyExtractor={(item) => item._id}
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                            }
+                            onEndReached={loadMore}
+                            onEndReachedThreshold={0.1}
+                            ListEmptyComponent={
+                                <EmptyState
+                                    icon="business"
+                                    title="No Brands Found"
+                                    subtitle={searchQuery
+                                        ? `No brands found matching "${searchQuery}"`
+                                        : "No brands match your filters. Try adjusting them."
+                                    }
+                                />
+                            }
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={styles.listContainer}
+                            keyboardShouldPersistTaps="handled"
+                            keyboardDismissMode="on-drag"
+                        />
+
+                        {/* Loading overlay when searching - only covers list area */}
+                        {isSearching && (
+                            <View style={styles.loadingOverlay}>
+                                <View style={styles.loadingCard}>
+                                    <LoadingSpinner size="md" />
+                                    <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+                                        Searching brands...
+                                    </Text>
+                                </View>
+                            </View>
+                        )}
+                    </>
+                )}
+            </View>
+
+            <TouchableOpacity
+                style={styles.fab}
+                onPress={() => navigation.navigate(SCREEN_NAMES.BRAND_FORM as any)}
+                activeOpacity={0.8}
+            >
+                <Icon name="add" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
         </View>
     );
 };
 
 export default BrandListScreen;
+

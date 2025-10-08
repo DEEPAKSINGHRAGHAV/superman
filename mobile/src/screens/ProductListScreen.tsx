@@ -33,6 +33,7 @@ const ProductListScreen: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+    const [categories, setCategories] = useState<Array<{ label: string; value: string }>>([]);
 
     const loadProducts = useCallback(async (page = 1, reset = false) => {
         try {
@@ -72,12 +73,40 @@ const ProductListScreen: React.FC = () => {
             setIsRefreshing(false);
             setIsLoadingMore(false);
         }
-    }, [filters, searchQuery, selectedCategory]);
+    }, [filters, selectedCategory]);
+    // Note: searchQuery is intentionally NOT in dependencies
+    // It's read from state directly, preventing unnecessary function recreations
+
+    // Load categories on mount
+    useEffect(() => {
+        const loadCategories = async () => {
+            try {
+                const response = await apiService.getProductCategories();
+                if (response.success && response.data) {
+                    const categoryOptions = [
+                        { label: 'All', value: null },
+                        ...response.data.map((cat: string) => ({
+                            label: cat.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+                            value: cat
+                        }))
+                    ];
+                    setCategories(categoryOptions);
+                }
+            } catch (error) {
+                console.error('Error loading categories:', error);
+                // Set default categories if API fails
+                setCategories([{ label: 'All', value: null }]);
+            }
+        };
+        loadCategories();
+    }, []);
 
     useFocusEffect(
         useCallback(() => {
             loadProducts(1, true);
-        }, [loadProducts])
+        }, [filters, selectedCategory])
+        // Note: searchQuery is NOT in dependencies - search is handled by debounced handleSearch
+        // Including loadProducts as dependency would cause re-run on every search keystroke
     );
 
     const handleRefresh = useCallback(() => {
@@ -91,16 +120,23 @@ const ProductListScreen: React.FC = () => {
         }
     }, [isLoadingMore, hasMore, currentPage, loadProducts]);
 
-    const handleSearch = useCallback((query: string) => {
-        setSearchQuery(query);
-        setCurrentPage(1);
-        // Debounce search - reload after user stops typing
-        const timeoutId = setTimeout(() => {
-            loadProducts(1, true);
-        }, 500);
+    // Use ref for debounce timeout
+    const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-        return () => clearTimeout(timeoutId);
-    }, [loadProducts]);
+    const handleSearch = (query: string) => {
+        setSearchQuery(query);
+
+        // Clear existing timeout
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        // Debounce search - reload after user stops typing
+        searchTimeoutRef.current = setTimeout(() => {
+            setCurrentPage(1);
+            loadProducts(1, true);
+        }, 800); // 800ms delay for better UX
+    };
 
     const handleCategoryFilter = useCallback((category: string | null) => {
         setSelectedCategory(category);
@@ -144,14 +180,21 @@ const ProductListScreen: React.FC = () => {
         color: theme.colors.text,
     });
 
-    const renderProduct = ({ item }: { item: Product }) => (
-        <ProductCard
-            product={item}
-            onPress={() => handleProductPress(item._id)}
-            onEdit={() => handleEditProduct(item._id)}
-            showActions={true}
-        />
-    );
+    const renderProduct = ({ item }: { item: Product }) => {
+        try {
+            return (
+                <ProductCard
+                    product={item}
+                    onPress={() => handleProductPress(item._id)}
+                    onEdit={() => handleEditProduct(item._id)}
+                    showActions={true}
+                />
+            );
+        } catch (error) {
+            console.error('Error rendering product card:', error, item);
+            return null;
+        }
+    };
 
     const renderFooter = () => {
         if (!isLoadingMore) return null;
@@ -227,10 +270,13 @@ const ProductListScreen: React.FC = () => {
                     }}
                 />
 
-                <FilterChips
-                    selectedCategory={selectedCategory}
-                    onCategorySelect={handleCategoryFilter}
-                />
+                {categories.length > 0 && (
+                    <FilterChips
+                        options={categories}
+                        selectedValue={selectedCategory}
+                        onValueChange={handleCategoryFilter}
+                    />
+                )}
             </View>
 
             {/* Products List */}
@@ -250,6 +296,8 @@ const ProductListScreen: React.FC = () => {
                 ListFooterComponent={renderFooter}
                 ListEmptyComponent={renderEmpty}
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
                 contentContainerStyle={styles.listContent}
             />
         </View>

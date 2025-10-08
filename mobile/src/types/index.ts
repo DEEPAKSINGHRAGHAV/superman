@@ -177,6 +177,122 @@ export interface StockMovement {
     formattedDate?: string;
 }
 
+// Batch Tracking Types
+export interface InventoryBatch {
+    _id: string;
+    product: string | Product;
+    batchNumber: string;
+    costPrice: number;
+    sellingPrice: number;
+    mrp?: number;
+    initialQuantity: number;
+    currentQuantity: number;
+    reservedQuantity: number;
+    availableQuantity: number;
+    purchaseOrder?: string;
+    supplier?: string | Supplier;
+    purchaseDate: string;
+    expiryDate?: string;
+    manufactureDate?: string;
+    status: 'active' | 'depleted' | 'expired' | 'damaged' | 'returned';
+    location?: string;
+    notes?: string;
+    createdBy: string | User;
+    createdAt: string;
+    updatedAt: string;
+    // Virtual fields
+    isDepleted?: boolean;
+    isExpired?: boolean;
+    daysUntilExpiry?: number | null;
+    profitMargin?: number;
+    batchValue?: number;
+    potentialRevenue?: number;
+}
+
+export interface BatchSummary {
+    productId: string;
+    productName: string;
+    productSku: string;
+    barcode?: string;
+    totalBatches: number;
+    totalQuantity: number;
+    priceRange: {
+        minCostPrice: number;
+        maxCostPrice: number;
+        minSellingPrice: number;
+        maxSellingPrice: number;
+    };
+    batches: InventoryBatch[];
+}
+
+export interface BatchSaleResult {
+    success: boolean;
+    quantitySold: number;
+    batchesUsed: Array<{
+        batchId: string;
+        batchNumber: string;
+        quantity: number;
+        costPrice: number;
+        sellingPrice: number;
+        totalCost: number;
+        totalRevenue: number;
+    }>;
+    totalCost: number;
+    totalRevenue: number;
+    profit: number;
+    profitMargin: string;
+    averageCostPrice: number;
+    averageSellingPrice: number;
+}
+
+export interface InventoryValuation {
+    summary: {
+        totalProducts: number;
+        totalBatches: number;
+        totalQuantity: number;
+        totalCostValue: number;
+        totalSellingValue: number;
+        totalPotentialProfit: number;
+    };
+    products: Array<{
+        productId: string;
+        productName: string;
+        productSku: string;
+        barcode?: string;
+        category?: string;
+        totalBatches: number;
+        totalQuantity: number;
+        totalCostValue: number;
+        totalSellingValue: number;
+        potentialProfit: number;
+        profitMargin: number;
+        weightedAvgCostPrice: number;
+        weightedAvgSellingPrice: number;
+        batches: Array<{
+            batchNumber: string;
+            quantity: number;
+            costPrice: number;
+            sellingPrice: number;
+            purchaseDate: string;
+            expiryDate?: string;
+        }>;
+    }>;
+}
+
+export interface BatchFormData {
+    productId: string;
+    quantity: number;
+    costPrice: number;
+    sellingPrice: number;
+    mrp?: number;
+    purchaseOrderId?: string;
+    supplierId?: string;
+    expiryDate?: string;
+    manufactureDate?: string;
+    location?: string;
+    notes?: string;
+}
+
 // Inventory Types
 export interface InventorySummary {
     totalProducts: number;

@@ -22,6 +22,7 @@ import PurchaseOrderFormScreen from '../screens/PurchaseOrderFormScreen';
 import InventoryTrackingScreen from '../screens/InventoryTrackingScreen';
 import BarcodeScannerScreen from '../screens/BarcodeScannerScreen';
 import BulkUploadScreen from '../screens/BulkUploadScreen';
+import BatchValuationScreen from '../screens/BatchValuationScreen';
 // Admin Screens
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import BrandListScreen from '../screens/admin/BrandListScreen';
@@ -51,12 +52,6 @@ const MainTabNavigator = () => {
                             break;
                         case SCREEN_NAMES.PRODUCT_LIST:
                             iconName = 'inventory';
-                            break;
-                        case SCREEN_NAMES.SUPPLIER_LIST:
-                            iconName = 'business';
-                            break;
-                        case SCREEN_NAMES.PURCHASE_ORDER_LIST:
-                            iconName = 'shopping-cart';
                             break;
                         case SCREEN_NAMES.INVENTORY_TRACKING:
                             iconName = 'track-changes';
@@ -91,16 +86,6 @@ const MainTabNavigator = () => {
                 name={SCREEN_NAMES.PRODUCT_LIST}
                 component={ProductListScreen}
                 options={{ title: 'Products' }}
-            />
-            <Tab.Screen
-                name={SCREEN_NAMES.SUPPLIER_LIST}
-                component={SupplierListScreen}
-                options={{ title: 'Suppliers' }}
-            />
-            <Tab.Screen
-                name={SCREEN_NAMES.PURCHASE_ORDER_LIST}
-                component={PurchaseOrderListScreen}
-                options={{ title: 'Orders' }}
             />
             <Tab.Screen
                 name={SCREEN_NAMES.INVENTORY_TRACKING}
@@ -198,6 +183,11 @@ const AppNavigator = () => {
                             name={SCREEN_NAMES.BULK_UPLOAD}
                             component={BulkUploadScreen}
                             options={{ title: 'Bulk Upload' }}
+                        />
+                        <Stack.Screen
+                            name={SCREEN_NAMES.BATCH_VALUATION}
+                            component={BatchValuationScreen}
+                            options={{ title: 'Inventory Valuation' }}
                         />
 
                         {/* Admin Screens */}

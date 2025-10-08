@@ -17,7 +17,7 @@ import { RootStackParamList, Brand } from '../../types';
 import { SCREEN_NAMES, BRAND_CATEGORIES } from '../../constants';
 import { Card } from '../../components/ui/Card';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
-import { api } from '../../services/api';
+import api from '../../services/api';
 
 type BrandDetailNavigationProp = StackNavigationProp<RootStackParamList>;
 type BrandDetailRouteProp = RouteProp<RootStackParamList, 'BrandDetail'>;
@@ -26,17 +26,41 @@ const BrandDetailScreen: React.FC = () => {
     const navigation = useNavigation<BrandDetailNavigationProp>();
     const route = useRoute<BrandDetailRouteProp>();
     const { theme, isDark } = useTheme();
-    
+
     const { brandId } = route.params;
     const [brand, setBrand] = useState<Brand | null>(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
 
+    // Set up navigation header with edit button
+    React.useLayoutEffect(() => {
+        if (brand) {
+            navigation.setOptions({
+                headerRight: () => (
+                    <TouchableOpacity
+                        onPress={() => navigation.navigate(SCREEN_NAMES.BRAND_FORM as any, { brandId: brand._id })}
+                        style={{
+                            marginRight: 12,
+                            backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                            borderRadius: 8,
+                            padding: 8,
+                            borderWidth: 1,
+                            borderColor: 'rgba(255, 255, 255, 0.3)',
+                        }}
+                        activeOpacity={0.7}
+                    >
+                        <Icon name="edit" size={24} color="#FFFFFF" />
+                    </TouchableOpacity>
+                ),
+            });
+        }
+    }, [navigation, brand]);
+
     const loadBrand = async () => {
         try {
             setLoading(true);
-            const response = await api.get(`/brands/${brandId}`);
-            setBrand(response.data.data);
+            const response = await api.getBrand(brandId);
+            setBrand(response.data);
         } catch (error) {
             console.error('Error loading brand:', error);
             Alert.alert('Error', 'Failed to load brand details');
@@ -56,7 +80,7 @@ const BrandDetailScreen: React.FC = () => {
         if (!brand) return;
 
         try {
-            await api.patch(`/brands/${brandId}/toggle-status`);
+            await api.toggleBrandStatus(brandId);
             setBrand(prev => prev ? { ...prev, isActive: !prev.isActive } : null);
             Alert.alert('Success', `Brand ${brand.isActive ? 'deactivated' : 'activated'} successfully`);
         } catch (error) {
@@ -69,7 +93,7 @@ const BrandDetailScreen: React.FC = () => {
         if (!brand) return;
 
         try {
-            await api.patch(`/brands/${brandId}/verify`);
+            await api.verifyBrand(brandId);
             setBrand(prev => prev ? { ...prev, isVerified: !prev.isVerified } : null);
             Alert.alert('Success', `Brand ${brand.isVerified ? 'unverified' : 'verified'} successfully`);
         } catch (error) {
@@ -91,7 +115,7 @@ const BrandDetailScreen: React.FC = () => {
                     style: 'destructive',
                     onPress: async () => {
                         try {
-                            await api.delete(`/brands/${brandId}`);
+                            await api.deleteBrand(brandId);
                             Alert.alert('Success', 'Brand deleted successfully');
                             navigation.goBack();
                         } catch (error) {
@@ -112,37 +136,6 @@ const BrandDetailScreen: React.FC = () => {
         container: {
             flex: 1,
             backgroundColor: theme.colors.background,
-        },
-        header: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: 16,
-            backgroundColor: theme.colors.surface,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.colors.border,
-        },
-        headerLeft: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            flex: 1,
-        },
-        backButton: {
-            padding: 8,
-            marginRight: 8,
-        },
-        headerTitle: {
-            fontSize: 20,
-            fontWeight: 'bold',
-            color: theme.colors.text,
-            flex: 1,
-        },
-        headerActions: {
-            flexDirection: 'row',
-            gap: 8,
-        },
-        actionButton: {
-            padding: 8,
         },
         content: {
             flex: 1,
@@ -326,26 +319,6 @@ const BrandDetailScreen: React.FC = () => {
 
     return (
         <View style={styles.container}>
-            <View style={styles.header}>
-                <View style={styles.headerLeft}>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => navigation.goBack()}
-                    >
-                        <Icon name="arrow-back" size={24} color={theme.colors.text} />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>{brand.name}</Text>
-                </View>
-                <View style={styles.headerActions}>
-                    <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => navigation.navigate(SCREEN_NAMES.BRAND_FORM as any, { brandId: brand._id })}
-                    >
-                        <Icon name="edit" size={24} color={theme.colors.text} />
-                    </TouchableOpacity>
-                </View>
-            </View>
-
             <ScrollView
                 style={styles.content}
                 refreshControl={
@@ -375,7 +348,7 @@ const BrandDetailScreen: React.FC = () => {
                             </View>
                         )}
                         <View style={[
-                            styles.statusBadge, 
+                            styles.statusBadge,
                             { backgroundColor: brand.isActive ? '#4CAF50' : '#F44336' }
                         ]}>
                             <Text style={styles.statusText}>
@@ -481,15 +454,15 @@ const BrandDetailScreen: React.FC = () => {
                         <Icon name="edit" size={16} color="#FFFFFF" />
                         <Text style={styles.buttonText}>Edit Brand</Text>
                     </TouchableOpacity>
-                    
+
                     <TouchableOpacity
                         style={styles.secondaryButton}
                         onPress={handleToggleStatus}
                     >
-                        <Icon 
-                            name={brand.isActive ? 'pause' : 'play-arrow'} 
-                            size={16} 
-                            color={theme.colors.text} 
+                        <Icon
+                            name={brand.isActive ? 'pause' : 'play-arrow'}
+                            size={16}
+                            color={theme.colors.text}
                         />
                         <Text style={styles.secondaryButtonText}>
                             {brand.isActive ? 'Deactivate' : 'Activate'}
@@ -502,16 +475,16 @@ const BrandDetailScreen: React.FC = () => {
                         style={styles.secondaryButton}
                         onPress={handleToggleVerification}
                     >
-                        <Icon 
-                            name={brand.isVerified ? 'verified-user' : 'verified'} 
-                            size={16} 
-                            color={theme.colors.text} 
+                        <Icon
+                            name={brand.isVerified ? 'verified-user' : 'verified'}
+                            size={16}
+                            color={theme.colors.text}
                         />
                         <Text style={styles.secondaryButtonText}>
                             {brand.isVerified ? 'Unverify' : 'Verify'}
                         </Text>
                     </TouchableOpacity>
-                    
+
                     <TouchableOpacity
                         style={styles.dangerButton}
                         onPress={handleDelete}

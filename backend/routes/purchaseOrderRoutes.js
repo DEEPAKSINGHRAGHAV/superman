@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const PurchaseOrder = require('../models/PurchaseOrder');
 const InventoryService = require('../services/inventoryService');
+const BatchService = require('../services/batchService');
 const asyncHandler = require('../middleware/asyncHandler');
 const { protect, requirePermission } = require('../middleware/auth');
 const { validateRequest, validatePagination, validateDateRange } = require('../middleware/validation');
@@ -273,7 +274,7 @@ router.patch('/:id/approve',
     })
 );
 
-// @desc    Mark purchase order as received
+// @desc    Mark purchase order as received (creates inventory batches)
 // @route   PATCH /api/v1/purchase-orders/:id/receive
 // @access  Private (requires write_purchase_orders permission)
 router.patch('/:id/receive',
@@ -289,7 +290,9 @@ router.patch('/:id/receive',
             });
         }
 
-        const purchaseOrder = await PurchaseOrder.findById(req.params.id);
+        const purchaseOrder = await PurchaseOrder.findById(req.params.id)
+            .populate('supplier');
+
         if (!purchaseOrder) {
             return res.status(404).json({
                 success: false,
@@ -297,22 +300,59 @@ router.patch('/:id/receive',
             });
         }
 
-        // Process the received items through inventory service
-        const results = await InventoryService.processPurchaseReceipt(
-            req.params.id,
-            receivedItems,
-            req.user._id
-        );
+        // Validate that all items in receivedItems exist in the purchase order
+        const validItems = [];
+        const createdBatches = [];
+
+        for (const receivedItem of receivedItems) {
+            const { productId, quantity, costPrice, sellingPrice, expiryDate, manufactureDate, location, notes } = receivedItem;
+
+            // Find the item in the purchase order
+            const poItem = purchaseOrder.items.find(item =>
+                item.product.toString() === productId.toString()
+            );
+
+            if (!poItem) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Product ${productId} not found in purchase order`
+                });
+            }
+
+            // Create a batch for this received item
+            const batch = await BatchService.createBatch({
+                productId,
+                quantity,
+                costPrice: costPrice || poItem.costPrice,
+                sellingPrice: sellingPrice || poItem.costPrice * 1.2, // Default 20% markup if not provided
+                purchaseOrderId: purchaseOrder._id,
+                supplierId: purchaseOrder.supplier._id,
+                expiryDate,
+                manufactureDate,
+                location,
+                notes: notes || `Received from PO ${purchaseOrder.orderNumber}`,
+                createdBy: req.user._id
+            });
+
+            createdBatches.push(batch);
+        }
 
         // Mark purchase order as received
         await purchaseOrder.markAsReceived();
 
+        // Populate the purchase order for response
+        await purchaseOrder.populate([
+            { path: 'createdBy', select: 'name email' },
+            { path: 'items.product', select: 'name sku category' }
+        ]);
+
         res.status(200).json({
             success: true,
-            message: 'Purchase order received successfully',
+            message: `Purchase order received successfully. ${createdBatches.length} batch(es) created.`,
             data: {
                 purchaseOrder,
-                stockMovements: results
+                batches: createdBatches,
+                batchCount: createdBatches.length
             }
         });
     })

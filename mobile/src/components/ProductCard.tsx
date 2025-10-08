@@ -26,19 +26,28 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 }) => {
     const { theme } = useTheme();
 
+    // Safety checks with default values
+    const currentStock = product.currentStock ?? 0;
+    const minStockLevel = product.minStockLevel ?? 0;
+    const sellingPrice = product.sellingPrice ?? 0;
+    const mrp = product.mrp ?? 0;
+    const images = product.images ?? [];
+    const createdAt = product.createdAt ?? new Date().toISOString();
+    const expiryDate = product.expiryDate;
+
     const getStockStatusColor = () => {
-        if (product.currentStock === 0) {
+        if (currentStock === 0) {
             return theme.colors.error[500];
-        } else if (product.currentStock <= product.minStockLevel) {
+        } else if (currentStock <= minStockLevel) {
             return theme.colors.warning[500];
         }
         return theme.colors.success[500];
     };
 
     const getStockStatusText = () => {
-        if (product.currentStock === 0) {
+        if (currentStock === 0) {
             return 'Out of Stock';
-        } else if (product.currentStock <= product.minStockLevel) {
+        } else if (currentStock <= minStockLevel) {
             return 'Low Stock';
         }
         return 'In Stock';
@@ -49,6 +58,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
     };
 
     const formatCategory = (category: string) => {
+        if (!category) return 'Other';
         return category.split('-').map(word =>
             word.charAt(0).toUpperCase() + word.slice(1)
         ).join(' ');
@@ -85,9 +95,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
             <View style={styles.content}>
                 <View style={styles.imageContainer}>
-                    {product.images && product.images.length > 0 ? (
+                    {images.length > 0 ? (
                         <Image
-                            source={{ uri: product.images[0] }}
+                            source={{ uri: images[0] }}
                             style={styles.image}
                             resizeMode="cover"
                         />
@@ -112,10 +122,10 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
                     <View style={styles.pricing}>
                         <Text style={[styles.sellingPrice, { color: theme.colors.text }]}>
-                            {formatPrice(product.sellingPrice)}
+                            {formatPrice(sellingPrice)}
                         </Text>
                         <Text style={[styles.mrp, { color: theme.colors.textSecondary }]}>
-                            MRP: {formatPrice(product.mrp)}
+                            MRP: {formatPrice(mrp)}
                         </Text>
                     </View>
 
@@ -125,7 +135,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
                                 Stock:
                             </Text>
                             <Text style={[styles.stockValue, { color: theme.colors.text }]}>
-                                {product.currentStock} {product.unit}
+                                {currentStock} {product.unit || 'pcs'}
                             </Text>
                         </View>
                         <View style={[styles.stockStatus, { backgroundColor: getStockStatusColor() }]}>
@@ -146,11 +156,11 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <View style={styles.footer}>
                 <View style={styles.metaInfo}>
                     <Text style={[styles.metaText, { color: theme.colors.textSecondary }]}>
-                        Added {new Date(product.createdAt).toLocaleDateString()}
+                        Added {new Date(createdAt).toLocaleDateString()}
                     </Text>
-                    {product.expiryDate && (
+                    {expiryDate && (
                         <Text style={[styles.metaText, { color: theme.colors.warning[500] }]}>
-                            Expires: {new Date(product.expiryDate).toLocaleDateString()}
+                            Expires: {new Date(expiryDate).toLocaleDateString()}
                         </Text>
                     )}
                 </View>

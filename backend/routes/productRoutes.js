@@ -64,9 +64,21 @@ router.get('/',
             Product.countDocuments(filter)
         ]);
 
+        // Ensure all products have required fields with default values
+        const sanitizedProducts = products.map(product => ({
+            ...product,
+            rating: product.rating || { average: 0, count: 0 },
+            images: product.images || [],
+            tags: product.tags || [],
+            featured: product.featured || false,
+            currentStock: product.currentStock || 0,
+            minStockLevel: product.minStockLevel || 0,
+            maxStockLevel: product.maxStockLevel || 1000
+        }));
+
         res.status(200).json({
             success: true,
-            count: products.length,
+            count: sanitizedProducts.length,
             total,
             pagination: {
                 currentPage: page,
@@ -75,7 +87,7 @@ router.get('/',
                 hasPrev: page > 1,
                 limit
             },
-            data: products
+            data: sanitizedProducts
         });
     })
 );
@@ -229,7 +241,8 @@ router.get('/:id',
         }
 
         const product = await Product.findById(req.params.id)
-            .populate('createdBy', 'name email');
+            .populate('createdBy', 'name email')
+            .lean();
 
         if (!product) {
             return res.status(404).json({
@@ -238,9 +251,21 @@ router.get('/:id',
             });
         }
 
+        // Ensure all required fields have default values
+        const sanitizedProduct = {
+            ...product,
+            rating: product.rating || { average: 0, count: 0 },
+            images: product.images || [],
+            tags: product.tags || [],
+            featured: product.featured || false,
+            currentStock: product.currentStock || 0,
+            minStockLevel: product.minStockLevel || 0,
+            maxStockLevel: product.maxStockLevel || 1000
+        };
+
         res.status(200).json({
             success: true,
-            data: product
+            data: sanitizedProduct
         });
     })
 );

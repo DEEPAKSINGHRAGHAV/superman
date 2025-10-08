@@ -1,5 +1,6 @@
 const Product = require('../models/Product');
 const StockMovement = require('../models/StockMovement');
+const BatchService = require('./batchService');
 const mongoose = require('mongoose');
 
 class InventoryService {
@@ -147,16 +148,13 @@ class InventoryService {
     }
 
     /**
-     * Process sale/consumption
+     * Process sale/consumption using FIFO from batches
      * @param {Array} saleItems - Items sold/consumed
      * @param {string} createdBy - User ID
      * @param {string} referenceNumber - Reference number (invoice, etc.)
      * @returns {Promise<Array>} Processing results
      */
     static async processSale(saleItems, createdBy, referenceNumber = '') {
-        const session = await mongoose.startSession();
-        session.startTransaction();
-
         try {
             const results = [];
 
@@ -167,29 +165,24 @@ class InventoryService {
                     notes = ''
                 } = item;
 
-                const result = await this.updateStock(
+                // Use batch service to process sale with FIFO
+                const result = await BatchService.processSaleFIFO(
                     productId,
-                    -quantity, // Negative for sale
-                    'sale',
+                    quantity,
+                    createdBy,
                     {
-                        reason: 'Sale/Consumption',
-                        notes,
-                        referenceNumber,
-                        createdBy
+                        referenceNumber: referenceNumber || `SALE-${Date.now()}`,
+                        notes
                     }
                 );
 
                 results.push(result);
             }
 
-            await session.commitTransaction();
             return results;
 
         } catch (error) {
-            await session.abortTransaction();
             throw error;
-        } finally {
-            session.endSession();
         }
     }
 

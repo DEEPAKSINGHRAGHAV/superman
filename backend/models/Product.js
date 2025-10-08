@@ -197,6 +197,14 @@ productSchema.virtual('inventoryValue').get(function () {
     return (this.currentStock || 0) * (this.costPrice || 0);
 });
 
+// Virtual to populate batches
+productSchema.virtual('batches', {
+    ref: 'InventoryBatch',
+    localField: '_id',
+    foreignField: 'product',
+    match: { status: 'active', currentQuantity: { $gt: 0 } }
+});
+
 // Indexes for better query performance
 productSchema.index({ name: 'text', description: 'text' }); // Text search
 productSchema.index({ sku: 1 }, { unique: true });
@@ -283,6 +291,15 @@ productSchema.statics.getInventorySummary = function () {
             }
         }
     ]);
+};
+
+// Static method to get product with batch information
+productSchema.statics.findWithBatches = function (productId) {
+    return this.findById(productId).populate({
+        path: 'batches',
+        options: { sort: { purchaseDate: 1 } }, // FIFO order
+        populate: { path: 'supplier', select: 'name code' }
+    });
 };
 
 // Instance method to update stock (atomic operation)

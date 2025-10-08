@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import { useTheme } from '../contexts/ThemeContext';
-import { Button, Input, LoadingSpinner } from '../components/ui';
+import { Button, Input, LoadingSpinner, SearchableDropdown } from '../components/ui';
 import { HighQualityBarcodeScanner } from '../components';
 import { ProductFormData } from '../types';
 import apiService from '../services/api';
@@ -49,6 +49,8 @@ const ProductFormScreen: React.FC = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [errors, setErrors] = useState<Partial<ProductFormData>>({});
     const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
+    const [brands, setBrands] = useState<any[]>([]);
+    const [brandsLoading, setBrandsLoading] = useState(false);
 
     const categories = [
         'grocery', 'snacks', 'personal-care', 'dairy',
@@ -56,11 +58,37 @@ const ProductFormScreen: React.FC = () => {
         'household', 'electronics', 'other'
     ];
 
+    const units = [
+        { name: 'Pieces', value: 'pcs' },
+        { name: 'Kilogram', value: 'kg' },
+        { name: 'Liter', value: 'liter' },
+        { name: 'Gram', value: 'gram' },
+        { name: 'Milliliter', value: 'ml' },
+        { name: 'Box', value: 'box' },
+        { name: 'Pack', value: 'pack' },
+    ];
+
     useEffect(() => {
+        loadBrands();
         if (productId) {
             loadProduct();
         }
     }, [productId]);
+
+    const loadBrands = async () => {
+        try {
+            setBrandsLoading(true);
+            const response = await apiService.getBrands({ isActive: true }, 1, 100);
+            if (response.success && response.data) {
+                setBrands(response.data);
+            }
+        } catch (error) {
+            console.error('Error loading brands:', error);
+            // Don't show alert for brands loading error, just log it
+        } finally {
+            setBrandsLoading(false);
+        }
+    };
 
     const loadProduct = async () => {
         try {
@@ -375,19 +403,29 @@ const ProductFormScreen: React.FC = () => {
                         keyboardType="numeric"
                     />
 
-                    <Input
+                    <SearchableDropdown
                         label="Brand"
-                        placeholder="Enter brand name"
+                        placeholder="Select a brand"
                         value={formData.brand}
-                        onChangeText={(text) => handleInputChange('brand', text)}
+                        onSelect={(value) => handleInputChange('brand', value)}
+                        options={brands}
+                        optionLabelKey="name"
+                        optionValueKey="name"
+                        loading={brandsLoading}
+                        searchPlaceholder="Search brands..."
+                        emptyMessage="No brands available. Please create a brand first in admin settings."
                     />
 
-                    <Input
+                    <SearchableDropdown
                         label="Unit"
-                        placeholder="Enter unit (pcs, kg, liter, etc.)"
+                        placeholder="Select a unit"
                         value={formData.unit}
-                        onChangeText={(text) => handleInputChange('unit', text)}
-                        error={errors.unit}
+                        onSelect={(value) => handleInputChange('unit', value)}
+                        options={units}
+                        optionLabelKey="name"
+                        optionValueKey="value"
+                        searchPlaceholder="Search units..."
+                        emptyMessage="No units available"
                     />
 
                     <Button

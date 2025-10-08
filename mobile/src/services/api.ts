@@ -531,6 +531,12 @@ class ApiService {
         });
     }
 
+    async verifyBrand(id: string): Promise<ApiResponse<any>> {
+        return this.request(`/brands/${id}/verify`, {
+            method: 'PATCH',
+        });
+    }
+
     // Categories
     async getCategories(filters?: any, page = 1, limit = 20): Promise<PaginatedResponse<any>> {
         const params = new URLSearchParams({
@@ -553,6 +559,10 @@ class ApiService {
 
     async getCategory(id: string): Promise<ApiResponse<any>> {
         return this.request(`/categories/${id}`);
+    }
+
+    async getMainCategories(): Promise<ApiResponse<any>> {
+        return this.request('/categories/main');
     }
 
     async createCategory(categoryData: any): Promise<ApiResponse<any>> {
@@ -584,6 +594,96 @@ class ApiService {
     async toggleCategoryFeatured(id: string): Promise<ApiResponse<any>> {
         return this.request(`/categories/${id}/toggle-featured`, {
             method: 'PATCH',
+        });
+    }
+
+    // Batch Tracking APIs
+    async getBatches(filters?: {
+        status?: string;
+        product?: string;
+        expiringInDays?: number;
+        page?: number;
+        limit?: number;
+    }): Promise<PaginatedResponse<any>> {
+        const params = new URLSearchParams();
+
+        if (filters) {
+            Object.entries(filters).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    params.append(key, value.toString());
+                }
+            });
+        }
+
+        return this.request(`/batches?${params.toString()}`);
+    }
+
+    async getBatchesByProduct(productIdOrBarcode: string): Promise<ApiResponse<any>> {
+        return this.request(`/batches/product/${productIdOrBarcode}`);
+    }
+
+    async getExpiringBatches(days = 30): Promise<ApiResponse<any>> {
+        return this.request(`/batches/expiring?days=${days}`);
+    }
+
+    async getInventoryValuation(): Promise<ApiResponse<any>> {
+        return this.request('/batches/valuation');
+    }
+
+    async getBatchDetails(batchIdOrNumber: string): Promise<ApiResponse<any>> {
+        return this.request(`/batches/${batchIdOrNumber}`);
+    }
+
+    async createBatch(batchData: {
+        productId: string;
+        quantity: number;
+        costPrice: number;
+        sellingPrice: number;
+        mrp?: number;
+        purchaseOrderId?: string;
+        supplierId?: string;
+        expiryDate?: string;
+        manufactureDate?: string;
+        location?: string;
+        notes?: string;
+    }): Promise<ApiResponse<any>> {
+        return this.request('/batches', {
+            method: 'POST',
+            body: JSON.stringify(batchData),
+        });
+    }
+
+    async processBatchSale(saleData: {
+        productId: string;
+        quantity: number;
+        referenceNumber?: string;
+        notes?: string;
+    }): Promise<ApiResponse<any>> {
+        return this.request('/batches/sale', {
+            method: 'POST',
+            body: JSON.stringify(saleData),
+        });
+    }
+
+    async updateBatchStatus(
+        batchId: string,
+        status: 'expired' | 'damaged' | 'returned' | 'active',
+        reason?: string
+    ): Promise<ApiResponse<any>> {
+        return this.request(`/batches/${batchId}/status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ status, reason }),
+        });
+    }
+
+    async adjustBatchQuantity(
+        batchId: string,
+        quantity: number,
+        reason?: string
+    ): Promise<ApiResponse<any>> {
+        return this.request(`/batches/${batchId}/adjust`, {
+            method: 'PATCH',
+            body: JSON.stringify({ quantity, reason }),
         });
     }
 

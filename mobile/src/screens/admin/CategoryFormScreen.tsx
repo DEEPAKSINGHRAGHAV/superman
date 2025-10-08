@@ -20,7 +20,7 @@ import { Card } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
-import { api } from '../../services/api';
+import api from '../../services/api';
 
 type CategoryFormNavigationProp = StackNavigationProp<RootStackParamList>;
 type CategoryFormRouteProp = RouteProp<RootStackParamList, 'CategoryForm'>;
@@ -29,7 +29,7 @@ const CategoryFormScreen: React.FC = () => {
     const navigation = useNavigation<CategoryFormNavigationProp>();
     const route = useRoute<CategoryFormRouteProp>();
     const { theme, isDark } = useTheme();
-    
+
     const { categoryId, parentCategoryId } = route.params || {};
     const isEditing = !!categoryId;
     const isSubcategory = !!parentCategoryId;
@@ -63,9 +63,9 @@ const CategoryFormScreen: React.FC = () => {
     const loadCategory = async () => {
         try {
             setInitialLoading(true);
-            const response = await api.get(`/categories/${categoryId}`);
-            const category: Category = response.data.data;
-            
+            const response = await api.getCategory(categoryId);
+            const category: Category = response.data;
+
             setFormData({
                 name: category.name,
                 slug: category.slug,
@@ -90,8 +90,8 @@ const CategoryFormScreen: React.FC = () => {
 
     const loadParentCategories = async () => {
         try {
-            const response = await api.get('/categories/main');
-            setParentCategories(response.data.data);
+            const response = await api.getMainCategories();
+            setParentCategories(response.data);
         } catch (error) {
             console.error('Error loading parent categories:', error);
         }
@@ -129,7 +129,7 @@ const CategoryFormScreen: React.FC = () => {
 
         try {
             setLoading(true);
-            
+
             const submitData = {
                 ...formData,
                 name: formData.name.trim(),
@@ -142,17 +142,17 @@ const CategoryFormScreen: React.FC = () => {
             };
 
             if (isEditing) {
-                await api.put(`/categories/${categoryId}`, submitData);
+                await api.updateCategory(categoryId, submitData);
                 Alert.alert('Success', 'Category updated successfully');
             } else {
-                await api.post('/categories', submitData);
+                await api.createCategory(submitData);
                 Alert.alert('Success', 'Category created successfully');
             }
 
             navigation.goBack();
         } catch (error: any) {
             console.error('Error saving category:', error);
-            const errorMessage = error.response?.data?.message || 'Failed to save category';
+            const errorMessage = error.message || 'Failed to save category';
             Alert.alert('Error', errorMessage);
         } finally {
             setLoading(false);
@@ -179,23 +179,6 @@ const CategoryFormScreen: React.FC = () => {
         container: {
             flex: 1,
             backgroundColor: theme.colors.background,
-        },
-        header: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            padding: 16,
-            backgroundColor: theme.colors.surface,
-            borderBottomWidth: 1,
-            borderBottomColor: theme.colors.border,
-        },
-        headerTitle: {
-            fontSize: 20,
-            fontWeight: 'bold',
-            color: theme.colors.text,
-        },
-        backButton: {
-            padding: 8,
         },
         content: {
             flex: 1,
@@ -317,29 +300,16 @@ const CategoryFormScreen: React.FC = () => {
     }
 
     return (
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
             style={styles.container}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-            <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <Icon name="arrow-back" size={24} color={theme.colors.text} />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>
-                    {isEditing ? 'Edit Category' : isSubcategory ? 'Add Subcategory' : 'Add Category'}
-                </Text>
-                <View style={{ width: 40 }} />
-            </View>
-
             <ScrollView style={styles.content}>
                 <View style={styles.form}>
                     {/* Basic Information */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Basic Information</Text>
-                        
+
                         <Input
                             label="Category Name *"
                             value={formData.name}
@@ -401,7 +371,7 @@ const CategoryFormScreen: React.FC = () => {
                     {/* Visual Settings */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Visual Settings</Text>
-                        
+
                         <View style={styles.iconContainer}>
                             <Text style={styles.iconTitle}>Icon</Text>
                             <View style={styles.iconGrid}>
@@ -454,11 +424,11 @@ const CategoryFormScreen: React.FC = () => {
                                     }}
                                 >
                                     <Text style={
-                                        formData.parentCategory 
-                                            ? styles.parentCategoryText 
+                                        formData.parentCategory
+                                            ? styles.parentCategoryText
                                             : styles.parentCategoryPlaceholder
                                     }>
-                                        {formData.parentCategory 
+                                        {formData.parentCategory
                                             ? parentCategories.find(cat => cat._id === formData.parentCategory)?.name || 'Select parent category'
                                             : 'Select parent category (optional)'
                                         }
@@ -471,7 +441,7 @@ const CategoryFormScreen: React.FC = () => {
                     {/* SEO Settings */}
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>SEO Settings</Text>
-                        
+
                         <Input
                             label="Meta Title"
                             value={formData.metaTitle}

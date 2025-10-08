@@ -71,7 +71,8 @@ const PurchaseOrderListScreen: React.FC = () => {
     useFocusEffect(
         useCallback(() => {
             loadOrders(1, true);
-        }, [loadOrders])
+        }, [filters, selectedStatus])
+        // Note: searchQuery is NOT in dependencies - search is handled by debounced handleSearch
     );
 
     const handleRefresh = useCallback(() => {
@@ -84,6 +85,25 @@ const PurchaseOrderListScreen: React.FC = () => {
             loadOrders(currentPage + 1, false);
         }
     }, [isLoadingMore, hasMore, currentPage, loadOrders]);
+
+    // Use ref for debounce timeout
+    const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+    const handleSearch = (query: string) => {
+        setSearchQuery(query);
+
+        // Clear existing timeout
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        // Debounce search - reload after user stops typing
+        // Note: Backend search needs to be implemented to use searchQuery
+        searchTimeoutRef.current = setTimeout(() => {
+            setCurrentPage(1);
+            loadOrders(1, true);
+        }, 800); // 800ms delay for better UX
+    };
 
     const handleStatusFilter = useCallback((status: string | null) => {
         setSelectedStatus(status);
@@ -194,7 +214,7 @@ const PurchaseOrderListScreen: React.FC = () => {
                 <SearchBar
                     placeholder="Search orders..."
                     value={searchQuery}
-                    onChangeText={setSearchQuery}
+                    onChangeText={handleSearch}
                     showFilter={true}
                     onFilterPress={() => {
                         // Show filter modal
@@ -268,6 +288,8 @@ const PurchaseOrderListScreen: React.FC = () => {
                 ListFooterComponent={renderFooter}
                 ListEmptyComponent={renderEmpty}
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
                 contentContainerStyle={styles.listContent}
             />
         </View>

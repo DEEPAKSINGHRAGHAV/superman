@@ -64,12 +64,15 @@ const SupplierListScreen: React.FC = () => {
             setIsRefreshing(false);
             setIsLoadingMore(false);
         }
-    }, [filters, searchQuery]);
+    }, [filters]);
+    // Note: searchQuery is intentionally NOT in dependencies
+    // It's read from state directly, preventing unnecessary function recreations
 
     useFocusEffect(
         useCallback(() => {
             loadSuppliers(1, true);
-        }, [loadSuppliers])
+        }, [filters])
+        // Note: searchQuery is NOT in dependencies - search is handled by debounced handleSearch
     );
 
     const handleRefresh = useCallback(() => {
@@ -83,16 +86,23 @@ const SupplierListScreen: React.FC = () => {
         }
     }, [isLoadingMore, hasMore, currentPage, loadSuppliers]);
 
-    const handleSearch = useCallback((query: string) => {
-        setSearchQuery(query);
-        setCurrentPage(1);
-        // Debounce search - reload after user stops typing
-        const timeoutId = setTimeout(() => {
-            loadSuppliers(1, true);
-        }, 500);
+    // Use ref for debounce timeout
+    const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
 
-        return () => clearTimeout(timeoutId);
-    }, [loadSuppliers]);
+    const handleSearch = (query: string) => {
+        setSearchQuery(query);
+
+        // Clear existing timeout
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current);
+        }
+
+        // Debounce search - reload after user stops typing
+        searchTimeoutRef.current = setTimeout(() => {
+            setCurrentPage(1);
+            loadSuppliers(1, true);
+        }, 800); // 800ms delay for better UX
+    };
 
     const handleSupplierPress = (supplierId: string) => {
         // Navigate to supplier detail
@@ -223,6 +233,8 @@ const SupplierListScreen: React.FC = () => {
                 ListFooterComponent={renderFooter}
                 ListEmptyComponent={renderEmpty}
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
                 contentContainerStyle={styles.listContent}
             />
         </View>

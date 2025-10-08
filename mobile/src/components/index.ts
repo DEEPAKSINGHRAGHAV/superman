@@ -2,6 +2,7 @@
 export * from './ui';
 
 // Business Components
+export { BatchList } from './BatchList';
 export { ProductCard } from './ProductCard';
 export { SupplierCard } from './SupplierCard';
 export { PurchaseOrderCard } from './PurchaseOrderCard';

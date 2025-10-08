@@ -101,6 +101,10 @@ const DashboardScreen: React.FC = () => {
         navigation.navigate(SCREEN_NAMES.PURCHASE_ORDER_FORM, {});
     };
 
+    const handleBatchValuation = () => {
+        navigation.navigate(SCREEN_NAMES.BATCH_VALUATION);
+    };
+
     const formatCurrency = (amount: number) => {
         return new Intl.NumberFormat('en-IN', {
             style: 'currency',
@@ -238,6 +242,28 @@ const DashboardScreen: React.FC = () => {
                                 style={styles.actionButton}
                             />
                         </View>
+                    </View>
+                    <View style={styles.quickActionsSecondRow}>
+                        <TouchableOpacity
+                            style={[styles.batchValuationCard, { backgroundColor: theme.colors.primary[50] }]}
+                            onPress={handleBatchValuation}
+                            activeOpacity={0.7}
+                        >
+                            <View style={styles.batchValuationContent}>
+                                <View style={[styles.batchValuationIcon, { backgroundColor: theme.colors.primary[500] }]}>
+                                    <Icon name="assessment" size={28} color={theme.colors.white} />
+                                </View>
+                                <View style={styles.batchValuationText}>
+                                    <Text style={[styles.batchValuationTitle, { color: theme.colors.text }]}>
+                                        Inventory Valuation
+                                    </Text>
+                                    <Text style={[styles.batchValuationSubtitle, { color: theme.colors.textSecondary }]}>
+                                        View batch-wise profit analysis
+                                    </Text>
+                                </View>
+                                <Icon name="chevron-right" size={24} color={theme.colors.primary[500]} />
+                            </View>
+                        </TouchableOpacity>
                     </View>
                 </View>
 
@@ -384,6 +410,43 @@ const styles = StyleSheet.create({
     },
     actionButton: {
         width: '100%',
+    },
+    quickActionsSecondRow: {
+        marginTop: 12,
+    },
+    batchValuationCard: {
+        borderRadius: 12,
+        padding: 16,
+        marginHorizontal: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    batchValuationContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 12,
+    },
+    batchValuationIcon: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    batchValuationText: {
+        flex: 1,
+    },
+    batchValuationTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    batchValuationSubtitle: {
+        fontSize: 13,
+        lineHeight: 18,
     },
     statsGrid: {
         flexDirection: 'row',
