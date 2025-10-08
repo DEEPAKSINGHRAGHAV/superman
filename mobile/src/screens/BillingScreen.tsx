@@ -27,7 +27,12 @@ interface CartItem {
     quantity: number;
     unitPrice: number;
     totalPrice: number;
+    costPrice: number; // Actual FIFO cost price
     isEditingPrice?: boolean;
+    batchInfo?: {
+        batchNumber: string;
+        availableQuantity: number;
+    };
 }
 
 interface PaymentMethod {
@@ -103,43 +108,72 @@ const BillingScreen: React.FC = () => {
         }
     };
 
-    // Add product to cart
-    const addToCart = (product: Product) => {
-        const existingItemIndex = cart.findIndex(item => item.product._id === product._id);
+    // Add product to cart with FIFO pricing
+    const addToCart = async (product: Product) => {
+        try {
+            const existingItemIndex = cart.findIndex(item => item.product._id === product._id);
 
-        if (existingItemIndex >= 0) {
-            // Update quantity
-            const updatedCart = [...cart];
-            const newQuantity = updatedCart[existingItemIndex].quantity + 1;
+            if (existingItemIndex >= 0) {
+                // Update quantity
+                const updatedCart = [...cart];
+                const newQuantity = updatedCart[existingItemIndex].quantity + 1;
 
-            // Check stock
-            if (newQuantity > product.currentStock) {
-                Alert.alert('Insufficient Stock', `Only ${product.currentStock} units available`);
-                return;
+                // Check stock
+                if (newQuantity > product.currentStock) {
+                    Alert.alert('Insufficient Stock', `Only ${product.currentStock} units available`);
+                    return;
+                }
+
+                updatedCart[existingItemIndex].quantity = newQuantity;
+                updatedCart[existingItemIndex].totalPrice = newQuantity * updatedCart[existingItemIndex].unitPrice;
+                setCart(updatedCart);
+            } else {
+                // Add new item - fetch batch info for accurate FIFO pricing
+                if (product.currentStock === 0) {
+                    Alert.alert('Out of Stock', 'This product is out of stock');
+                    return;
+                }
+
+                let unitPrice = product.sellingPrice;
+                let costPrice = product.costPrice || 0;
+                let batchInfo = undefined;
+
+                try {
+                    // Fetch batch information to get accurate FIFO price
+                    const batchResponse = await apiService.getBatchesByProduct(product._id);
+
+                    if (batchResponse.success && batchResponse.data?.batches?.length > 0) {
+                        // Get oldest (FIFO) batch - first batch in the array
+                        const oldestBatch = batchResponse.data.batches[0];
+                        unitPrice = oldestBatch.sellingPrice;
+                        costPrice = oldestBatch.costPrice;
+                        batchInfo = {
+                            batchNumber: oldestBatch.batchNumber,
+                            availableQuantity: oldestBatch.currentQuantity || oldestBatch.availableQuantity
+                        };
+                    }
+                } catch (error) {
+                    console.log('Could not fetch batch info, using product prices:', error);
+                    // Continue with product's default prices
+                }
+
+                const newItem: CartItem = {
+                    product,
+                    quantity: 1,
+                    unitPrice,
+                    costPrice,
+                    totalPrice: unitPrice,
+                    batchInfo,
+                };
+                setCart([...cart, newItem]);
             }
 
-            updatedCart[existingItemIndex].quantity = newQuantity;
-            updatedCart[existingItemIndex].totalPrice = newQuantity * product.sellingPrice;
-            setCart(updatedCart);
-        } else {
-            // Add new item
-            if (product.currentStock === 0) {
-                Alert.alert('Out of Stock', 'This product is out of stock');
-                return;
-            }
-
-            const newItem: CartItem = {
-                product,
-                quantity: 1,
-                unitPrice: product.sellingPrice,
-                totalPrice: product.sellingPrice,
-            };
-            setCart([...cart, newItem]);
+            setShowProductSearch(false);
+            setSearchQuery('');
+            setSearchResults([]);
+        } catch (error: any) {
+            Alert.alert('Error', error.message || 'Failed to add product to cart');
         }
-
-        setShowProductSearch(false);
-        setSearchQuery('');
-        setSearchResults([]);
     };
 
     // Update quantity
@@ -193,13 +227,13 @@ const BillingScreen: React.FC = () => {
 
         const updatedCart = cart.map(item => {
             if (item.product._id === productId) {
-                const itemCostPrice = item.product.costPrice || 0;
+                const itemCostPrice = item.costPrice; // Use FIFO cost price from cart item
 
                 // Validate: selling price must be >= cost price (only if cost price exists)
                 if (itemCostPrice > 0 && price < itemCostPrice) {
                     Alert.alert(
                         'Invalid Price',
-                        `Selling price (₹${price.toFixed(2)}) cannot be less than cost price (₹${itemCostPrice.toFixed(2)})`
+                        `Selling price (₹${price.toFixed(2)}) cannot be less than FIFO cost price (₹${itemCostPrice.toFixed(2)})`
                     );
                     return item;
                 }
@@ -289,7 +323,7 @@ const BillingScreen: React.FC = () => {
     };
 
     const renderCartItem = ({ item }: { item: CartItem }) => {
-        const costPrice = item.product.costPrice || 0;
+        const costPrice = item.costPrice; // Use FIFO cost price from cart item
         const profitPerUnit = item.unitPrice - costPrice;
         const profitMargin = ((profitPerUnit / item.unitPrice) * 100).toFixed(1);
         const isProfitable = profitPerUnit >= 0;
@@ -323,7 +357,7 @@ const BillingScreen: React.FC = () => {
                                 </View>
                                 <View style={styles.priceInfo}>
                                     <Text style={[styles.costPriceLabel, { color: theme.colors.textSecondary }]}>
-                                        Cost: {formatCurrency(costPrice)}
+                                        Cost: {formatCurrency(costPrice)} {item.batchInfo && '(FIFO)'}
                                     </Text>
                                     {isProfitable && profitPerUnit > 0 && (
                                         <View style={[styles.profitBadge, { backgroundColor: theme.colors.success[100] }]}>
@@ -334,6 +368,11 @@ const BillingScreen: React.FC = () => {
                                         </View>
                                     )}
                                 </View>
+                                {item.batchInfo && (
+                                    <Text style={[styles.batchInfoLabel, { color: theme.colors.textSecondary }]}>
+                                        Batch: {item.batchInfo.batchNumber}
+                                    </Text>
+                                )}
                             </View>
                             <TouchableOpacity
                                 onPress={() => removeFromCart(item.product._id)}
@@ -963,6 +1002,11 @@ const styles = StyleSheet.create({
     profitText: {
         fontSize: 11,
         fontWeight: '600',
+    },
+    batchInfoLabel: {
+        fontSize: 11,
+        fontWeight: '500',
+        marginTop: 4,
     },
     removeButton: {
         padding: 4,
