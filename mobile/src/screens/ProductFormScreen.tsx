@@ -394,14 +394,6 @@ const ProductFormScreen: React.FC = () => {
                     />
 
                     <Input
-                        label="Current Stock"
-                        placeholder="Enter current stock"
-                        value={formData.currentStock.toString()}
-                        onChangeText={(text) => handleInputChange('currentStock', parseInt(text) || 0)}
-                        keyboardType="numeric"
-                    />
-
-                    <Input
                         label="Minimum Stock Level"
                         placeholder="Enter minimum stock level"
                         value={formData.minStockLevel.toString()}
