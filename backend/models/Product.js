@@ -239,6 +239,80 @@ productSchema.pre('save', function (next) {
     next();
 });
 
+// Post-save middleware to update category product count
+productSchema.post('save', async function (doc) {
+    try {
+        const Category = mongoose.model('Category');
+        
+        // Update the current category's product count
+        if (doc.category) {
+            const category = await Category.findOne({ slug: doc.category });
+            if (category) {
+                await category.updateProductCount();
+            }
+        }
+        
+        // If category was changed, update the old category's count too
+        if (doc.isModified('category')) {
+            const oldCategory = doc._original?.category;
+            if (oldCategory && oldCategory !== doc.category) {
+                const oldCategoryDoc = await Category.findOne({ slug: oldCategory });
+                if (oldCategoryDoc) {
+                    await oldCategoryDoc.updateProductCount();
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error updating category product count:', error);
+    }
+});
+
+// Pre-remove middleware to update category count when product is deleted
+productSchema.pre('remove', async function (next) {
+    try {
+        const Category = mongoose.model('Category');
+        if (this.category) {
+            const category = await Category.findOne({ slug: this.category });
+            if (category) {
+                await category.updateProductCount();
+            }
+        }
+        next();
+    } catch (error) {
+        console.error('Error updating category on product remove:', error);
+        next(error);
+    }
+});
+
+// Post findOneAndDelete/findOneAndRemove middleware
+productSchema.post('findOneAndDelete', async function (doc) {
+    if (doc && doc.category) {
+        try {
+            const Category = mongoose.model('Category');
+            const category = await Category.findOne({ slug: doc.category });
+            if (category) {
+                await category.updateProductCount();
+            }
+        } catch (error) {
+            console.error('Error updating category after product deletion:', error);
+        }
+    }
+});
+
+productSchema.post('findOneAndRemove', async function (doc) {
+    if (doc && doc.category) {
+        try {
+            const Category = mongoose.model('Category');
+            const category = await Category.findOne({ slug: doc.category });
+            if (category) {
+                await category.updateProductCount();
+            }
+        } catch (error) {
+            console.error('Error updating category after product deletion:', error);
+        }
+    }
+});
+
 // Static method to find featured products
 productSchema.statics.findFeatured = function () {
     return this.find({ featured: true, isActive: true });

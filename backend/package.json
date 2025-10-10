@@ -11,6 +11,7 @@
     "test-expiry": "node scripts/testExpiryFixes.js",
     "seed": "node scripts/seedData.js",
     "seed-categories": "node scripts/seedDefaultCategories.js",
+    "update-category-counts": "node scripts/updateCategoryProductCounts.js",
     "create-admin": "node scripts/createAdmin.js"
   },
   "keywords": [
