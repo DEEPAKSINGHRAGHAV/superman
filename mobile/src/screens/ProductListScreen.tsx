@@ -81,13 +81,14 @@ const ProductListScreen: React.FC = () => {
     useEffect(() => {
         const loadCategories = async () => {
             try {
-                const response = await apiService.getProductCategories();
+                // Fetch categories from Category model (database) instead of Product.distinct
+                const response = await apiService.getCategories({ isActive: true, level: 0 }, 1, 100);
                 if (response.success && response.data) {
                     const categoryOptions = [
                         { label: 'All', value: null },
-                        ...response.data.map((cat: string) => ({
-                            label: cat.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-                            value: cat
+                        ...response.data.map((cat: any) => ({
+                            label: cat.name,
+                            value: cat.slug
                         }))
                     ];
                     setCategories(categoryOptions);

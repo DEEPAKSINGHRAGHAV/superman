@@ -10,6 +10,7 @@
     "check-expired": "node scripts/checkExpiredBatches.js",
     "test-expiry": "node scripts/testExpiryFixes.js",
     "seed": "node scripts/seedData.js",
+    "seed-categories": "node scripts/seedDefaultCategories.js",
     "create-admin": "node scripts/createAdmin.js"
   },
   "keywords": [

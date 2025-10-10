@@ -51,12 +51,8 @@ const ProductFormScreen: React.FC = () => {
     const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
     const [brands, setBrands] = useState<any[]>([]);
     const [brandsLoading, setBrandsLoading] = useState(false);
-
-    const categories = [
-        'grocery', 'snacks', 'personal-care', 'dairy',
-        'fruits-vegetables', 'meat-seafood', 'bakery', 'beverages',
-        'household', 'electronics', 'other'
-    ];
+    const [categories, setCategories] = useState<any[]>([]);
+    const [categoriesLoading, setCategoriesLoading] = useState(false);
 
     const units = [
         { name: 'Pieces', value: 'pcs' },
@@ -70,6 +66,7 @@ const ProductFormScreen: React.FC = () => {
 
     useEffect(() => {
         loadBrands();
+        loadCategories();
         if (productId) {
             loadProduct();
         }
@@ -87,6 +84,23 @@ const ProductFormScreen: React.FC = () => {
             // Don't show alert for brands loading error, just log it
         } finally {
             setBrandsLoading(false);
+        }
+    };
+
+    const loadCategories = async () => {
+        try {
+            setCategoriesLoading(true);
+            const response = await apiService.getCategories({ isActive: true, level: 0 }, 1, 100);
+            if (response.success && response.data) {
+                // Sort by sortOrder to match admin display
+                const sortedCategories = response.data.sort((a: any, b: any) => a.sortOrder - b.sortOrder);
+                setCategories(sortedCategories);
+            }
+        } catch (error) {
+            console.error('Error loading categories:', error);
+            // Don't show alert for categories loading error, just log it
+        } finally {
+            setCategoriesLoading(false);
         }
     };
 
@@ -294,47 +308,51 @@ const ProductFormScreen: React.FC = () => {
 
                     <View style={styles.categorySection}>
                         <Text style={[styles.categoryLabel, { color: theme.colors.text }]}>
-                            Category *
+                            Category * {categoriesLoading && '(Loading...)'}
                         </Text>
                         <ScrollView
                             horizontal
                             showsHorizontalScrollIndicator={false}
                             style={styles.categoryScrollView}
                         >
-                            {categories.map((category) => (
-                                <TouchableOpacity
-                                    key={category}
-                                    style={[
-                                        styles.categoryChip,
-                                        {
-                                            backgroundColor: formData.category === category
-                                                ? theme.colors.primary[500]
-                                                : theme.colors.surface,
-                                            borderColor: formData.category === category
-                                                ? theme.colors.primary[500]
-                                                : theme.colors.border,
-                                            borderWidth: formData.category === category ? 2 : 1,
-                                        }
-                                    ]}
-                                    onPress={() => {
-                                        console.log('Selected category:', category);
-                                        handleInputChange('category', category);
-                                    }}
-                                >
-                                    <Text style={[
-                                        styles.categoryChipText,
-                                        {
-                                            color: formData.category === category
-                                                ? theme.colors.white
-                                                : theme.colors.text,
-                                            fontWeight: formData.category === category ? 'bold' : '500'
-                                        }
-                                    ]}>
-                                        {formData.category === category ? '✓ ' : ''}
-                                        {category.charAt(0).toUpperCase() + category.slice(1).replace('-', ' ')}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
+                            {categories.map((category) => {
+                                const isSelected = formData.category === category.slug || formData.category === category.name;
+                                return (
+                                    <TouchableOpacity
+                                        key={category._id || category.slug}
+                                        style={[
+                                            styles.categoryChip,
+                                            {
+                                                backgroundColor: isSelected
+                                                    ? theme.colors.primary[500]
+                                                    : theme.colors.surface,
+                                                borderColor: isSelected
+                                                    ? theme.colors.primary[500]
+                                                    : theme.colors.border,
+                                                borderWidth: isSelected ? 2 : 1,
+                                            }
+                                        ]}
+                                        onPress={() => {
+                                            console.log('Selected category:', category.slug, category.name);
+                                            // Use slug for consistency with backend
+                                            handleInputChange('category', category.slug);
+                                        }}
+                                    >
+                                        <Text style={[
+                                            styles.categoryChipText,
+                                            {
+                                                color: isSelected
+                                                    ? theme.colors.white
+                                                    : theme.colors.text,
+                                                fontWeight: isSelected ? 'bold' : '500'
+                                            }
+                                        ]}>
+                                            {isSelected ? '✓ ' : ''}
+                                            {category.name}
+                                        </Text>
+                                    </TouchableOpacity>
+                                );
+                            })}
                         </ScrollView>
                     </View>
 

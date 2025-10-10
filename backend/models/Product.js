@@ -68,7 +68,10 @@ const productSchema = new mongoose.Schema({
         type: String,
         required: [true, 'Category is required'],
         index: true,
-        enum: ['grocery', 'dairy', 'fruits-vegetables', 'meat-seafood', 'bakery', 'beverages', 'snacks', 'personal-care', 'household', 'electronics', 'other']
+        trim: true,
+        lowercase: true,
+        // Note: Category should match slug from Category model
+        // Enum removed to allow dynamic categories from database
     },
     subcategory: {
         type: String,
