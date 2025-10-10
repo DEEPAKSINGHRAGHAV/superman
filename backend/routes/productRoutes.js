@@ -92,7 +92,7 @@ router.get('/',
     })
 );
 
-// @desc    Search products (Fuzzy search with partial matching)
+// @desc    Search products (Fuzzy search with partial matching and typo tolerance)
 // @route   GET /api/v1/products/search
 // @access  Private (requires read_products permission)
 router.get('/search',
@@ -103,29 +103,125 @@ router.get('/search',
     asyncHandler(async (req, res) => {
         const { search, limit = 20 } = req.query;
 
-        // Escape special regex characters for safety
-        const searchRegex = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Split search query into tokens (words)
+        const searchTokens = search.toLowerCase().trim().split(/\s+/).filter(token => token.length > 0);
+        
+        if (searchTokens.length === 0) {
+            return res.status(200).json({
+                success: true,
+                count: 0,
+                data: []
+            });
+        }
 
-        // Use regex-based search for fuzzy/partial matching
-        const products = await Product.find({
-            $or: [
-                { name: { $regex: searchRegex, $options: 'i' } },
-                { sku: { $regex: searchRegex, $options: 'i' } },
-                { barcode: { $regex: searchRegex, $options: 'i' } },
-                { brand: { $regex: searchRegex, $options: 'i' } },
-                { category: { $regex: searchRegex, $options: 'i' } }
-            ],
+        // Build fuzzy search conditions for each token
+        const fuzzyConditions = searchTokens.map(token => {
+            // Escape special regex characters for exact match
+            const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            
+            // Create fuzzy patterns
+            const patterns = [];
+            
+            // 1. Exact partial match (highest priority)
+            patterns.push(escapedToken);
+            
+            // 2. Fuzzy match with character flexibility (allows typos)
+            if (token.length >= 3) {
+                const fuzzyPattern = token.split('').map((char, index) => {
+                    return index === 0 ? char : `.?${char}`;
+                }).join('');
+                patterns.push(fuzzyPattern);
+            }
+            
+            // 3. Very fuzzy match (character-by-character)
+            if (token.length >= 4) {
+                const veryFuzzyPattern = token.split('').join('.*');
+                patterns.push(veryFuzzyPattern);
+            }
+
+            // Combine all patterns
+            const combinedPattern = patterns.join('|');
+
+            // Search across multiple fields
+            return {
+                $or: [
+                    { name: { $regex: combinedPattern, $options: 'i' } },
+                    { sku: { $regex: combinedPattern, $options: 'i' } },
+                    { barcode: { $regex: combinedPattern, $options: 'i' } },
+                    { brand: { $regex: combinedPattern, $options: 'i' } },
+                    { category: { $regex: combinedPattern, $options: 'i' } },
+                    { description: { $regex: combinedPattern, $options: 'i' } }
+                ]
+            };
+        });
+
+        // Combine all token conditions (all tokens must match somewhere)
+        const query = {
+            $and: fuzzyConditions,
             isActive: true
-        })
-            .sort({ name: 1 }) // Sort by name alphabetically
-            .limit(parseInt(limit))
-            .select('name sku barcode category brand currentStock costPrice sellingPrice mrp')
+        };
+
+        // Find products
+        let products = await Product.find(query)
+            .limit(parseInt(limit) * 2) // Get more results for scoring
+            .select('name sku barcode category brand description currentStock costPrice sellingPrice mrp')
             .lean();
+
+        // Score and rank results based on match quality
+        const scoredProducts = products.map(product => {
+            let score = 0;
+            const searchLower = search.toLowerCase();
+            const nameLower = (product.name || '').toLowerCase();
+            const skuLower = (product.sku || '').toLowerCase();
+            const brandLower = (product.brand || '').toLowerCase();
+            
+            // Exact match (highest score)
+            if (nameLower === searchLower) score += 1000;
+            if (skuLower === searchLower) score += 900;
+            
+            // Starts with (high score)
+            if (nameLower.startsWith(searchLower)) score += 500;
+            if (skuLower.startsWith(searchLower)) score += 450;
+            if (brandLower.startsWith(searchLower)) score += 400;
+            
+            // Contains all search tokens
+            searchTokens.forEach(token => {
+                if (nameLower.includes(token)) score += 100;
+                if (skuLower.includes(token)) score += 80;
+                if (brandLower.includes(token)) score += 60;
+            });
+            
+            // Word boundary matches (complete word match)
+            searchTokens.forEach(token => {
+                const wordRegex = new RegExp(`\\b${token}\\b`, 'i');
+                if (wordRegex.test(product.name)) score += 150;
+                if (wordRegex.test(product.brand)) score += 100;
+            });
+            
+            // Proximity bonus (tokens close together)
+            const allText = `${product.name} ${product.brand} ${product.sku}`.toLowerCase();
+            if (searchTokens.length > 1) {
+                const firstIndex = allText.indexOf(searchTokens[0]);
+                const lastIndex = allText.indexOf(searchTokens[searchTokens.length - 1]);
+                if (firstIndex !== -1 && lastIndex !== -1) {
+                    const distance = Math.abs(lastIndex - firstIndex);
+                    score += Math.max(0, 100 - distance);
+                }
+            }
+
+            return { ...product, _score: score };
+        });
+
+        // Sort by score (descending) and limit results
+        const rankedProducts = scoredProducts
+            .sort((a, b) => b._score - a._score)
+            .slice(0, parseInt(limit))
+            .map(({ _score, ...product }) => product); // Remove score from response
 
         res.status(200).json({
             success: true,
-            count: products.length,
-            data: products
+            count: rankedProducts.length,
+            data: rankedProducts
         });
     })
 );
