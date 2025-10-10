@@ -9,6 +9,8 @@ import {
     Alert,
     FlatList,
     Modal,
+    KeyboardAvoidingView,
+    Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -876,7 +878,10 @@ const BillingScreen: React.FC = () => {
                 transparent
                 onRequestClose={() => setShowPaymentModal(false)}
             >
-                <View style={styles.paymentModalOverlay}>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                    style={styles.paymentModalOverlay}
+                >
                     <View style={[styles.paymentModal, { backgroundColor: theme.colors.white }]}>
                         <View style={styles.paymentHeader}>
                             <Text style={[styles.paymentTitle, { color: theme.colors.text }]}>Payment</Text>
@@ -885,97 +890,105 @@ const BillingScreen: React.FC = () => {
                             </TouchableOpacity>
                         </View>
 
-                        <View style={styles.paymentAmount}>
-                            <Text style={[styles.paymentAmountLabel, { color: theme.colors.textSecondary }]}>
-                                Total Amount
-                            </Text>
-                            <Text style={[styles.paymentAmountValue, { color: theme.colors.primary[500] }]}>
-                                {formatCurrency(total)}
-                            </Text>
-                        </View>
+                        <ScrollView
+                            style={styles.paymentContent}
+                            showsVerticalScrollIndicator={false}
+                            keyboardShouldPersistTaps="handled"
+                        >
+                            <View style={styles.paymentAmount}>
+                                <Text style={[styles.paymentAmountLabel, { color: theme.colors.textSecondary }]}>
+                                    Total Amount
+                                </Text>
+                                <Text style={[styles.paymentAmountValue, { color: theme.colors.primary[500] }]}>
+                                    {formatCurrency(total)}
+                                </Text>
+                            </View>
 
-                        <View style={styles.paymentMethods}>
-                            <Text style={[styles.paymentMethodsTitle, { color: theme.colors.text }]}>
-                                Payment Method
-                            </Text>
-                            <View style={styles.paymentMethodsGrid}>
-                                {PAYMENT_METHODS.map((method) => (
-                                    <TouchableOpacity
-                                        key={method.id}
-                                        style={[
-                                            styles.paymentMethodButton,
-                                            {
-                                                backgroundColor:
-                                                    selectedPaymentMethod === method.id
-                                                        ? theme.colors.primary[100]
-                                                        : theme.colors.gray[100],
-                                                borderColor:
-                                                    selectedPaymentMethod === method.id
-                                                        ? theme.colors.primary[500]
-                                                        : theme.colors.gray[200],
-                                            },
-                                        ]}
-                                        onPress={() => setSelectedPaymentMethod(method.id)}
-                                    >
-                                        <Icon
-                                            name={method.icon}
-                                            size={28}
-                                            color={
-                                                selectedPaymentMethod === method.id
-                                                    ? theme.colors.primary[500]
-                                                    : theme.colors.gray[500]
-                                            }
-                                        />
-                                        <Text
+                            <View style={styles.paymentMethods}>
+                                <Text style={[styles.paymentMethodsTitle, { color: theme.colors.text }]}>
+                                    Payment Method
+                                </Text>
+                                <View style={styles.paymentMethodsGrid}>
+                                    {PAYMENT_METHODS.map((method) => (
+                                        <TouchableOpacity
+                                            key={method.id}
                                             style={[
-                                                styles.paymentMethodText,
+                                                styles.paymentMethodButton,
                                                 {
-                                                    color:
+                                                    backgroundColor:
+                                                        selectedPaymentMethod === method.id
+                                                            ? theme.colors.primary[100]
+                                                            : theme.colors.gray[100],
+                                                    borderColor:
                                                         selectedPaymentMethod === method.id
                                                             ? theme.colors.primary[500]
-                                                            : theme.colors.text,
+                                                            : theme.colors.gray[200],
                                                 },
                                             ]}
+                                            onPress={() => setSelectedPaymentMethod(method.id)}
                                         >
-                                            {method.name}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
+                                            <Icon
+                                                name={method.icon}
+                                                size={28}
+                                                color={
+                                                    selectedPaymentMethod === method.id
+                                                        ? theme.colors.primary[500]
+                                                        : theme.colors.gray[500]
+                                                }
+                                            />
+                                            <Text
+                                                style={[
+                                                    styles.paymentMethodText,
+                                                    {
+                                                        color:
+                                                            selectedPaymentMethod === method.id
+                                                                ? theme.colors.primary[500]
+                                                                : theme.colors.text,
+                                                    },
+                                                ]}
+                                            >
+                                                {method.name}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
                             </View>
-                        </View>
 
-                        {selectedPaymentMethod === 'cash' && (
-                            <View style={styles.cashInput}>
-                                <Text style={[styles.cashInputLabel, { color: theme.colors.text }]}>
-                                    Amount Received
-                                </Text>
-                                <TextInput
-                                    style={[styles.cashInputField, { backgroundColor: theme.colors.gray[100], color: theme.colors.text }]}
-                                    placeholder="0.00"
-                                    placeholderTextColor={theme.colors.textSecondary}
-                                    keyboardType="numeric"
-                                    value={amountReceived}
-                                    onChangeText={setAmountReceived}
-                                />
-                                {amountReceived && parseFloat(amountReceived) >= total && (
-                                    <Text style={[styles.changeText, { color: theme.colors.success[500] }]}>
-                                        Change: {formatCurrency(parseFloat(amountReceived) - total)}
+                            {selectedPaymentMethod === 'cash' && (
+                                <View style={styles.cashInput}>
+                                    <Text style={[styles.cashInputLabel, { color: theme.colors.text }]}>
+                                        Amount Received
                                     </Text>
-                                )}
-                            </View>
-                        )}
+                                    <TextInput
+                                        style={[styles.cashInputField, { backgroundColor: theme.colors.gray[100], color: theme.colors.text }]}
+                                        placeholder="0.00"
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        keyboardType="numeric"
+                                        value={amountReceived}
+                                        onChangeText={setAmountReceived}
+                                    />
+                                    {amountReceived && parseFloat(amountReceived) >= total && (
+                                        <Text style={[styles.changeText, { color: theme.colors.success[500] }]}>
+                                            Change: {formatCurrency(parseFloat(amountReceived) - total)}
+                                        </Text>
+                                    )}
+                                </View>
+                            )}
+                        </ScrollView>
 
-                        <Button
-                            title="Complete Payment"
-                            onPress={handlePayment}
-                            variant="primary"
-                            size="lg"
-                            fullWidth
-                            loading={isProcessing}
-                            style={styles.completePaymentButton}
-                        />
+                        <View style={styles.paymentButtonContainer}>
+                            <Button
+                                title="Complete Payment"
+                                onPress={handlePayment}
+                                variant="primary"
+                                size="lg"
+                                fullWidth
+                                loading={isProcessing}
+                                style={styles.completePaymentButton}
+                            />
+                        </View>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             {/* Receipt Modal */}
@@ -1518,14 +1531,18 @@ const styles = StyleSheet.create({
     paymentModal: {
         borderTopLeftRadius: 20,
         borderTopRightRadius: 20,
-        padding: 24,
-        maxHeight: '80%',
+        maxHeight: '85%',
+        paddingTop: 24,
     },
     paymentHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 20,
+        paddingHorizontal: 24,
+    },
+    paymentContent: {
+        paddingHorizontal: 24,
     },
     paymentTitle: {
         fontSize: 20,
@@ -1590,8 +1607,15 @@ const styles = StyleSheet.create({
         marginTop: 8,
         textAlign: 'right',
     },
+    paymentButtonContainer: {
+        paddingHorizontal: 24,
+        paddingTop: 16,
+        paddingBottom: Platform.OS === 'ios' ? 34 : 24, // Extra padding for iOS home indicator and Android navigation
+        borderTopWidth: 1,
+        borderTopColor: '#E0E0E0',
+    },
     completePaymentButton: {
-        marginTop: 8,
+        marginTop: 0,
     },
     receiptModalOverlay: {
         flex: 1,
