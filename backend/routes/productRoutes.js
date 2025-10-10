@@ -33,11 +33,15 @@ router.get('/',
         }
 
         if (search) {
+            // Escape special regex characters for safety
+            const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            
             filter.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { sku: { $regex: search, $options: 'i' } },
-                { barcode: { $regex: search, $options: 'i' } },
-                { brand: { $regex: search, $options: 'i' } }
+                { name: { $regex: escapedSearch, $options: 'i' } },
+                { sku: { $regex: escapedSearch, $options: 'i' } },
+                { barcode: { $regex: escapedSearch, $options: 'i' } },
+                { brand: { $regex: escapedSearch, $options: 'i' } },
+                { description: { $regex: escapedSearch, $options: 'i' } }
             ];
         }
 
@@ -102,6 +106,13 @@ router.get('/search',
     validateRequest(queryValidation.search),
     asyncHandler(async (req, res) => {
         const { search, limit = 20 } = req.query;
+
+        if (!search || typeof search !== 'string') {
+            return res.status(400).json({
+                success: false,
+                message: 'Search query is required'
+            });
+        }
 
         // Split search query into tokens (words)
         const searchTokens = search.toLowerCase().trim().split(/\s+/).filter(token => token.length > 0);

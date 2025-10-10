@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
         marginLeft: 4,
     },
     scrollContent: {
-        paddingRight: 16,
+        paddingHorizontal: 16,
     },
     chip: {
         paddingHorizontal: 16,

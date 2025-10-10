@@ -78,7 +78,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({
                     onBlur={() => setIsFocused(false)}
                     returnKeyType="search"
                     autoCorrect={false}
-                    autoCapitalize="words"
+                    autoCapitalize="none"
                 />
 
                 {value.length > 0 && (

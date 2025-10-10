@@ -22,7 +22,7 @@ router.get('/',
     validateDateRange('orderDate', 'expectedDeliveryDate'),
     asyncHandler(async (req, res) => {
         const { page, limit, skip } = req.pagination;
-        const { status, supplier, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
+        const { status, supplier, search, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
 
         // Build filter object
         const filter = {};
@@ -33,6 +33,13 @@ router.get('/',
 
         if (supplier) {
             filter.supplier = supplier;
+        }
+
+        if (search) {
+            filter.$or = [
+                { orderNumber: { $regex: search, $options: 'i' } },
+                { notes: { $regex: search, $options: 'i' } }
+            ];
         }
 
         // Add date filters if provided

@@ -33,7 +33,7 @@ const SupplierListScreen: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [hasMore, setHasMore] = useState(true);
 
-    const loadSuppliers = useCallback(async (page = 1, reset = false) => {
+    const loadSuppliers = useCallback(async (page = 1, reset = false, customSearchQuery?: string) => {
         try {
             if (page === 1) {
                 setError(null);
@@ -44,9 +44,12 @@ const SupplierListScreen: React.FC = () => {
                 setIsLoadingMore(true);
             }
 
+            // Use provided search query or current state value
+            const currentSearchQuery = customSearchQuery !== undefined ? customSearchQuery : searchQuery;
+
             const searchFilters: SupplierFilters = {
                 ...filters,
-                search: searchQuery || undefined,
+                search: currentSearchQuery || undefined,
             };
 
             const response = await apiService.getSuppliers(searchFilters, page, 20);
@@ -69,15 +72,12 @@ const SupplierListScreen: React.FC = () => {
             setIsRefreshing(false);
             setIsLoadingMore(false);
         }
-    }, [filters]);
-    // Note: searchQuery is intentionally NOT in dependencies
-    // It's read from state directly, preventing unnecessary function recreations
+    }, [filters, searchQuery]);
 
     useFocusEffect(
         useCallback(() => {
             loadSuppliers(1, true);
-        }, [filters])
-        // Note: searchQuery is NOT in dependencies - search is handled by debounced handleSearch
+        }, [loadSuppliers])
     );
 
     const handleRefresh = useCallback(() => {
@@ -105,9 +105,18 @@ const SupplierListScreen: React.FC = () => {
         // Debounce search - reload after user stops typing
         searchTimeoutRef.current = setTimeout(() => {
             setCurrentPage(1);
-            loadSuppliers(1, true);
-        }, 800); // 800ms delay for better UX
+            loadSuppliers(1, true, query);
+        }, 500); // 500ms delay for better UX
     };
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+            }
+        };
+    }, []);
 
     const handleSupplierPress = (supplierId: string) => {
         navigation.navigate(SCREEN_NAMES.SUPPLIER_DETAIL as any, { supplierId });
@@ -178,7 +187,13 @@ const SupplierListScreen: React.FC = () => {
                 onActionPress={searchQuery
                     ? () => {
                         setSearchQuery('');
-                        loadSuppliers(1, true);
+                        setCurrentPage(1);
+                        // Clear the search timeout if it's pending
+                        if (searchTimeoutRef.current) {
+                            clearTimeout(searchTimeoutRef.current);
+                        }
+                        // Immediately reload with no search query
+                        loadSuppliers(1, true, '');
                     }
                     : handleAddSupplier
                 }
@@ -211,6 +226,16 @@ const SupplierListScreen: React.FC = () => {
                     placeholder="Search suppliers..."
                     value={searchQuery}
                     onChangeText={handleSearch}
+                    onClear={() => {
+                        setSearchQuery('');
+                        setCurrentPage(1);
+                        // Clear the search timeout if it's pending
+                        if (searchTimeoutRef.current) {
+                            clearTimeout(searchTimeoutRef.current);
+                        }
+                        // Immediately reload with no search query
+                        loadSuppliers(1, true, '');
+                    }}
                     showFilter={true}
                     onFilterPress={() => {
                         // Show filter modal

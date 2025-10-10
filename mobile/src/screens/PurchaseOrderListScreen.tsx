@@ -35,7 +35,7 @@ const PurchaseOrderListScreen: React.FC = () => {
     const [hasMore, setHasMore] = useState(true);
     const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
 
-    const loadOrders = useCallback(async (page = 1, reset = false) => {
+    const loadOrders = useCallback(async (page = 1, reset = false, customSearchQuery?: string) => {
         try {
             if (page === 1) {
                 setError(null);
@@ -46,9 +46,13 @@ const PurchaseOrderListScreen: React.FC = () => {
                 setIsLoadingMore(true);
             }
 
+            // Use provided search query or current state value
+            const currentSearchQuery = customSearchQuery !== undefined ? customSearchQuery : searchQuery;
+
             const searchFilters: PurchaseOrderFilters = {
                 ...filters,
                 status: selectedStatus || undefined,
+                search: currentSearchQuery || undefined,
             };
 
             const response = await apiService.getPurchaseOrders(searchFilters, page, 20);
@@ -71,13 +75,12 @@ const PurchaseOrderListScreen: React.FC = () => {
             setIsRefreshing(false);
             setIsLoadingMore(false);
         }
-    }, [filters, selectedStatus]);
+    }, [filters, selectedStatus, searchQuery]);
 
     useFocusEffect(
         useCallback(() => {
             loadOrders(1, true);
-        }, [filters, selectedStatus])
-        // Note: searchQuery is NOT in dependencies - search is handled by debounced handleSearch
+        }, [loadOrders])
     );
 
     const handleRefresh = useCallback(() => {
@@ -103,18 +106,26 @@ const PurchaseOrderListScreen: React.FC = () => {
         }
 
         // Debounce search - reload after user stops typing
-        // Note: Backend search needs to be implemented to use searchQuery
         searchTimeoutRef.current = setTimeout(() => {
             setCurrentPage(1);
-            loadOrders(1, true);
-        }, 800); // 800ms delay for better UX
+            loadOrders(1, true, query);
+        }, 500); // 500ms delay for better UX
     };
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+            }
+        };
+    }, []);
 
     const handleStatusFilter = useCallback((status: string | null) => {
         setSelectedStatus(status);
         setCurrentPage(1);
-        loadOrders(1, true);
-    }, [loadOrders]);
+        // Don't clear search when status changes - allow filtering by both
+    }, []);
 
     const handleOrderPress = (orderId: string) => {
         navigation.navigate(SCREEN_NAMES.PURCHASE_ORDER_DETAIL as any, { orderId });
@@ -177,15 +188,22 @@ const PurchaseOrderListScreen: React.FC = () => {
             <EmptyState
                 icon="shopping-cart"
                 title="No purchase orders found"
-                subtitle={selectedStatus
-                    ? "Try adjusting your filters"
+                subtitle={searchQuery || selectedStatus
+                    ? "Try adjusting your search or filters"
                     : "Start by creating your first purchase order"
                 }
-                actionText={selectedStatus ? "Clear Filters" : "Create Order"}
-                onActionPress={selectedStatus
+                actionText={searchQuery || selectedStatus ? "Clear Filters" : "Create Order"}
+                onActionPress={searchQuery || selectedStatus
                     ? () => {
+                        setSearchQuery('');
                         setSelectedStatus(null);
-                        loadOrders(1, true);
+                        setCurrentPage(1);
+                        // Clear the search timeout if it's pending
+                        if (searchTimeoutRef.current) {
+                            clearTimeout(searchTimeoutRef.current);
+                        }
+                        // Immediately reload with no filters
+                        loadOrders(1, true, '');
                     }
                     : handleAddOrder
                 }
@@ -218,6 +236,16 @@ const PurchaseOrderListScreen: React.FC = () => {
                     placeholder="Search orders..."
                     value={searchQuery}
                     onChangeText={handleSearch}
+                    onClear={() => {
+                        setSearchQuery('');
+                        setCurrentPage(1);
+                        // Clear the search timeout if it's pending
+                        if (searchTimeoutRef.current) {
+                            clearTimeout(searchTimeoutRef.current);
+                        }
+                        // Immediately reload with no search query
+                        loadOrders(1, true, '');
+                    }}
                     showFilter={true}
                     onFilterPress={() => {
                         // Show filter modal
