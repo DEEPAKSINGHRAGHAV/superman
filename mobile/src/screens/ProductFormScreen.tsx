@@ -310,11 +310,7 @@ const ProductFormScreen: React.FC = () => {
                         <Text style={[styles.categoryLabel, { color: theme.colors.text }]}>
                             Category * {categoriesLoading && '(Loading...)'}
                         </Text>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            style={styles.categoryScrollView}
-                        >
+                        <View style={styles.categoryGridContainer}>
                             {categories.map((category) => {
                                 const isSelected = formData.category === category.slug || formData.category === category.name;
                                 return (
@@ -353,7 +349,7 @@ const ProductFormScreen: React.FC = () => {
                                     </TouchableOpacity>
                                 );
                             })}
-                        </ScrollView>
+                        </View>
                     </View>
 
                     <Input
@@ -491,17 +487,20 @@ const styles = StyleSheet.create({
         fontWeight: '500',
         marginBottom: 8,
     },
-    categoryScrollView: {
+    categoryGridContainer: {
         flexDirection: 'row',
+        flexWrap: 'wrap',
+        marginRight: -8,
     },
     categoryChip: {
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 20,
         borderWidth: 1,
-        marginRight: 8,
         minWidth: 80,
         alignItems: 'center',
+        marginRight: 8,
+        marginBottom: 8,
     },
     categoryChipText: {
         fontSize: 14,
