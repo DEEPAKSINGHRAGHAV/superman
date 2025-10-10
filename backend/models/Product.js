@@ -86,7 +86,10 @@ const productSchema = new mongoose.Schema({
     unit: {
         type: String,
         default: 'pcs',
-        enum: ['pcs', 'kg', 'liter', 'gram', 'ml', 'box', 'pack']
+        trim: true,
+        lowercase: true,
+        // Common units: pcs, kg, liter, gram, ml, box, pack
+        // Enum removed to allow custom units
     },
     weight: {
         type: Number,

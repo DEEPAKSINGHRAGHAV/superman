@@ -63,13 +63,27 @@ const productValidation = {
         body('category')
             .notEmpty()
             .withMessage('Category is required')
-            .isIn(['grocery', 'snacks', 'personal-care', 'dairy', 'fruits-vegetables', 'meat-seafood', 'bakery', 'beverages', 'household', 'electronics', 'other'])
-            .withMessage('Invalid category'),
+            .trim()
+            .isString()
+            .withMessage('Category must be a string')
+            .custom(async (value) => {
+                // Check if category exists in Category model
+                const Category = require('../models/Category');
+                const category = await Category.findOne({ slug: value, isActive: true });
+                if (!category) {
+                    throw new Error('Invalid category. Category must exist and be active.');
+                }
+                return true;
+            }),
 
         body('unit')
             .optional()
-            .isIn(['pcs', 'kg', 'liter', 'gram', 'ml', 'box', 'pack'])
-            .withMessage('Invalid unit'),
+            .trim()
+            .isString()
+            .withMessage('Unit must be a string')
+            .isLength({ min: 1, max: 20 })
+            .withMessage('Unit must be between 1 and 20 characters'),
+            // Common units: pcs, kg, liter, gram, ml, box, pack
 
         body('brand')
             .optional()
@@ -120,8 +134,18 @@ const productValidation = {
 
         body('category')
             .optional()
-            .isIn(['grocery', 'dairy', 'fruits-vegetables', 'meat-seafood', 'bakery', 'beverages', 'snacks', 'personal-care', 'household', 'electronics', 'other'])
-            .withMessage('Invalid category')
+            .trim()
+            .isString()
+            .withMessage('Category must be a string')
+            .custom(async (value) => {
+                // Check if category exists in Category model
+                const Category = require('../models/Category');
+                const category = await Category.findOne({ slug: value, isActive: true });
+                if (!category) {
+                    throw new Error('Invalid category. Category must exist and be active.');
+                }
+                return true;
+            })
     ],
 
     stockUpdate: [
@@ -450,8 +474,9 @@ const brandValidation = {
 
         body('category')
             .optional()
-            .isIn(['food-beverage', 'personal-care', 'household', 'electronics', 'clothing', 'automotive', 'pharmaceutical', 'other'])
-            .withMessage('Invalid brand category')
+            .trim()
+            .isString()
+            .withMessage('Brand category must be a string')
     ],
 
     update: [
@@ -492,8 +517,9 @@ const brandValidation = {
 
         body('category')
             .optional()
-            .isIn(['food-beverage', 'personal-care', 'household', 'electronics', 'clothing', 'automotive', 'pharmaceutical', 'other'])
-            .withMessage('Invalid brand category')
+            .trim()
+            .isString()
+            .withMessage('Brand category must be a string')
     ]
 };
 

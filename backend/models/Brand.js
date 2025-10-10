@@ -64,8 +64,9 @@ const brandSchema = new mongoose.Schema({
     category: {
         type: String,
         trim: true,
-        enum: ['food-beverage', 'personal-care', 'household', 'electronics', 'clothing', 'automotive', 'pharmaceutical', 'other'],
-        default: 'other'
+        lowercase: true,
+        // Note: Should ideally be a reference to Category model
+        // Kept as string for flexibility with legacy data
     },
 
     // Status & Tracking
