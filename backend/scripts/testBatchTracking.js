@@ -103,7 +103,6 @@ async function runBatchTrackingTest() {
             mrp: 30,
             supplierId: supplier._id,
             expiryDate: new Date('2025-12-31'),
-            location: 'Warehouse A',
             notes: 'First purchase batch',
             createdBy: adminUser._id
         });
@@ -137,7 +136,6 @@ async function runBatchTrackingTest() {
             mrp: 32,
             supplierId: supplier._id,
             expiryDate: new Date('2026-01-15'),
-            location: 'Warehouse B',
             notes: 'Second purchase batch - increased prices',
             createdBy: adminUser._id
         });

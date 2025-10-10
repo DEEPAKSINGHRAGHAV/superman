@@ -22,7 +22,6 @@ class InventoryService {
                 notes = '',
                 referenceId = null,
                 referenceNumber = '',
-                location = '',
                 unitCost = null,
                 batchNumber = '',
                 expiryDate = null,
@@ -70,7 +69,6 @@ class InventoryService {
                 referenceNumber,
                 reason,
                 notes,
-                location,
                 unitCost,
                 totalCost: unitCost ? Math.abs(quantity) * unitCost : null,
                 batchNumber,
@@ -251,15 +249,64 @@ class InventoryService {
      * @returns {Promise<Array>} Products expiring soon
      */
     static async getExpiringProducts(daysAhead = 30) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
         const futureDate = new Date();
         futureDate.setDate(futureDate.getDate() + daysAhead);
+        futureDate.setHours(23, 59, 59, 999);
 
-        return await Product.find({
-            expiryDate: { $lte: futureDate, $gte: new Date() },
-            isActive: true
-        })
-            .select('name sku expiryDate currentStock category')
-            .sort({ expiryDate: 1 });
+        // Get expiring batches and aggregate by product
+        const InventoryBatch = require('../models/InventoryBatch');
+
+        const expiringBatches = await InventoryBatch.aggregate([
+            {
+                $match: {
+                    status: 'active',
+                    currentQuantity: { $gt: 0 },
+                    expiryDate: {
+                        $gte: today,
+                        $lte: futureDate
+                    }
+                }
+            },
+            {
+                $group: {
+                    _id: '$product',
+                    earliestExpiry: { $min: '$expiryDate' },
+                    totalExpiringQuantity: { $sum: '$currentQuantity' },
+                    batchCount: { $sum: 1 }
+                }
+            },
+            {
+                $lookup: {
+                    from: 'products',
+                    localField: '_id',
+                    foreignField: '_id',
+                    as: 'product'
+                }
+            },
+            {
+                $unwind: '$product'
+            },
+            {
+                $project: {
+                    _id: '$product._id',
+                    name: '$product.name',
+                    sku: '$product.sku',
+                    category: '$product.category',
+                    currentStock: '$product.currentStock',
+                    expiryDate: '$earliestExpiry',
+                    expiringQuantity: '$totalExpiringQuantity',
+                    expiringBatchCount: '$batchCount'
+                }
+            },
+            {
+                $sort: { expiryDate: 1 }
+            }
+        ]);
+
+        return expiringBatches;
     }
 
     /**

@@ -92,7 +92,7 @@ router.get('/',
     })
 );
 
-// @desc    Search products
+// @desc    Search products (Fuzzy search with partial matching)
 // @route   GET /api/v1/products/search
 // @access  Private (requires read_products permission)
 router.get('/search',
@@ -103,15 +103,24 @@ router.get('/search',
     asyncHandler(async (req, res) => {
         const { search, limit = 20 } = req.query;
 
+        // Escape special regex characters for safety
+        const searchRegex = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        // Use regex-based search for fuzzy/partial matching
         const products = await Product.find({
-            $text: { $search: search },
+            $or: [
+                { name: { $regex: searchRegex, $options: 'i' } },
+                { sku: { $regex: searchRegex, $options: 'i' } },
+                { barcode: { $regex: searchRegex, $options: 'i' } },
+                { brand: { $regex: searchRegex, $options: 'i' } },
+                { category: { $regex: searchRegex, $options: 'i' } }
+            ],
             isActive: true
-        }, {
-            score: { $meta: 'textScore' }
         })
-            .sort({ score: { $meta: 'textScore' } })
+            .sort({ name: 1 }) // Sort by name alphabetically
             .limit(parseInt(limit))
-            .select('name sku barcode category currentStock costPrice sellingPrice mrp');
+            .select('name sku barcode category brand currentStock costPrice sellingPrice mrp')
+            .lean();
 
         res.status(200).json({
             success: true,

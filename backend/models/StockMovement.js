@@ -56,11 +56,6 @@ const stockMovementSchema = new mongoose.Schema({
         trim: true,
         maxlength: [500, 'Notes cannot exceed 500 characters']
     },
-    location: {
-        type: String,
-        trim: true,
-        maxlength: [100, 'Location cannot exceed 100 characters']
-    },
 
     // Financial Information (for tracking cost changes)
     unitCost: {

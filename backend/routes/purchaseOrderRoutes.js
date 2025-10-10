@@ -305,7 +305,7 @@ router.patch('/:id/receive',
         const createdBatches = [];
 
         for (const receivedItem of receivedItems) {
-            const { productId, quantity, costPrice, sellingPrice, expiryDate, manufactureDate, location, notes } = receivedItem;
+            const { productId, quantity, costPrice, sellingPrice, expiryDate, manufactureDate, notes } = receivedItem;
 
             // Find the item in the purchase order
             const poItem = purchaseOrder.items.find(item =>
@@ -324,12 +324,11 @@ router.patch('/:id/receive',
                 productId,
                 quantity,
                 costPrice: costPrice || poItem.costPrice,
-                sellingPrice: sellingPrice || poItem.costPrice * 1.2, // Default 20% markup if not provided
+                sellingPrice: sellingPrice || poItem.sellingPrice || poItem.costPrice * 1.2, // Use PO selling price or default 20% markup
                 purchaseOrderId: purchaseOrder._id,
                 supplierId: purchaseOrder.supplier._id,
-                expiryDate,
+                expiryDate: expiryDate || poItem.expiryDate, // Use provided expiry date or fall back to PO item expiry date
                 manufactureDate,
-                location,
                 notes: notes || `Received from PO ${purchaseOrder.orderNumber}`,
                 createdBy: req.user._id
             });

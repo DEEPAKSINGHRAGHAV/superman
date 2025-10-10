@@ -428,7 +428,7 @@ class ApiService {
     }
 
     async getExpiringProducts(daysAhead = 30): Promise<ApiResponse<Product[]>> {
-        return this.request(`/inventory/analytics?period=${daysAhead}`);
+        return this.request(`/inventory/expiring?daysAhead=${daysAhead}`);
     }
 
     async getProductStockHistory(
@@ -636,6 +636,16 @@ class ApiService {
 
     async getBatchDetails(batchIdOrNumber: string): Promise<ApiResponse<any>> {
         return this.request(`/batches/${batchIdOrNumber}`);
+    }
+
+    async checkExpiredBatches(): Promise<ApiResponse<any>> {
+        return this.request('/batches/check-expired', {
+            method: 'POST',
+        });
+    }
+
+    async getExpiryStatistics(): Promise<ApiResponse<any>> {
+        return this.request('/batches/expiry-stats');
     }
 
     async createBatch(batchData: {

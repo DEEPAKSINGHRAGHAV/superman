@@ -24,7 +24,6 @@ class BatchService {
                 supplierId = null,
                 expiryDate = null,
                 manufactureDate = null,
-                location = '',
                 notes = '',
                 createdBy
             } = batchData;
@@ -51,7 +50,6 @@ class BatchService {
                 supplier: supplierId,
                 expiryDate,
                 manufactureDate,
-                location,
                 notes,
                 createdBy
             }], { session });

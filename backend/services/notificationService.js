@@ -328,11 +328,9 @@ class NotificationService {
                 results.push({ type: 'lowStock', ...lowStockResult });
             }
 
-            // Send expiring products alerts
-            const expiringProducts = await Product.find({
-                expiryDate: { $lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
-                isActive: true
-            });
+            // Send expiring products alerts (using batch-based expiry)
+            const InventoryService = require('./inventoryService');
+            const expiringProducts = await InventoryService.getExpiringProducts(30);
             if (expiringProducts.length > 0) {
                 const expiringResult = await this.sendExpiringProductsAlert(expiringProducts, recipients);
                 results.push({ type: 'expiringProducts', ...expiringResult });

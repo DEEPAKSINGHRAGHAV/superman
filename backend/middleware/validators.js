@@ -233,6 +233,17 @@ const purchaseOrderValidation = {
             .isFloat({ min: 0 })
             .withMessage('Cost price must be a positive number'),
 
+        body('items.*.expiryDate')
+            .optional()
+            .isISO8601()
+            .withMessage('Expiry date must be a valid date')
+            .custom((value) => {
+                if (value && new Date(value) < new Date()) {
+                    throw new Error('Expiry date cannot be in the past');
+                }
+                return true;
+            }),
+
         body('expectedDeliveryDate')
             .optional()
             .isISO8601()

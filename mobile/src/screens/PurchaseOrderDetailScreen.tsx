@@ -90,12 +90,19 @@ const PurchaseOrderDetailScreen: React.FC = () => {
                                 // Use selling price from order if available, otherwise calculate with 20% markup
                                 const sellingPrice = (item as any).sellingPrice || item.costPrice * 1.2;
 
-                                return {
+                                const receivedItem: any = {
                                     productId: productId,
                                     quantity: item.quantity,
                                     costPrice: item.costPrice,
                                     sellingPrice: sellingPrice,
                                 };
+
+                                // Include expiry date if present in order item
+                                if (item.expiryDate) {
+                                    receivedItem.expiryDate = item.expiryDate;
+                                }
+
+                                return receivedItem;
                             }) || [];
 
                             const response = await apiService.receivePurchaseOrder(orderId, receivedItems);

@@ -13,8 +13,8 @@ import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { StatsCard, SearchBar, EmptyState } from '../components';
-import { Button, Card, LoadingSpinner } from '../components/ui';
+import { StatsCard, EmptyState } from '../components';
+import { LoadingSpinner } from '../components/ui';
 import { InventorySummary, DashboardStats, RootStackParamList } from '../types';
 import apiService from '../services/api';
 import { SCREEN_NAMES } from '../constants';
@@ -89,10 +89,6 @@ const DashboardScreen: React.FC = () => {
         }
     };
 
-    const handleAddProduct = () => {
-        navigation.navigate(SCREEN_NAMES.PRODUCT_FORM, {});
-    };
-
     const handleScanBarcode = () => {
         navigation.navigate(SCREEN_NAMES.BARCODE_SCANNER);
     };
@@ -150,10 +146,6 @@ const DashboardScreen: React.FC = () => {
         content: {
             ...styles.content,
             paddingHorizontal: isSmallScreen ? 12 : 16,
-        },
-        actionButtonContainer: {
-            ...styles.actionButtonContainer,
-            maxWidth: isSmallScreen ? '45%' : '30%',
         },
     });
 
@@ -219,93 +211,86 @@ const DashboardScreen: React.FC = () => {
                 {/* Quick Actions */}
                 <View style={styles.section}>
                     <Text style={getSectionTitleStyle()}>Quick Actions</Text>
-                    <View style={styles.quickActions}>
-                        <View style={getResponsiveStyles().actionButtonContainer}>
-                            <Button
-                                title="Billing"
-                                onPress={handleBilling}
-                                variant="primary"
-                                size="sm"
-                                leftIcon={<Icon name="point-of-sale" size={16} color="white" />}
-                                style={styles.actionButton}
-                            />
-                        </View>
-                        <View style={getResponsiveStyles().actionButtonContainer}>
-                            <Button
-                                title="Add Product"
-                                onPress={handleAddProduct}
-                                variant="outline"
-                                size="sm"
-                                leftIcon={<Icon name="add" size={16} color={theme.colors.primary[500]} />}
-                                style={styles.actionButton}
-                            />
-                        </View>
-                        <View style={getResponsiveStyles().actionButtonContainer}>
-                            <Button
-                                title="Barcode"
-                                onPress={handleScanBarcode}
-                                variant="outline"
-                                size="sm"
-                                leftIcon={<Icon name="qr-code-scanner" size={16} color={theme.colors.primary[500]} />}
-                                style={styles.actionButton}
-                            />
-                        </View>
-                    </View>
-                    <View style={styles.quickActions}>
-                        <View style={getResponsiveStyles().actionButtonContainer}>
-                            <Button
-                                title="New Order"
-                                onPress={handleNewOrder}
-                                variant="outline"
-                                size="sm"
-                                leftIcon={<Icon name="shopping-cart" size={16} color={theme.colors.primary[500]} />}
-                                style={styles.actionButton}
-                            />
-                        </View>
-                    </View>
-                    <View style={styles.quickActionsSecondRow}>
+
+                    {/* Primary Actions Grid - 2x2 */}
+                    <View style={styles.quickActionsGrid}>
+                        {/* Billing - Primary Action */}
                         <TouchableOpacity
-                            style={[styles.batchValuationCard, { backgroundColor: theme.colors.primary[50] }]}
-                            onPress={handleBatchValuation}
-                            activeOpacity={0.7}
+                            style={[styles.quickActionCard, { backgroundColor: '#10B981' }]}
+                            onPress={handleBilling}
+                            activeOpacity={0.8}
                         >
-                            <View style={styles.batchValuationContent}>
-                                <View style={[styles.batchValuationIcon, { backgroundColor: theme.colors.primary[500] }]}>
-                                    <Icon name="assessment" size={28} color={theme.colors.white} />
-                                </View>
-                                <View style={styles.batchValuationText}>
-                                    <Text style={[styles.batchValuationTitle, { color: theme.colors.text }]}>
-                                        Inventory Valuation
-                                    </Text>
-                                    <Text style={[styles.batchValuationSubtitle, { color: theme.colors.textSecondary }]}>
-                                        View batch-wise profit analysis
-                                    </Text>
-                                </View>
-                                <Icon name="chevron-right" size={24} color={theme.colors.primary[500]} />
+                            <View style={styles.quickActionIconContainer}>
+                                <Icon name="receipt-long" size={32} color="#FFFFFF" />
                             </View>
+                            <Text style={styles.quickActionTitle}>Billing</Text>
+                            <Text style={styles.quickActionSubtitle}>Point of Sale</Text>
                         </TouchableOpacity>
 
+                        {/* Barcode Scanner */}
                         <TouchableOpacity
-                            style={[styles.batchValuationCard, { backgroundColor: theme.colors.warning[50] }]}
-                            onPress={handleExpiringProducts}
-                            activeOpacity={0.7}
+                            style={[styles.quickActionCard, { backgroundColor: '#3B82F6' }]}
+                            onPress={handleScanBarcode}
+                            activeOpacity={0.8}
                         >
-                            <View style={styles.batchValuationContent}>
-                                <View style={[styles.batchValuationIcon, { backgroundColor: theme.colors.warning[500] }]}>
-                                    <Icon name="warning" size={28} color={theme.colors.white} />
-                                </View>
-                                <View style={styles.batchValuationText}>
-                                    <Text style={[styles.batchValuationTitle, { color: theme.colors.text }]}>
-                                        Expiring Products
-                                    </Text>
-                                    <Text style={[styles.batchValuationSubtitle, { color: theme.colors.textSecondary }]}>
-                                        Check expired & expiring items
-                                    </Text>
-                                </View>
-                                <Icon name="chevron-right" size={24} color={theme.colors.warning[500]} />
+                            <View style={styles.quickActionIconContainer}>
+                                <Icon name="qr-code-scanner" size={32} color="#FFFFFF" />
                             </View>
+                            <Text style={styles.quickActionTitle}>Scan Product</Text>
+                            <Text style={styles.quickActionSubtitle}>Barcode Lookup</Text>
+                        </TouchableOpacity>
+
+                        {/* New Purchase Order */}
+                        <TouchableOpacity
+                            style={[styles.quickActionCard, { backgroundColor: '#F59E0B' }]}
+                            onPress={handleNewOrder}
+                            activeOpacity={0.8}
+                        >
+                            <View style={styles.quickActionIconContainer}>
+                                <Icon name="shopping-cart" size={32} color="#FFFFFF" />
+                            </View>
+                            <Text style={styles.quickActionTitle}>New Order</Text>
+                            <Text style={styles.quickActionSubtitle}>Purchase Order</Text>
+                        </TouchableOpacity>
+
+                        {/* Inventory Valuation */}
+                        <TouchableOpacity
+                            style={[styles.quickActionCard, { backgroundColor: '#8B5CF6' }]}
+                            onPress={handleBatchValuation}
+                            activeOpacity={0.8}
+                        >
+                            <View style={styles.quickActionIconContainer}>
+                                <Icon name="trending-up" size={32} color="#FFFFFF" />
+                            </View>
+                            <Text style={styles.quickActionTitle}>Valuation</Text>
+                            <Text style={styles.quickActionSubtitle}>Profit Analysis</Text>
                         </TouchableOpacity>
                     </View>
+
+                    {/* Expiring Products - Full Width Alert Card */}
+                    <TouchableOpacity
+                        style={[styles.expiringAlertCard, {
+                            backgroundColor: theme.colors.error[50],
+                            borderColor: theme.colors.error[200],
+                        }]}
+                        onPress={handleExpiringProducts}
+                        activeOpacity={0.7}
+                    >
+                        <View style={styles.expiringAlertContent}>
+                            <View style={[styles.expiringAlertIcon, { backgroundColor: theme.colors.error[500] }]}>
+                                <Icon name="event-busy" size={24} color={theme.colors.white} />
+                            </View>
+                            <View style={styles.expiringAlertText}>
+                                <Text style={[styles.expiringAlertTitle, { color: theme.colors.error[700] }]}>
+                                    Expiring Products Alert
+                                </Text>
+                                <Text style={[styles.expiringAlertSubtitle, { color: theme.colors.error[600] }]}>
+                                    Check items expiring soon or expired
+                                </Text>
+                            </View>
+                            <Icon name="chevron-right" size={24} color={theme.colors.error[500]} />
+                        </View>
+                    </TouchableOpacity>
                 </View>
 
                 {/* Stats Cards */}
@@ -340,54 +325,6 @@ const DashboardScreen: React.FC = () => {
                             color="#8B5CF6"
                         />
                     </View>
-                </View>
-
-                {/* Recent Activity */}
-                <View style={styles.section}>
-                    <Text style={getSectionTitleStyle()}>Recent Activity</Text>
-                    <Card variant="elevated" style={styles.activityCard}>
-                        <View style={styles.activityItem}>
-                            <View style={[styles.activityIcon, { backgroundColor: theme.colors.success[50] }]}>
-                                <Icon name="add" size={20} color={theme.colors.success[500]} />
-                            </View>
-                            <View style={styles.activityContent}>
-                                <Text style={[styles.activityTitle, { color: theme.colors.text }]}>
-                                    New product added
-                                </Text>
-                                <Text style={[styles.activitySubtitle, { color: theme.colors.textSecondary }]}>
-                                    Apple iPhone 15 Pro - 2 hours ago
-                                </Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.activityItem}>
-                            <View style={[styles.activityIcon, { backgroundColor: theme.colors.warning[50] }]}>
-                                <Icon name="warning" size={20} color={theme.colors.warning[500]} />
-                            </View>
-                            <View style={styles.activityContent}>
-                                <Text style={[styles.activityTitle, { color: theme.colors.text }]}>
-                                    Low stock alert
-                                </Text>
-                                <Text style={[styles.activitySubtitle, { color: theme.colors.textSecondary }]}>
-                                    Samsung Galaxy S24 - 4 hours ago
-                                </Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.activityItem}>
-                            <View style={[styles.activityIcon, { backgroundColor: theme.colors.info[50] }]}>
-                                <Icon name="shopping-cart" size={20} color={theme.colors.info[500]} />
-                            </View>
-                            <View style={styles.activityContent}>
-                                <Text style={[styles.activityTitle, { color: theme.colors.text }]}>
-                                    Purchase order received
-                                </Text>
-                                <Text style={[styles.activitySubtitle, { color: theme.colors.textSecondary }]}>
-                                    Order #PO-2024-001 - 6 hours ago
-                                </Text>
-                            </View>
-                        </View>
-                    </Card>
                 </View>
 
                 {/* Bottom Spacing */}
@@ -437,92 +374,82 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         marginHorizontal: 4,
     },
-    quickActions: {
+    quickActionsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         justifyContent: 'space-between',
-        gap: 8,
-        marginBottom: 8,
+        gap: 12,
+        marginBottom: 16,
     },
-    actionButtonContainer: {
-        flex: 1,
-        minWidth: 100,
-        maxWidth: '30%',
-    },
-    actionButton: {
-        width: '100%',
-    },
-    quickActionsSecondRow: {
-        marginTop: 12,
-    },
-    batchValuationCard: {
-        borderRadius: 12,
+    quickActionCard: {
+        width: '48%',
+        aspectRatio: 1,
+        borderRadius: 16,
         padding: 16,
-        marginHorizontal: 4,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 5,
+    },
+    quickActionIconContainer: {
+        marginBottom: 12,
+    },
+    quickActionTitle: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        marginBottom: 4,
+        textAlign: 'center',
+    },
+    quickActionSubtitle: {
+        fontSize: 12,
+        color: '#FFFFFF',
+        opacity: 0.9,
+        textAlign: 'center',
+    },
+    expiringAlertCard: {
+        borderRadius: 14,
+        padding: 16,
+        borderWidth: 2,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        shadowOpacity: 0.08,
+        shadowRadius: 6,
         elevation: 3,
     },
-    batchValuationContent: {
+    expiringAlertContent: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
     },
-    batchValuationIcon: {
-        width: 56,
-        height: 56,
-        borderRadius: 28,
+    expiringAlertIcon: {
+        width: 48,
+        height: 48,
+        borderRadius: 24,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    batchValuationText: {
+    expiringAlertText: {
         flex: 1,
     },
-    batchValuationTitle: {
+    expiringAlertTitle: {
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: '700',
         marginBottom: 4,
     },
-    batchValuationSubtitle: {
+    expiringAlertSubtitle: {
         fontSize: 13,
         lineHeight: 18,
+        fontWeight: '500',
     },
     statsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         justifyContent: 'space-between',
         gap: 8,
-    },
-    activityCard: {
-        padding: 16,
-    },
-    activityItem: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: 'rgba(0, 0, 0, 0.1)',
-    },
-    activityIcon: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginRight: 12,
-    },
-    activityContent: {
-        flex: 1,
-    },
-    activityTitle: {
-        fontSize: 14,
-        fontWeight: '500',
-        marginBottom: 2,
-    },
-    activitySubtitle: {
-        fontSize: 12,
     },
     bottomSpacing: {
         height: 20,

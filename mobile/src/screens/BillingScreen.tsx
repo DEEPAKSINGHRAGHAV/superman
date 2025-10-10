@@ -65,6 +65,7 @@ const BillingScreen: React.FC = () => {
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('cash');
     const [amountReceived, setAmountReceived] = useState('');
     const [receiptData, setReceiptData] = useState<any>(null);
+    const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
     // Calculate totals
     const subtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
@@ -72,25 +73,50 @@ const BillingScreen: React.FC = () => {
     const total = subtotal + tax;
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-    // Search products
+    // Search products with debouncing for better UX
     const searchProducts = async (query: string) => {
-        if (!query.trim()) {
+        // Clear previous timeout
+        if (searchTimeout) {
+            clearTimeout(searchTimeout);
+        }
+
+        // Clear results if query is empty or too short
+        if (!query.trim() || query.trim().length < 2) {
             setSearchResults([]);
+            setIsSearching(false);
             return;
         }
 
         setIsSearching(true);
-        try {
-            const response = await apiService.searchProducts(query);
-            if (response.success && response.data) {
-                setSearchResults(response.data);
+
+        // Debounce search - wait 300ms after user stops typing
+        const timeout = setTimeout(async () => {
+            try {
+                const response = await apiService.searchProducts(query.trim(), 50); // Increased limit for better results
+                if (response.success && response.data) {
+                    setSearchResults(response.data);
+                } else {
+                    setSearchResults([]);
+                }
+            } catch (error: any) {
+                console.error('Search error:', error);
+                setSearchResults([]);
+            } finally {
+                setIsSearching(false);
             }
-        } catch (error: any) {
-            console.error('Search error:', error);
-        } finally {
-            setIsSearching(false);
-        }
+        }, 300);
+
+        setSearchTimeout(timeout);
     };
+
+    // Cleanup timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (searchTimeout) {
+                clearTimeout(searchTimeout);
+            }
+        };
+    }, [searchTimeout]);
 
     // Handle barcode scan
     const handleBarcodeScan = async (barcode: string) => {
@@ -143,30 +169,108 @@ const BillingScreen: React.FC = () => {
                     const batchResponse = await apiService.getBatchesByProduct(product._id);
 
                     if (batchResponse.success && batchResponse.data?.batches?.length > 0) {
-                        // Get oldest (FIFO) batch - first batch in the array
-                        const oldestBatch = batchResponse.data.batches[0];
+                        const batches = batchResponse.data.batches;
 
-                        // Check if batch is expired
-                        const isExpired = oldestBatch.expiryDate && new Date(oldestBatch.expiryDate) < new Date();
-                        if (isExpired) {
+                        // Filter out expired batches and check if oldest available batch is valid
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0); // Reset to start of day for accurate comparison
+
+                        const validBatches = batches.filter((batch: any) => {
+                            // Must have current quantity
+                            if (!batch.currentQuantity || batch.currentQuantity <= 0) return false;
+
+                            // No expiry date means always valid
+                            if (!batch.expiryDate) return true;
+
+                            // Parse expiry date and compare
+                            const expiryDate = new Date(batch.expiryDate);
+                            expiryDate.setHours(0, 0, 0, 0); // Reset to start of day
+
+                            // Batch is valid if expiry date is today or in the future
+                            return expiryDate >= today;
+                        });
+
+                        if (validBatches.length === 0) {
                             Alert.alert(
-                                'Expired Product',
-                                `This product has expired batches and cannot be sold. Please remove expired batches from inventory.`
+                                'Expired Stock',
+                                `All batches for "${product.name}" have expired and cannot be sold. Please remove expired batches from inventory or contact management.`,
+                                [{ text: 'OK' }]
                             );
                             return;
                         }
 
+                        // Get oldest valid (FIFO) batch
+                        const oldestBatch = validBatches[0];
+
+                        // Extract batch info first
                         unitPrice = parseFloat(oldestBatch.sellingPrice.toFixed(2));
                         costPrice = parseFloat(oldestBatch.costPrice.toFixed(2));
                         batchInfo = {
                             batchNumber: oldestBatch.batchNumber,
                             availableQuantity: oldestBatch.currentQuantity || oldestBatch.availableQuantity
                         };
+
+                        // Check if batch is expiring soon (within 3 days) and show warning
+                        if (oldestBatch.expiryDate) {
+                            const expiryDate = new Date(oldestBatch.expiryDate);
+                            const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+                            if (daysUntilExpiry <= 3 && daysUntilExpiry > 0) {
+                                // Show warning and wait for user response
+                                return new Promise((resolve) => {
+                                    Alert.alert(
+                                        'Warning: Expiring Soon',
+                                        `The batch for "${product.name}" will expire in ${daysUntilExpiry} day${daysUntilExpiry !== 1 ? 's' : ''}.\n\nExpiry Date: ${expiryDate.toLocaleDateString()}\nBatch: ${batchInfo.batchNumber}`,
+                                        [
+                                            {
+                                                text: 'Cancel',
+                                                style: 'cancel',
+                                                onPress: () => {
+                                                    resolve(null); // Don't add to cart
+                                                }
+                                            },
+                                            {
+                                                text: 'Add Anyway',
+                                                style: 'default',
+                                                onPress: () => {
+                                                    // Actually add to cart
+                                                    const newItem: CartItem = {
+                                                        product,
+                                                        quantity: 1,
+                                                        unitPrice,
+                                                        costPrice,
+                                                        totalPrice: unitPrice,
+                                                        batchInfo,
+                                                    };
+                                                    setCart([...cart, newItem]);
+                                                    setShowProductSearch(false);
+                                                    setSearchQuery('');
+                                                    setSearchResults([]);
+                                                    resolve(newItem);
+                                                }
+                                            }
+                                        ]
+                                    );
+                                });
+                            }
+                        }
+
+                        // If no warning needed, add to cart normally
+                        const newItem: CartItem = {
+                            product,
+                            quantity: 1,
+                            unitPrice,
+                            costPrice,
+                            totalPrice: unitPrice,
+                            batchInfo,
+                        };
+                        setCart([...cart, newItem]);
                     } else if (batchResponse.success && batchResponse.data?.batches?.length === 0) {
                         // No non-expired batches available
                         Alert.alert(
                             'No Valid Batches',
-                            `This product has no available non-expired batches. Please check inventory.`
+                            `This product has no available non-expired batches. Please check inventory or add new stock.`,
+                            [{ text: 'OK' }]
                         );
                         return;
                     }
@@ -481,22 +585,79 @@ const BillingScreen: React.FC = () => {
         );
     };
 
-    const renderSearchResult = ({ item }: { item: Product }) => (
-        <TouchableOpacity
-            style={[styles.searchResultItem, { backgroundColor: theme.colors.background }]}
-            onPress={() => addToCart(item)}
-        >
-            <View style={styles.searchResultInfo}>
-                <Text style={[styles.searchResultName, { color: theme.colors.text }]}>{item.name}</Text>
-                <Text style={[styles.searchResultDetails, { color: theme.colors.textSecondary }]}>
-                    {item.sku} • Stock: {item.currentStock}
-                </Text>
-            </View>
-            <Text style={[styles.searchResultPrice, { color: theme.colors.primary[500] }]}>
-                {formatCurrency(item.sellingPrice)}
-            </Text>
-        </TouchableOpacity>
-    );
+    const renderSearchResult = ({ item }: { item: Product }) => {
+        const isLowStock = item.currentStock <= 5;
+        const isOutOfStock = item.currentStock === 0;
+
+        return (
+            <TouchableOpacity
+                style={[
+                    styles.searchResultItem,
+                    {
+                        backgroundColor: theme.colors.background,
+                        borderColor: isOutOfStock ? theme.colors.error[200] : theme.colors.gray[200]
+                    }
+                ]}
+                onPress={() => addToCart(item)}
+                disabled={isOutOfStock}
+                activeOpacity={isOutOfStock ? 1 : 0.7}
+            >
+                <View style={styles.searchResultInfo}>
+                    <Text
+                        style={[
+                            styles.searchResultName,
+                            {
+                                color: isOutOfStock ? theme.colors.textSecondary : theme.colors.text
+                            }
+                        ]}
+                    >
+                        {item.name}
+                    </Text>
+                    <Text style={[styles.searchResultDetails, { color: theme.colors.textSecondary }]}>
+                        {item.sku}
+                        {item.barcode && ` • ${item.barcode}`}
+                        {item.brand && ` • ${item.brand}`}
+                    </Text>
+                    <View style={styles.stockBadgeContainer}>
+                        <Text
+                            style={[
+                                styles.stockBadge,
+                                {
+                                    color: isOutOfStock
+                                        ? theme.colors.error[600]
+                                        : isLowStock
+                                            ? theme.colors.warning[600]
+                                            : theme.colors.success[600],
+                                    backgroundColor: isOutOfStock
+                                        ? theme.colors.error[100]
+                                        : isLowStock
+                                            ? theme.colors.warning[100]
+                                            : theme.colors.success[100]
+                                }
+                            ]}
+                        >
+                            {isOutOfStock ? 'Out of Stock' : `Stock: ${item.currentStock}`}
+                        </Text>
+                    </View>
+                </View>
+                <View style={styles.searchResultPriceContainer}>
+                    <Text
+                        style={[
+                            styles.searchResultPrice,
+                            {
+                                color: isOutOfStock ? theme.colors.textSecondary : theme.colors.primary[500]
+                            }
+                        ]}
+                    >
+                        {formatCurrency(item.sellingPrice)}
+                    </Text>
+                    {!isOutOfStock && (
+                        <Icon name="add-circle" size={24} color={theme.colors.primary[500]} />
+                    )}
+                </View>
+            </TouchableOpacity>
+        );
+    };
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -637,20 +798,43 @@ const BillingScreen: React.FC = () => {
                         <View style={{ width: 24 }} />
                     </View>
                     <View style={styles.searchContainer}>
-                        <TextInput
-                            style={[styles.searchInput, { backgroundColor: theme.colors.white, color: theme.colors.text }]}
-                            placeholder="Search by name, SKU, or barcode..."
-                            placeholderTextColor={theme.colors.textSecondary}
-                            value={searchQuery}
-                            onChangeText={(text) => {
-                                setSearchQuery(text);
-                                searchProducts(text);
-                            }}
-                            autoFocus
-                        />
+                        <View style={styles.searchInputWrapper}>
+                            <Icon name="search" size={20} color={theme.colors.textSecondary} style={styles.searchIcon} />
+                            <TextInput
+                                style={[styles.searchInput, { backgroundColor: theme.colors.white, color: theme.colors.text }]}
+                                placeholder="Type product name, SKU, barcode, or brand..."
+                                placeholderTextColor={theme.colors.textSecondary}
+                                value={searchQuery}
+                                onChangeText={(text) => {
+                                    setSearchQuery(text);
+                                    searchProducts(text);
+                                }}
+                                autoFocus
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                            />
+                            {searchQuery.length > 0 && (
+                                <TouchableOpacity
+                                    onPress={() => {
+                                        setSearchQuery('');
+                                        setSearchResults([]);
+                                    }}
+                                    style={styles.clearSearchButton}
+                                >
+                                    <Icon name="close" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                        {searchQuery.length > 0 && searchQuery.length < 2 && (
+                            <Text style={[styles.searchHint, { color: theme.colors.textSecondary }]}>
+                                Type at least 2 characters to search
+                            </Text>
+                        )}
                     </View>
                     {isSearching ? (
-                        <LoadingSpinner text="Searching..." />
+                        <View style={styles.searchingContainer}>
+                            <LoadingSpinner text="Searching products..." />
+                        </View>
                     ) : (
                         <FlatList
                             data={searchResults}
@@ -658,11 +842,24 @@ const BillingScreen: React.FC = () => {
                             keyExtractor={(item) => item._id}
                             contentContainerStyle={styles.searchResults}
                             ListEmptyComponent={
-                                searchQuery ? (
+                                searchQuery.length >= 2 ? (
                                     <View style={styles.emptySearch}>
-                                        <Icon name="search-off" size={48} color={theme.colors.gray[300]} />
-                                        <Text style={[styles.emptySearchText, { color: theme.colors.textSecondary }]}>
+                                        <Icon name="search-off" size={56} color={theme.colors.gray[300]} />
+                                        <Text style={[styles.emptySearchText, { color: theme.colors.text }]}>
                                             No products found
+                                        </Text>
+                                        <Text style={[styles.emptySearchSubtext, { color: theme.colors.textSecondary }]}>
+                                            Try searching with different keywords
+                                        </Text>
+                                    </View>
+                                ) : searchQuery.length === 0 ? (
+                                    <View style={styles.emptySearch}>
+                                        <Icon name="inventory" size={56} color={theme.colors.gray[300]} />
+                                        <Text style={[styles.emptySearchText, { color: theme.colors.text }]}>
+                                            Start typing to search
+                                        </Text>
+                                        <Text style={[styles.emptySearchSubtext, { color: theme.colors.textSecondary }]}>
+                                            Search by name, SKU, barcode, or brand
                                         </Text>
                                     </View>
                                 ) : null
@@ -1204,13 +1401,42 @@ const styles = StyleSheet.create({
         padding: 16,
         paddingTop: 0,
     },
+    searchInputWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        position: 'relative',
+    },
+    searchIcon: {
+        position: 'absolute',
+        left: 14,
+        zIndex: 1,
+    },
     searchInput: {
-        height: 48,
-        borderRadius: 8,
-        paddingHorizontal: 16,
-        fontSize: 16,
-        borderWidth: 1,
+        flex: 1,
+        height: 50,
+        borderRadius: 10,
+        paddingLeft: 42,
+        paddingRight: 42,
+        fontSize: 15,
+        borderWidth: 1.5,
         borderColor: '#E0E0E0',
+    },
+    clearSearchButton: {
+        position: 'absolute',
+        right: 12,
+        padding: 4,
+    },
+    searchHint: {
+        fontSize: 12,
+        marginTop: 8,
+        marginLeft: 4,
+        fontStyle: 'italic',
+    },
+    searchingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 40,
     },
     searchResults: {
         padding: 16,
@@ -1220,36 +1446,69 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 16,
-        borderRadius: 8,
-        marginBottom: 8,
-        borderWidth: 1,
-        borderColor: '#E0E0E0',
+        padding: 14,
+        borderRadius: 10,
+        marginBottom: 10,
+        borderWidth: 1.5,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
     },
     searchResultInfo: {
         flex: 1,
+        marginRight: 12,
     },
     searchResultName: {
         fontSize: 16,
-        fontWeight: '500',
-        marginBottom: 4,
+        fontWeight: '600',
+        marginBottom: 6,
+        lineHeight: 22,
     },
     searchResultDetails: {
-        fontSize: 14,
+        fontSize: 13,
+        marginBottom: 8,
+        lineHeight: 18,
+    },
+    stockBadgeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    stockBadge: {
+        fontSize: 12,
+        fontWeight: '600',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        overflow: 'hidden',
+    },
+    searchResultPriceContainer: {
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+        gap: 4,
     },
     searchResultPrice: {
-        fontSize: 16,
-        fontWeight: '600',
-        marginLeft: 12,
+        fontSize: 17,
+        fontWeight: '700',
     },
     emptySearch: {
         alignItems: 'center',
         justifyContent: 'center',
-        paddingVertical: 48,
+        paddingVertical: 60,
+        paddingHorizontal: 32,
     },
     emptySearchText: {
-        fontSize: 16,
+        fontSize: 18,
+        fontWeight: '600',
         marginTop: 16,
+        marginBottom: 8,
+        textAlign: 'center',
+    },
+    emptySearchSubtext: {
+        fontSize: 14,
+        textAlign: 'center',
+        lineHeight: 20,
     },
     paymentModalOverlay: {
         flex: 1,

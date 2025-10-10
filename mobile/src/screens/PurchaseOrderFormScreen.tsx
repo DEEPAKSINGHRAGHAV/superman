@@ -108,8 +108,9 @@ const PurchaseOrderFormScreen: React.FC = () => {
                         costPrice: item.costPrice,
                         sellingPrice: item.sellingPrice || item.costPrice * 1.2, // Use saved or calculate with 20% markup
                         mrp: item.mrp,
+                        expiryDate: item.expiryDate, // Include expiry date
                     })),
-                    expectedDeliveryDate: order.expectedDeliveryDate || '',
+                    expectedDeliveryDate: order.expectedDeliveryDate ? order.expectedDeliveryDate.split('T')[0] : '',
                     notes: order.notes || '',
                     paymentMethod: order.paymentMethod,
                 });
@@ -164,7 +165,12 @@ const PurchaseOrderFormScreen: React.FC = () => {
     const formatDisplayDate = (dateString: string) => {
         if (!dateString) return 'Select date';
 
-        const date = new Date(dateString + 'T00:00:00');
+        // Handle both YYYY-MM-DD and ISO 8601 formats
+        const date = dateString.includes('T') ? new Date(dateString) : new Date(dateString + 'T00:00:00');
+
+        // Check if date is valid
+        if (isNaN(date.getTime())) return 'Invalid date';
+
         const options: Intl.DateTimeFormatOptions = {
             year: 'numeric',
             month: 'short',
@@ -264,7 +270,9 @@ const PurchaseOrderFormScreen: React.FC = () => {
         }
 
         if (expiryDate) {
-            newItem.expiryDate = expiryDate;
+            // Convert YYYY-MM-DD to ISO 8601 format (set time to noon UTC to avoid timezone issues)
+            const date = new Date(expiryDate + 'T12:00:00.000Z');
+            newItem.expiryDate = date.toISOString();
         }
 
         setFormData(prev => ({
@@ -636,11 +644,12 @@ const PurchaseOrderFormScreen: React.FC = () => {
                                             Margin: {calculateMargin(item.costPrice, item.sellingPrice).toFixed(1)}%
                                         </Text>
                                     </View>
+                                    {/* Expiry Date Badge - Prominently displayed */}
                                     {item.expiryDate && (
-                                        <View style={styles.expiryInfo}>
-                                            <Icon name="schedule" size={14} color={theme.colors.warning['500']} />
-                                            <Text style={[styles.expiryText, { color: theme.colors.warning['600'] }]}>
-                                                Expires: {formatDisplayDate(item.expiryDate)}
+                                        <View style={[styles.expiryBadge, { backgroundColor: theme.colors.warning['50'], borderColor: theme.colors.warning['200'] }]}>
+                                            <Icon name="event-busy" size={16} color={theme.colors.warning['600']} />
+                                            <Text style={[styles.expiryBadgeText, { color: theme.colors.warning['700'] }]}>
+                                                Expiry Date: {formatDisplayDate(typeof item.expiryDate === 'string' ? item.expiryDate : item.expiryDate)}
                                             </Text>
                                         </View>
                                     )}
@@ -792,6 +801,21 @@ const styles = StyleSheet.create({
     },
     clearDateButton: {
         padding: 4,
+    },
+    expiryBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+    },
+    expiryBadgeText: {
+        fontSize: 13,
+        fontWeight: '600',
+        flex: 1,
     },
     expiryInfo: {
         flexDirection: 'row',

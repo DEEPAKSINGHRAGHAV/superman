@@ -12,7 +12,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useTheme } from '../contexts/ThemeContext';
-import { Card, LoadingSpinner, EmptyState } from '../components/ui';
+import { Card, LoadingSpinner } from '../components/ui';
+import { EmptyState } from '../components';
 import { RootStackParamList } from '../types';
 import apiService from '../services/api';
 
@@ -388,7 +389,7 @@ const ExpiringProductsScreen: React.FC = () => {
                 <EmptyState
                     icon="check-circle"
                     title="No Expiring Products"
-                    message={
+                    subtitle={
                         selectedFilter === 'expired'
                             ? 'No expired batches found.'
                             : `No products expiring in the next ${selectedFilter} days.`

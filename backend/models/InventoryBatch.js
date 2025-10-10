@@ -86,11 +86,6 @@ const inventoryBatchSchema = new mongoose.Schema({
     },
 
     // Additional Information
-    location: {
-        type: String,
-        trim: true,
-        maxlength: [100, 'Location cannot exceed 100 characters']
-    },
     notes: {
         type: String,
         trim: true,

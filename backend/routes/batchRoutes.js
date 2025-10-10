@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const BatchService = require('../services/batchService');
+const ExpiryCheckService = require('../services/expiryCheckService');
 const InventoryBatch = require('../models/InventoryBatch');
 const { protect, authorize } = require('../middleware/auth');
 const asyncHandler = require('../middleware/asyncHandler');
@@ -111,6 +112,37 @@ router.get('/expiring', protect, asyncHandler(async (req, res) => {
 }));
 
 /**
+ * @route   POST /api/batches/check-expired
+ * @desc    Check and automatically update expired batches
+ * @access  Private (Admin/Manager only)
+ */
+router.post('/check-expired', protect, authorize('admin', 'manager'), asyncHandler(async (req, res) => {
+    const result = await ExpiryCheckService.checkAndUpdateExpiredBatches();
+
+    res.status(200).json({
+        success: result.success,
+        message: result.success
+            ? `Expiry check completed. ${result.batchesUpdated.length} batch(es) marked as expired.`
+            : 'Expiry check failed',
+        data: result
+    });
+}));
+
+/**
+ * @route   GET /api/batches/expiry-stats
+ * @desc    Get expiry statistics
+ * @access  Private
+ */
+router.get('/expiry-stats', protect, asyncHandler(async (req, res) => {
+    const stats = await ExpiryCheckService.getExpiryStatistics();
+
+    res.status(200).json({
+        success: true,
+        data: stats
+    });
+}));
+
+/**
  * @route   GET /api/batches/valuation
  * @desc    Get inventory valuation report
  * @access  Private (Admin/Manager only)
@@ -156,7 +188,6 @@ router.post('/', protect, authorize('admin', 'manager'), asyncHandler(async (req
         supplierId,
         expiryDate,
         manufactureDate,
-        location,
         notes
     } = req.body;
 
@@ -182,6 +213,47 @@ router.post('/', protect, authorize('admin', 'manager'), asyncHandler(async (req
         });
     }
 
+    // Validate expiry date is not in the past
+    if (expiryDate) {
+        const expiry = new Date(expiryDate);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (expiry < today) {
+            return res.status(400).json({
+                success: false,
+                message: 'Expiry date cannot be in the past'
+            });
+        }
+    }
+
+    // Validate manufacture date is not in the future
+    if (manufactureDate) {
+        const mfgDate = new Date(manufactureDate);
+        const today = new Date();
+        today.setHours(23, 59, 59, 999);
+
+        if (mfgDate > today) {
+            return res.status(400).json({
+                success: false,
+                message: 'Manufacture date cannot be in the future'
+            });
+        }
+    }
+
+    // Validate manufacture date is before expiry date
+    if (expiryDate && manufactureDate) {
+        const expiry = new Date(expiryDate);
+        const mfgDate = new Date(manufactureDate);
+
+        if (mfgDate >= expiry) {
+            return res.status(400).json({
+                success: false,
+                message: 'Manufacture date must be before expiry date'
+            });
+        }
+    }
+
     const batch = await BatchService.createBatch({
         productId,
         quantity,
@@ -192,7 +264,6 @@ router.post('/', protect, authorize('admin', 'manager'), asyncHandler(async (req
         supplierId,
         expiryDate,
         manufactureDate,
-        location,
         notes,
         createdBy: req.user._id
     });

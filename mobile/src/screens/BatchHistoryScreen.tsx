@@ -11,7 +11,8 @@ import { useRoute, useNavigation, useFocusEffect } from '@react-navigation/nativ
 import { StackNavigationProp } from '@react-navigation/stack';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useTheme } from '../contexts/ThemeContext';
-import { Card, LoadingSpinner, EmptyState } from '../components/ui';
+import { Card, LoadingSpinner } from '../components/ui';
+import { EmptyState } from '../components';
 import { RootStackParamList } from '../types';
 import apiService from '../services/api';
 
@@ -281,26 +282,63 @@ const BatchHistoryScreen: React.FC = () => {
                         </Text>
                     </View>
                     {item.expiryDate && (
-                        <View style={styles.dateItem}>
+                        <View style={[
+                            styles.expiryBadge,
+                            {
+                                backgroundColor: item.isExpired
+                                    ? theme.colors.error[50]
+                                    : item.daysUntilExpiry !== undefined && item.daysUntilExpiry <= 7
+                                        ? theme.colors.warning[50]
+                                        : theme.colors.info[50],
+                                borderColor: item.isExpired
+                                    ? theme.colors.error[200]
+                                    : item.daysUntilExpiry !== undefined && item.daysUntilExpiry <= 7
+                                        ? theme.colors.warning[200]
+                                        : theme.colors.info[200],
+                            }
+                        ]}>
                             <Icon
-                                name="schedule"
-                                size={14}
-                                color={item.isExpired ? theme.colors.error[500] : theme.colors.textSecondary}
+                                name={item.isExpired ? "error" : "event-busy"}
+                                size={16}
+                                color={item.isExpired
+                                    ? theme.colors.error[600]
+                                    : item.daysUntilExpiry !== undefined && item.daysUntilExpiry <= 7
+                                        ? theme.colors.warning[600]
+                                        : theme.colors.info[600]
+                                }
                             />
-                            <Text
-                                style={[
-                                    styles.dateText,
-                                    {
-                                        color: item.isExpired
-                                            ? theme.colors.error[500]
-                                            : theme.colors.textSecondary,
-                                    },
-                                ]}
-                            >
-                                Expires: {formatDate(item.expiryDate)}
-                                {item.daysUntilExpiry !== undefined &&
-                                    ` (${item.daysUntilExpiry > 0 ? `${item.daysUntilExpiry} days` : 'Expired'})`}
-                            </Text>
+                            <View style={styles.expiryContent}>
+                                <Text
+                                    style={[
+                                        styles.expiryLabel,
+                                        {
+                                            color: item.isExpired
+                                                ? theme.colors.error[600]
+                                                : item.daysUntilExpiry !== undefined && item.daysUntilExpiry <= 7
+                                                    ? theme.colors.warning[600]
+                                                    : theme.colors.info[600],
+                                        },
+                                    ]}
+                                >
+                                    {item.isExpired ? 'EXPIRED' : 'Expires'}
+                                </Text>
+                                <Text
+                                    style={[
+                                        styles.expiryDate,
+                                        {
+                                            color: item.isExpired
+                                                ? theme.colors.error[700]
+                                                : item.daysUntilExpiry !== undefined && item.daysUntilExpiry <= 7
+                                                    ? theme.colors.warning[700]
+                                                    : theme.colors.info[700],
+                                        },
+                                    ]}
+                                >
+                                    {formatDate(item.expiryDate)}
+                                    {item.daysUntilExpiry !== undefined &&
+                                        ` (${item.daysUntilExpiry > 0 ? `${item.daysUntilExpiry} days left` : 'Expired'})`}
+                                </Text>
+                            </View>
                         </View>
                     )}
                 </View>
@@ -528,7 +566,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     dateSection: {
-        gap: 6,
+        gap: 8,
         marginBottom: 8,
     },
     dateItem: {
@@ -538,6 +576,29 @@ const styles = StyleSheet.create({
     },
     dateText: {
         fontSize: 12,
+    },
+    expiryBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+    },
+    expiryContent: {
+        flex: 1,
+    },
+    expiryLabel: {
+        fontSize: 11,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
+        marginBottom: 2,
+    },
+    expiryDate: {
+        fontSize: 13,
+        fontWeight: '600',
     },
     additionalInfo: {
         flexDirection: 'row',
