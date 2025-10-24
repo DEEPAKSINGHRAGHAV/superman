@@ -36,12 +36,14 @@ const ProductListScreen: React.FC = () => {
     const [categories, setCategories] = useState<Array<{ label: string; value: string }>>([]);
     const [totalCount, setTotalCount] = useState<number>(0);
     const [isSearching, setIsSearching] = useState(false);
+    const [hasActiveSearch, setHasActiveSearch] = useState(false);
 
     const loadProducts = useCallback(async (page = 1, reset = false, customSearchQuery?: string) => {
         try {
             if (page === 1) {
                 setError(null);
-                if (reset) {
+                // Only show full page loader on initial load or when explicitly resetting without search
+                if (reset && !customSearchQuery && !searchQuery.trim()) {
                     setIsLoading(true);
                 }
             } else {
@@ -50,31 +52,49 @@ const ProductListScreen: React.FC = () => {
 
             // Use provided search query or current state value
             const currentSearchQuery = customSearchQuery !== undefined ? customSearchQuery : searchQuery;
+            console.log('loadProducts called with:', { page, reset, customSearchQuery, currentSearchQuery, selectedCategory });
 
             let response;
 
-            // Use advanced fuzzy search endpoint for search queries without category filter
-            // Use regular endpoint when category filter is applied or no search
-            if (currentSearchQuery && currentSearchQuery.trim() && !selectedCategory) {
+            // Simplified search logic - use fuzzy search for pure text search, regular search for filtered queries
+            if (currentSearchQuery && currentSearchQuery.trim() && !selectedCategory && Object.keys(filters).length === 0) {
                 console.log('Using advanced fuzzy search for:', currentSearchQuery);
-                // Use fuzzy search endpoint (no pagination support, but better results)
-                const fuzzyResponse = await apiService.searchProducts(currentSearchQuery, 50);
+                try {
+                    const fuzzyResponse = await apiService.searchProducts(currentSearchQuery, 50);
 
-                if (fuzzyResponse.success && fuzzyResponse.data) {
-                    // Convert to paginated response format for consistency
-                    response = {
-                        success: true,
-                        data: fuzzyResponse.data,
-                        total: fuzzyResponse.count,
-                        count: fuzzyResponse.count,
-                        pagination: {
-                            currentPage: 1,
-                            totalPages: 1,
-                            hasNext: false,
-                            hasPrev: false,
-                            limit: 50
-                        }
+                    if (fuzzyResponse.success && fuzzyResponse.data) {
+                        // Convert to paginated response format for consistency
+                        response = {
+                            success: true,
+                            data: fuzzyResponse.data,
+                            total: fuzzyResponse.data?.length || 0,
+                            pagination: {
+                                currentPage: 1,
+                                totalPages: 1,
+                                hasNext: false,
+                                hasPrev: false,
+                                limit: 50
+                            }
+                        };
+                    } else {
+                        console.warn('Fuzzy search failed, falling back to regular search');
+                        // Fallback to regular search if fuzzy search fails
+                        const searchFilters: ProductFilters = {
+                            ...filters,
+                            search: currentSearchQuery,
+                            category: selectedCategory || undefined,
+                        };
+                        response = await apiService.getProducts(searchFilters, page, 20);
+                    }
+                } catch (fuzzyError) {
+                    console.warn('Fuzzy search error, falling back to regular search:', fuzzyError);
+                    // Fallback to regular search if fuzzy search throws error
+                    const searchFilters: ProductFilters = {
+                        ...filters,
+                        search: currentSearchQuery,
+                        category: selectedCategory || undefined,
                     };
+                    response = await apiService.getProducts(searchFilters, page, 20);
                 }
             } else {
                 // Use regular endpoint with pagination and category filter
@@ -89,15 +109,25 @@ const ProductListScreen: React.FC = () => {
             }
 
             if (response && response.success && response.data) {
+                // Ensure data is an array and filter out invalid products
+                const validProducts = Array.isArray(response.data)
+                    ? response.data.filter(product => product && product._id && product.name)
+                    : [];
+
                 if (page === 1) {
-                    setProducts(response.data);
+                    setProducts(validProducts);
                 } else {
-                    setProducts(prev => [...prev, ...response.data]);
+                    setProducts(prev => [...prev, ...validProducts]);
                 }
 
                 setHasMore(response.pagination?.hasNext || false);
                 setCurrentPage(page);
-                setTotalCount(response.total || response.count || 0);
+                setTotalCount(response.total || 0);
+            } else {
+                console.warn('Invalid response format:', response);
+                if (page === 1) {
+                    setProducts([]);
+                }
             }
         } catch (error: any) {
             console.error('Error loading products:', error);
@@ -128,10 +158,10 @@ const ProductListScreen: React.FC = () => {
                 const response = await apiService.getCategories({ isActive: true, level: 0 }, 1, 100);
                 if (response.success && response.data) {
                     const categoryOptions = [
-                        { label: 'All', value: null },
+                        { label: 'All', value: null as string | null },
                         ...response.data.map((cat: any) => ({
                             label: cat.name,
-                            value: cat.slug
+                            value: cat.slug || cat._id
                         }))
                     ];
                     setCategories(categoryOptions);
@@ -155,8 +185,14 @@ const ProductListScreen: React.FC = () => {
 
     useFocusEffect(
         useCallback(() => {
-            loadProducts(1, true);
-        }, [loadProducts])
+            // Only reload if there's no active search and not currently searching
+            if (!hasActiveSearch && !isSearching && !searchQuery.trim()) {
+                console.log('useFocusEffect: Reloading products (no active search)');
+                loadProducts(1, true);
+            } else {
+                console.log('useFocusEffect: Skipping reload (hasActiveSearch:', hasActiveSearch, 'isSearching:', isSearching, 'searchQuery:', searchQuery, ')');
+            }
+        }, [hasActiveSearch, isSearching, searchQuery, loadProducts])
     );
 
     const handleRefresh = useCallback(() => {
@@ -171,32 +207,59 @@ const ProductListScreen: React.FC = () => {
     }, [isLoadingMore, hasMore, currentPage, loadProducts]);
 
     // Use ref for debounce timeout
-    const searchTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+    const searchTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const handleSearch = (query: string) => {
-        setSearchQuery(query);
+        console.log('handleSearch called with:', query);
 
         // Clear existing timeout
         if (searchTimeoutRef.current) {
             clearTimeout(searchTimeoutRef.current);
         }
 
+        // Update search query state immediately
+        setSearchQuery(query);
+
         // Show searching indicator
         if (query.trim()) {
             setIsSearching(true);
+            setHasActiveSearch(true);
+        } else {
+            // If query is empty, clear search immediately without full page loader
+            setIsSearching(false);
+            setHasActiveSearch(false);
+            setCurrentPage(1);
+            // Don't clear products immediately - let the search handle it smoothly
+            loadProducts(1, false, ''); // Use reset=false to avoid full page loader
+            return;
         }
 
         // Debounce search - reload after user stops typing
         searchTimeoutRef.current = setTimeout(() => {
+            console.log('Executing debounced search for:', query);
             setCurrentPage(1);
             setIsSearching(false);
-            loadProducts(1, true, query);
-        }, 500); // 500ms delay for better UX
+            // Pass the query explicitly to avoid stale closure, use reset=false for search
+            loadProducts(1, false, query);
+        }, 300); // Reduced delay for better responsiveness
     };
 
     // Cleanup timeout on unmount
     useEffect(() => {
         return () => {
+            if (searchTimeoutRef.current) {
+                clearTimeout(searchTimeoutRef.current);
+            }
+        };
+    }, []);
+
+    // Reset search state when component unmounts or when navigating away
+    useEffect(() => {
+        return () => {
+            // Clear search state when component unmounts
+            setSearchQuery('');
+            setIsSearching(false);
+            setHasActiveSearch(false);
             if (searchTimeoutRef.current) {
                 clearTimeout(searchTimeoutRef.current);
             }
@@ -225,7 +288,7 @@ const ProductListScreen: React.FC = () => {
     };
 
     const handleScanBarcode = () => {
-        navigation.navigate(SCREEN_NAMES.BARCODE_SCANNER);
+        navigation.navigate('BarcodeScanner' as any);
     };
 
     const getContainerStyle = () => ({
@@ -246,6 +309,12 @@ const ProductListScreen: React.FC = () => {
 
     const renderProduct = ({ item }: { item: Product }) => {
         try {
+            // Validate product data before rendering
+            if (!item || !item._id || !item.name) {
+                console.warn('Invalid product data:', item);
+                return null;
+            }
+
             return (
                 <ProductCard
                     product={item}
@@ -304,13 +373,14 @@ const ProductListScreen: React.FC = () => {
                         setSelectedCategory(null);
                         setCurrentPage(1);
                         setIsSearching(false);
+                        setHasActiveSearch(false);
                         setError(null);
                         // Clear the search timeout if it's pending
                         if (searchTimeoutRef.current) {
                             clearTimeout(searchTimeoutRef.current);
                         }
-                        // Immediately reload with no filters
-                        loadProducts(1, true, '');
+                        // Immediately reload with no filters, use reset=false to avoid full loader
+                        loadProducts(1, false, '');
                     }
                     : handleAddProduct
                 }
@@ -370,15 +440,17 @@ const ProductListScreen: React.FC = () => {
                     value={searchQuery}
                     onChangeText={handleSearch}
                     onClear={() => {
+                        console.log('Search cleared');
                         setSearchQuery('');
                         setCurrentPage(1);
                         setIsSearching(false);
+                        setHasActiveSearch(false);
                         // Clear the search timeout if it's pending
                         if (searchTimeoutRef.current) {
                             clearTimeout(searchTimeoutRef.current);
                         }
-                        // Immediately reload with no search query
-                        loadProducts(1, true, '');
+                        // Immediately reload with no search query, use reset=false to avoid full loader
+                        loadProducts(1, false, '');
                     }}
                     showFilter={true}
                     onFilterPress={() => {
@@ -390,6 +462,7 @@ const ProductListScreen: React.FC = () => {
 
                 {isSearching && (
                     <View style={styles.searchingIndicator}>
+                        <LoadingSpinner size="sm" />
                         <Text style={[styles.searchingText, { color: theme.colors.textSecondary }]}>
                             Searching...
                         </Text>
@@ -401,6 +474,15 @@ const ProductListScreen: React.FC = () => {
                         <Icon name="auto-awesome" size={12} color={theme.colors.primary[500]} />
                         <Text style={[styles.searchHintText, { color: theme.colors.textSecondary }]}>
                             Smart search with typo tolerance active
+                        </Text>
+                    </View>
+                )}
+
+                {searchQuery && !selectedCategory && !isSearching && products.length === 0 && (
+                    <View style={styles.noResultsHint}>
+                        <Icon name="search-off" size={16} color={theme.colors.textSecondary} />
+                        <Text style={[styles.noResultsText, { color: theme.colors.textSecondary }]}>
+                            No products found for "{searchQuery}"
                         </Text>
                     </View>
                 )}
@@ -432,9 +514,13 @@ const ProductListScreen: React.FC = () => {
                 ListFooterComponent={renderFooter}
                 ListEmptyComponent={renderEmpty}
                 showsVerticalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                keyboardDismissMode="on-drag"
+                keyboardShouldPersistTaps="always"
+                keyboardDismissMode="none"
                 contentContainerStyle={styles.listContent}
+                maintainVisibleContentPosition={{
+                    minIndexForVisible: 0,
+                    autoscrollToTopThreshold: 10
+                }}
             />
         </View>
     );
@@ -491,8 +577,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
     },
     searchingIndicator: {
-        paddingVertical: 4,
+        flexDirection: 'row',
         alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 8,
+        gap: 8,
     },
     searchingText: {
         fontSize: 12,
@@ -507,6 +596,17 @@ const styles = StyleSheet.create({
     },
     searchHintText: {
         fontSize: 11,
+        fontStyle: 'italic',
+    },
+    noResultsHint: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 8,
+        gap: 4,
+    },
+    noResultsText: {
+        fontSize: 12,
         fontStyle: 'italic',
     },
     filterChips: {

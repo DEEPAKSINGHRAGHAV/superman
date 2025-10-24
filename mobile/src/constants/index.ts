@@ -1,9 +1,9 @@
+import { apiBaseUrl } from '../config/environment';
+
 // API Configuration
-// For USB Connection (recommended): Use localhost with adb reverse
-// For WiFi Connection: Use your computer's IP (192.168.86.13 or 192.168.137.1)
-export const API_BASE_URL = __DEV__
-    ? 'http://localhost:8000/api/v1'
-    : 'https://your-production-api.com/api/v1';
+// Development: http://localhost:8000/api/v1 (USB with adb reverse or WiFi with IP)
+// Production: https://api.shivikmart.com/api/v1
+export const API_BASE_URL = apiBaseUrl;
 
 // Product Categories
 export const PRODUCT_CATEGORIES = [

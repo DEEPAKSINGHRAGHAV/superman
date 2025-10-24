@@ -74,7 +74,7 @@
 │  │     • Body Parser (JSON)                                  │  │
 │  │  4. Mount routes (/api/v1/...)                            │  │
 │  │  5. Error handler                                         │  │
-│  │  6. Listen on port 8001                                   │  │
+│  │  6. Listen on port 8000                                   │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                              │                                   │
 │                              ▼                                   │

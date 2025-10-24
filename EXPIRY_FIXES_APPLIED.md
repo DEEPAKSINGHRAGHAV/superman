@@ -443,7 +443,7 @@ db.inventorybatches.find({
 ### Debug Step 4: Manual API Test
 ```bash
 # Test batch endpoint
-curl http://localhost:8001/api/v1/batches/product/YOUR_PRODUCT_ID \
+curl http://localhost:8000/api/v1/batches/product/YOUR_PRODUCT_ID \
   -H "Authorization: Bearer YOUR_TOKEN"
 
 # Check response for proper date formatting

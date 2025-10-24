@@ -44,7 +44,7 @@ npx react-native run-ios
 
 **Create Expired Batch:**
 ```http
-POST http://localhost:8001/api/v1/batches
+POST http://localhost:8000/api/v1/batches
 Authorization: Bearer YOUR_TOKEN
 Content-Type: application/json
 
@@ -60,7 +60,7 @@ Content-Type: application/json
 
 **Create Expiring Soon Batch (2 days):**
 ```http
-POST http://localhost:8001/api/v1/batches
+POST http://localhost:8000/api/v1/batches
 Authorization: Bearer YOUR_TOKEN
 Content-Type: application/json
 
@@ -76,7 +76,7 @@ Content-Type: application/json
 
 **Create Valid Batch:**
 ```http
-POST http://localhost:8001/api/v1/batches
+POST http://localhost:8000/api/v1/batches
 Authorization: Bearer YOUR_TOKEN
 Content-Type: application/json
 
@@ -169,7 +169,7 @@ Content-Type: application/json
 
 ## 📞 If You Still Have Issues
 
-1. **Check backend is running:** `http://localhost:8001/api/v1/health`
+1. **Check backend is running:** `http://localhost:8000/api/v1/health`
 2. **Check mobile console:** `npx react-native log-android` or `log-ios`
 3. **Verify token:** Make sure you're logged in
 4. **Clear cache:** Delete app and reinstall

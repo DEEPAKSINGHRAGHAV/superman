@@ -4,10 +4,19 @@
   "private": true,
   "scripts": {
     "android": "react-native run-android",
+    "android:dev": "react-native run-android --mode=debug",
+    "android:prod": "react-native run-android --mode=release",
     "ios": "react-native run-ios",
+    "ios:dev": "react-native run-ios --mode=Debug",
+    "ios:prod": "react-native run-ios --mode=Release",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "start:dev": "react-native start",
+    "start:prod": "react-native start --reset-cache",
+    "test": "jest",
+    "build:android:release": "cd android && ./gradlew assembleRelease && cd ..",
+    "build:android:bundle": "cd android && ./gradlew bundleRelease && cd ..",
+    "build:ios:release": "react-native run-ios --configuration Release"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "^2.2.0",

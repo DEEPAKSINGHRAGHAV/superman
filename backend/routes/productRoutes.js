@@ -10,8 +10,8 @@ const { validateRequest, validatePagination, validateDateRange } = require('../m
 const { productValidation, queryValidation } = require('../middleware/validators');
 const { productLimiter, searchLimiter } = require('../middleware/rateLimiter');
 
-// Apply rate limiting - temporarily disabled for testing
-// router.use(productLimiter);
+// Apply rate limiting for performance and security
+router.use(productLimiter);
 
 // @desc    Get all products with pagination and filters
 // @route   GET /api/v1/products
@@ -35,7 +35,7 @@ router.get('/',
         if (search) {
             // Escape special regex characters for safety
             const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            
+
             filter.$or = [
                 { name: { $regex: escapedSearch, $options: 'i' } },
                 { sku: { $regex: escapedSearch, $options: 'i' } },
@@ -77,7 +77,12 @@ router.get('/',
             featured: product.featured || false,
             currentStock: product.currentStock || 0,
             minStockLevel: product.minStockLevel || 0,
-            maxStockLevel: product.maxStockLevel || 1000
+            maxStockLevel: product.maxStockLevel || 1000,
+            sellingPrice: product.sellingPrice || 0,
+            costPrice: product.costPrice || 0,
+            mrp: product.mrp || 0,
+            name: product.name || 'Unnamed Product',
+            sku: product.sku || 'N/A'
         }));
 
         res.status(200).json({
@@ -102,12 +107,15 @@ router.get('/',
 router.get('/search',
     protect,
     requirePermission('read_products'),
-    // searchLimiter, // temporarily disabled for testing
+    searchLimiter, // Re-enabled for production
     validateRequest(queryValidation.search),
     asyncHandler(async (req, res) => {
         const { search, limit = 20 } = req.query;
 
+        console.log('Backend search endpoint called with:', { search, limit });
+
         if (!search || typeof search !== 'string') {
+            console.log('Backend search: Invalid search query');
             return res.status(400).json({
                 success: false,
                 message: 'Search query is required'
@@ -116,7 +124,7 @@ router.get('/search',
 
         // Split search query into tokens (words)
         const searchTokens = search.toLowerCase().trim().split(/\s+/).filter(token => token.length > 0);
-        
+
         if (searchTokens.length === 0) {
             return res.status(200).json({
                 success: true,
@@ -129,13 +137,13 @@ router.get('/search',
         const fuzzyConditions = searchTokens.map(token => {
             // Escape special regex characters for exact match
             const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            
+
             // Create fuzzy patterns
             const patterns = [];
-            
+
             // 1. Exact partial match (highest priority)
             patterns.push(escapedToken);
-            
+
             // 2. Fuzzy match with character flexibility (allows typos)
             if (token.length >= 3) {
                 const fuzzyPattern = token.split('').map((char, index) => {
@@ -143,7 +151,7 @@ router.get('/search',
                 }).join('');
                 patterns.push(fuzzyPattern);
             }
-            
+
             // 3. Very fuzzy match (character-by-character)
             if (token.length >= 4) {
                 const veryFuzzyPattern = token.split('').join('.*');
@@ -185,30 +193,30 @@ router.get('/search',
             const nameLower = (product.name || '').toLowerCase();
             const skuLower = (product.sku || '').toLowerCase();
             const brandLower = (product.brand || '').toLowerCase();
-            
+
             // Exact match (highest score)
             if (nameLower === searchLower) score += 1000;
             if (skuLower === searchLower) score += 900;
-            
+
             // Starts with (high score)
             if (nameLower.startsWith(searchLower)) score += 500;
             if (skuLower.startsWith(searchLower)) score += 450;
             if (brandLower.startsWith(searchLower)) score += 400;
-            
+
             // Contains all search tokens
             searchTokens.forEach(token => {
                 if (nameLower.includes(token)) score += 100;
                 if (skuLower.includes(token)) score += 80;
                 if (brandLower.includes(token)) score += 60;
             });
-            
+
             // Word boundary matches (complete word match)
             searchTokens.forEach(token => {
                 const wordRegex = new RegExp(`\\b${token}\\b`, 'i');
                 if (wordRegex.test(product.name)) score += 150;
                 if (wordRegex.test(product.brand)) score += 100;
             });
-            
+
             // Proximity bonus (tokens close together)
             const allText = `${product.name} ${product.brand} ${product.sku}`.toLowerCase();
             if (searchTokens.length > 1) {
@@ -228,6 +236,13 @@ router.get('/search',
             .sort((a, b) => b._score - a._score)
             .slice(0, parseInt(limit))
             .map(({ _score, ...product }) => product); // Remove score from response
+
+        console.log('Backend search results:', {
+            query: search,
+            totalFound: products.length,
+            returned: rankedProducts.length,
+            productNames: rankedProducts.map(p => p.name)
+        });
 
         res.status(200).json({
             success: true,

@@ -8,7 +8,7 @@
 ```bash
 cd backend
 npm start
-# Server runs on: http://localhost:8001
+# Server runs on: http://localhost:8000
 ```
 
 **Mobile App:**

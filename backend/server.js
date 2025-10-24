@@ -10,7 +10,7 @@ require('dotenv').config({ path: './config.env' });
 const routes = require('./routes');
 
 const app = express();
-const PORT = process.env.PORT || 8001;
+const PORT = process.env.PORT || 8000;
 
 // Security middleware
 app.use(helmet());

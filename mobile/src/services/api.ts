@@ -175,8 +175,10 @@ class ApiService {
 
         // Add filters only if they have values
         if (filters) {
+            console.log('API getProducts filters:', filters);
             Object.entries(filters).forEach(([key, value]) => {
                 if (value !== undefined && value !== null && value !== '') {
+                    console.log(`API adding filter: ${key}=${value}`);
                     params.append(key, value.toString());
                 }
             });
@@ -192,7 +194,9 @@ class ApiService {
     }
 
     async searchProducts(query: string, limit = 20): Promise<ApiResponse<Product[]>> {
-        return this.request(`/products/search?search=${encodeURIComponent(query)}&limit=${limit}`);
+        const url = `/products/search?search=${encodeURIComponent(query)}&limit=${limit}`;
+        console.log('API searchProducts URL:', url);
+        return this.request(url);
     }
 
     async getProductCategories(): Promise<ApiResponse<string[]>> {

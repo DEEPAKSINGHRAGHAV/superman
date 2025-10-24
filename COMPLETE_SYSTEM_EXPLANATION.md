@@ -422,7 +422,7 @@ StockMovement {
 3. Connect to MongoDB
 4. Mount routes with API version prefix (/api/v1)
 5. Global error handler
-6. Start server on port 8001 (bind to 0.0.0.0 for network access)
+6. Start server on port 8000 (bind to 0.0.0.0 for network access)
 ```
 
 ---
@@ -842,7 +842,7 @@ Result:
 **Architecture:**
 ```typescript
 class ApiService {
-  private baseURL = 'http://192.168.137.1:8001/api/v1'
+  private baseURL = 'http://192.168.137.1:8000/api/v1'
   private token: string | null
   
   // Core request method
