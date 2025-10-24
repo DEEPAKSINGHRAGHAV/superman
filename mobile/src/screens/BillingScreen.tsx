@@ -963,7 +963,7 @@ const BillingScreen: React.FC = () => {
                                         style={[styles.cashInputField, { backgroundColor: theme.colors.gray[100], color: theme.colors.text }]}
                                         placeholder="0.00"
                                         placeholderTextColor={theme.colors.textSecondary}
-                                        keyboardType="numeric"
+                                        keyboardType="decimal-pad"
                                         value={amountReceived}
                                         onChangeText={setAmountReceived}
                                     />

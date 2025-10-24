@@ -46,6 +46,12 @@ const ProductFormScreen: React.FC = () => {
         batchNumber: '',
     });
 
+    // String state for money input fields
+    const [costPriceInput, setCostPriceInput] = useState('');
+    const [mrpInput, setMrpInput] = useState('');
+    const [sellingPriceInput, setSellingPriceInput] = useState('');
+
+
     const [isLoading, setIsLoading] = useState(false);
     const [errors, setErrors] = useState<Partial<ProductFormData>>({});
     const [showBarcodeScanner, setShowBarcodeScanner] = useState(false);
@@ -131,6 +137,10 @@ const ProductFormScreen: React.FC = () => {
                     expiryDate: product.expiryDate || '',
                     batchNumber: product.batchNumber || '',
                 });
+                // Initialize string input values
+                setCostPriceInput(product.costPrice.toString());
+                setMrpInput(product.mrp.toString());
+                setSellingPriceInput(product.sellingPrice.toString());
             }
         } catch (error) {
             console.error('Error loading product:', error);
@@ -366,9 +376,13 @@ const ProductFormScreen: React.FC = () => {
                     <Input
                         label="Cost Price"
                         placeholder="Enter cost price"
-                        value={formData.costPrice.toString()}
-                        onChangeText={(text) => handleInputChange('costPrice', parseFloat(text) || 0)}
-                        keyboardType="numeric"
+                        value={costPriceInput}
+                        onChangeText={(text) => {
+                            setCostPriceInput(text);
+                            const num = parseFloat(text) || 0;
+                            handleInputChange('costPrice', num);
+                        }}
+                        keyboardType="decimal-pad"
                         error={errors.costPrice}
                         required
                     />
@@ -376,9 +390,13 @@ const ProductFormScreen: React.FC = () => {
                     <Input
                         label="MRP"
                         placeholder="Enter MRP"
-                        value={formData.mrp.toString()}
-                        onChangeText={(text) => handleInputChange('mrp', parseFloat(text) || 0)}
-                        keyboardType="numeric"
+                        value={mrpInput}
+                        onChangeText={(text) => {
+                            setMrpInput(text);
+                            const num = parseFloat(text) || 0;
+                            handleInputChange('mrp', num);
+                        }}
+                        keyboardType="decimal-pad"
                         error={errors.mrp}
                         required
                     />
@@ -386,9 +404,13 @@ const ProductFormScreen: React.FC = () => {
                     <Input
                         label="Selling Price"
                         placeholder="Enter selling price"
-                        value={formData.sellingPrice.toString()}
-                        onChangeText={(text) => handleInputChange('sellingPrice', parseFloat(text) || 0)}
-                        keyboardType="numeric"
+                        value={sellingPriceInput}
+                        onChangeText={(text) => {
+                            setSellingPriceInput(text);
+                            const num = parseFloat(text) || 0;
+                            handleInputChange('sellingPrice', num);
+                        }}
+                        keyboardType="decimal-pad"
                         error={errors.sellingPrice}
                         required
                     />

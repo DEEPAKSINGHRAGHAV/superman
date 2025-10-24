@@ -16,20 +16,9 @@ const PORT = process.env.PORT || 8000;
 app.use(helmet());
 
 // General rate limiting (will be overridden by specific limiters in routes)
-// Temporarily disabled for testing
-if (process.env.NODE_ENV === 'production') {
-    const limiter = rateLimit({
-        windowMs: 15 * 60 * 1000, // 15 minutes
-        max: 100, // limit each IP to 100 requests per windowMs
-        message: {
-            success: false,
-            message: 'Too many requests from this IP, please try again later.'
-        },
-        standardHeaders: true,
-        legacyHeaders: false
-    });
-    app.use(limiter);
-}
+// Industry standard: 1000 requests per 15 minutes
+const { generalLimiter } = require('./middleware/rateLimiter');
+app.use(generalLimiter);
 
 // CORS configuration
 app.use(cors({

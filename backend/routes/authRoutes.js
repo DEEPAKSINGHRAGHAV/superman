@@ -14,7 +14,7 @@ const { authLimiter, passwordResetLimiter } = require('../middleware/rateLimiter
 // @access  Private (admin only)
 router.post('/register',
     protect,
-    // authLimiter, // temporarily disabled for testing
+    authLimiter,
     validateRequest(userValidation.register),
     asyncHandler(async (req, res) => {
         const { name, email, password, role = 'employee' } = req.body;
@@ -65,7 +65,7 @@ router.post('/register',
 // @route   POST /api/v1/auth/login
 // @access  Public
 router.post('/login',
-    // authLimiter, // temporarily disabled for testing
+    authLimiter,
     validateRequest(userValidation.login),
     asyncHandler(async (req, res) => {
         const { email, password } = req.body;

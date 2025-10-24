@@ -8,8 +8,8 @@ const { validateRequest, validatePagination, validateDateRange } = require('../m
 const { stockMovementValidation } = require('../middleware/validators');
 const { inventoryLimiter } = require('../middleware/rateLimiter');
 
-// Apply rate limiting - temporarily disabled for testing
-// router.use(inventoryLimiter);
+// Apply rate limiting - Industry standard limits
+router.use(inventoryLimiter);
 
 // @desc    Get stock movements with pagination and filters
 // @route   GET /api/v1/inventory/movements

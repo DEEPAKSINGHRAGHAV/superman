@@ -43,6 +43,9 @@ const SupplierFormScreen: React.FC = () => {
         },
     });
 
+    // String state for credit limit input
+    const [creditLimitInput, setCreditLimitInput] = useState('');
+
     const [isLoading, setIsLoading] = useState(false);
     const [errors, setErrors] = useState<Partial<SupplierFormData>>({});
 
@@ -77,6 +80,8 @@ const SupplierFormScreen: React.FC = () => {
                         email: '',
                     },
                 });
+                // Initialize string input value
+                setCreditLimitInput(supplier.creditLimit.toString());
             }
         } catch (error) {
             console.error('Error loading supplier:', error);
@@ -244,9 +249,13 @@ const SupplierFormScreen: React.FC = () => {
                 <Input
                     label="Credit Limit"
                     placeholder="Enter credit limit"
-                    value={formData.creditLimit.toString()}
-                    onChangeText={(text) => handleInputChange('creditLimit', parseFloat(text) || 0)}
-                    keyboardType="numeric"
+                    value={creditLimitInput}
+                    onChangeText={(text) => {
+                        setCreditLimitInput(text);
+                        const num = parseFloat(text) || 0;
+                        handleInputChange('creditLimit', num);
+                    }}
+                    keyboardType="decimal-pad"
                 />
 
                 <Input

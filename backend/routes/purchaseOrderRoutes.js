@@ -9,8 +9,8 @@ const { validateRequest, validatePagination, validateDateRange } = require('../m
 const { purchaseOrderValidation } = require('../middleware/validators');
 const { purchaseOrderLimiter } = require('../middleware/rateLimiter');
 
-// Apply rate limiting - temporarily disabled for testing
-// router.use(purchaseOrderLimiter);
+// Apply rate limiting - Industry standard limits
+router.use(purchaseOrderLimiter);
 
 // @desc    Get all purchase orders with pagination and filters
 // @route   GET /api/v1/purchase-orders
