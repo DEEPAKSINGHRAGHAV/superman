@@ -263,6 +263,7 @@ const PurchaseOrderFormScreen: React.FC = () => {
             quantity: quantity,
             costPrice: parseFloat(costPrice.toFixed(2)), // Round to 2 decimals
             sellingPrice: parseFloat(sellingPrice.toFixed(2)), // Round to 2 decimals
+            totalAmount: parseFloat((quantity * costPrice).toFixed(2)), // Calculate total amount
         };
 
         if (mrp) {
@@ -346,7 +347,10 @@ const PurchaseOrderFormScreen: React.FC = () => {
                 totalAmount,
                 taxAmount: 0,
                 discountAmount: 0,
+                expectedDeliveryDate: formData.expectedDeliveryDate ? new Date(formData.expectedDeliveryDate + 'T12:00:00.000Z').toISOString() : undefined,
             };
+
+            console.log('Creating purchase order with data:', JSON.stringify(orderData, null, 2));
 
             if (orderId) {
                 await apiService.updatePurchaseOrder(orderId, orderData);

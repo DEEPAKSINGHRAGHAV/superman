@@ -334,12 +334,18 @@ class ApiService {
 
     // Purchase Orders
     async getPurchaseOrders(filters?: PurchaseOrderFilters, page = 1, limit = 20): Promise<PaginatedResponse<PurchaseOrder>> {
+        // Filter out undefined values to prevent search=undefined in URL
+        const cleanFilters = filters ? Object.fromEntries(
+            Object.entries(filters).filter(([_, value]) => value !== undefined && value !== null && value !== '')
+        ) : {};
+
         const params = new URLSearchParams({
             page: page.toString(),
             limit: limit.toString(),
-            ...filters,
+            ...cleanFilters,
         });
 
+        console.log('Purchase Orders API Parameters:', params.toString());
         return this.request(`/purchase-orders?${params.toString()}`);
     }
 

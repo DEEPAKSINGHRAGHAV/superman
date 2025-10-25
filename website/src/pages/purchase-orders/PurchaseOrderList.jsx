@@ -92,9 +92,9 @@ const PurchaseOrderList = () => {
 
     const getStatusVariant = (status) => {
         const variants = {
-            draft: 'gray',
             pending: 'warning',
             approved: 'info',
+            ordered: 'info',
             received: 'success',
             cancelled: 'danger',
         };
@@ -103,12 +103,12 @@ const PurchaseOrderList = () => {
 
     const columns = [
         {
-            key: 'poNumber',
+            key: 'orderNumber',
             label: 'PO Number',
             sortable: true,
             render: (row) => (
                 <div>
-                    <p className="font-medium text-gray-900">{row.poNumber}</p>
+                    <p className="font-medium text-gray-900">{row.orderNumber}</p>
                     <p className="text-xs text-gray-500">{formatDate(row.orderDate)}</p>
                 </div>
             ),
@@ -132,8 +132,8 @@ const PurchaseOrderList = () => {
             render: (row) => (
                 <div>
                     <p className="font-medium">{formatCurrency(row.totalAmount)}</p>
-                    {row.gstAmount > 0 && (
-                        <p className="text-xs text-gray-500">GST: {formatCurrency(row.gstAmount)}</p>
+                    {row.taxAmount > 0 && (
+                        <p className="text-xs text-gray-500">GST: {formatCurrency(row.taxAmount)}</p>
                     )}
                 </div>
             ),
@@ -173,7 +173,7 @@ const PurchaseOrderList = () => {
                             <CheckCircle size={18} />
                         </button>
                     )}
-                    {(row.status === 'pending' || row.status === 'draft') && (
+                    {row.status === 'pending' && (
                         <button
                             onClick={(e) => handleCancel(row._id, e)}
                             className="p-1 text-red-600 hover:bg-red-50 rounded"
@@ -221,9 +221,9 @@ const PurchaseOrderList = () => {
                         className="input"
                     >
                         <option value="">All Status</option>
-                        <option value="draft">Draft</option>
                         <option value="pending">Pending</option>
                         <option value="approved">Approved</option>
+                        <option value="ordered">Ordered</option>
                         <option value="received">Received</option>
                         <option value="cancelled">Cancelled</option>
                     </select>

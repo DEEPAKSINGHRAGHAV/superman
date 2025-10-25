@@ -49,13 +49,29 @@ const PurchaseOrderListScreen: React.FC = () => {
             // Use provided search query or current state value
             const currentSearchQuery = customSearchQuery !== undefined ? customSearchQuery : searchQuery;
 
-            const searchFilters: PurchaseOrderFilters = {
-                ...filters,
-                status: selectedStatus || undefined,
-                search: currentSearchQuery || undefined,
-            };
+            const searchFilters: PurchaseOrderFilters = {};
 
+            // Only add filters that have actual values
+            if (selectedStatus) {
+                searchFilters.status = selectedStatus;
+            }
+            if (currentSearchQuery && currentSearchQuery.trim()) {
+                searchFilters.search = currentSearchQuery.trim();
+            }
+
+            // Also merge any existing filters that have valid values
+            if (filters) {
+                Object.entries(filters).forEach(([key, value]) => {
+                    if (value !== undefined && value !== null && value !== '') {
+                        searchFilters[key] = value;
+                    }
+                });
+            }
+
+            console.log('Sending filters to API:', JSON.stringify(searchFilters, null, 2));
             const response = await apiService.getPurchaseOrders(searchFilters, page, 20);
+
+            console.log('Purchase orders response:', JSON.stringify(response, null, 2));
 
             if (response.success && response.data) {
                 if (page === 1) {
