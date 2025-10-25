@@ -157,9 +157,6 @@ const PurchaseOrderListScreen: React.FC = () => {
         // TODO: Implement delete with confirmation
     };
 
-    const handleAddOrder = () => {
-        navigation.navigate(SCREEN_NAMES.PURCHASE_ORDER_FORM as any);
-    };
 
     const getContainerStyle = () => ({
         ...styles.container,
@@ -208,7 +205,7 @@ const PurchaseOrderListScreen: React.FC = () => {
                     ? "Try adjusting your search or filters"
                     : "Start by creating your first purchase order"
                 }
-                actionText={searchQuery || selectedStatus ? "Clear Filters" : "Create Order"}
+                actionText={searchQuery || selectedStatus ? "Clear Filters" : "Refresh"}
                 onActionPress={searchQuery || selectedStatus
                     ? () => {
                         setSearchQuery('');
@@ -221,7 +218,10 @@ const PurchaseOrderListScreen: React.FC = () => {
                         // Immediately reload with no filters
                         loadOrders(1, true, '');
                     }
-                    : handleAddOrder
+                    : () => {
+                        setCurrentPage(1);
+                        loadOrders(1, true);
+                    }
                 }
             />
         );
@@ -234,17 +234,11 @@ const PurchaseOrderListScreen: React.FC = () => {
     return (
         <View style={getContainerStyle()}>
             {/* Header */}
-            <View style={getHeaderStyle()}>
+            {/* <View style={getHeaderStyle()}>
                 <View style={styles.headerContent}>
                     <Text style={getHeaderTitleStyle()}>Purchase Orders</Text>
-                    <TouchableOpacity
-                        onPress={handleAddOrder}
-                        style={[styles.headerButton, { backgroundColor: theme.colors.primary['500'] }]}
-                    >
-                        <Icon name="add" size={20} color={theme.colors.white} />
-                    </TouchableOpacity>
                 </View>
-            </View>
+            </View> */}
 
             {/* Search and Filters */}
             <View style={styles.searchContainer}>
@@ -361,13 +355,6 @@ const styles = StyleSheet.create({
     headerTitle: {
         fontSize: 24,
         fontWeight: 'bold',
-    },
-    headerButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        alignItems: 'center',
-        justifyContent: 'center',
     },
     searchContainer: {
         paddingVertical: 8,

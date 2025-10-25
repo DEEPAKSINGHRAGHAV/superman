@@ -8,6 +8,7 @@ import Badge from '../../components/common/Badge';
 import Table from '../../components/common/Table';
 import Pagination from '../../components/common/Pagination';
 import Modal from '../../components/common/Modal';
+import ProductSearch from '../../components/common/ProductSearch';
 import { productsAPI } from '../../services/api';
 import { formatCurrency, formatDate, getStockStatus, debounce } from '../../utils/helpers';
 import toast from 'react-hot-toast';
@@ -33,6 +34,8 @@ const ProductList = () => {
         sortOrder: 'desc',
     });
     const [deleteModal, setDeleteModal] = useState({ isOpen: false, product: null });
+    const [searchResults, setSearchResults] = useState([]);
+    const [isSearching, setIsSearching] = useState(false);
 
     useEffect(() => {
         fetchProducts();
@@ -68,35 +71,31 @@ const ProductList = () => {
     const handleSearch = debounce((value) => {
         setSearch(value);
         setPagination((prev) => ({ ...prev, page: 1 }));
-        // Trigger immediate fetch with new search value
-        fetchProductsWithSearch(value);
+        fetchProducts();
     }, 300);
 
-    const fetchProductsWithSearch = async (searchValue) => {
+    const handleProductSearch = async (query) => {
         try {
-            setLoading(true);
-            const response = await productsAPI.getAll({
-                page: 1, // Reset to first page for search
-                limit: pagination.limit,
-                search: searchValue,
-                ...sortConfig,
-                ...filters,
-            });
+            setIsSearching(true);
+            const response = await productsAPI.search(query);
 
-            if (response.success) {
-                setProducts(response.data);
-                setPagination((prev) => ({
-                    ...prev,
-                    total: response.total,
-                    totalPages: response.pagination.totalPages,
-                }));
+            if (response.success && response.data) {
+                setSearchResults(response.data);
+            } else {
+                setSearchResults([]);
             }
         } catch (error) {
-            toast.error('Failed to load products');
-            console.error('Products fetch error:', error);
+            console.error('Product search error:', error);
+            toast.error('Search failed. Please try again.');
+            setSearchResults([]);
         } finally {
-            setLoading(false);
+            setIsSearching(false);
         }
+    };
+
+    const handleProductSelect = (product) => {
+        // Navigate to product detail when selected from search
+        navigate(`/products/${product._id}`);
     };
 
     const handleSort = (column, order) => {
@@ -246,8 +245,18 @@ const ProductList = () => {
             {/* Filters */}
             <Card>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Input
+                    <ProductSearch
                         placeholder="Search products..."
+                        onProductSelect={handleProductSelect}
+                        showStockInfo={true}
+                        showPrice={true}
+                        maxResults={10}
+                        minSearchLength={1}
+                        debounceMs={300}
+                        className="md:col-span-1"
+                    />
+                    <Input
+                        placeholder="Filter by search term..."
                         icon={<Search size={18} />}
                         onChange={(e) => handleSearch(e.target.value)}
                     />

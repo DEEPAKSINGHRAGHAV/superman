@@ -18,6 +18,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Button, Card, LoadingSpinner } from '../components/ui';
+import ProductSearch from '../components/ProductSearch';
 import { RootStackParamList, Product } from '../types';
 import apiService from '../services/api';
 import { CameraKitBarcodeScanner } from '../components/CameraKitBarcodeScanner';
@@ -60,14 +61,10 @@ const BillingScreen: React.FC = () => {
     const [showProductSearch, setShowProductSearch] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showReceiptModal, setShowReceiptModal] = useState(false);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState<Product[]>([]);
-    const [isSearching, setIsSearching] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('cash');
     const [amountReceived, setAmountReceived] = useState('');
     const [receiptData, setReceiptData] = useState<any>(null);
-    const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
     // Calculate totals
     const subtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
@@ -75,50 +72,6 @@ const BillingScreen: React.FC = () => {
     const total = subtotal + tax;
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-    // Search products with debouncing for better UX
-    const searchProducts = async (query: string) => {
-        // Clear previous timeout
-        if (searchTimeout) {
-            clearTimeout(searchTimeout);
-        }
-
-        // Clear results if query is empty or too short
-        if (!query.trim() || query.trim().length < 2) {
-            setSearchResults([]);
-            setIsSearching(false);
-            return;
-        }
-
-        setIsSearching(true);
-
-        // Debounce search - wait 300ms after user stops typing
-        const timeout = setTimeout(async () => {
-            try {
-                const response = await apiService.searchProducts(query.trim(), 50); // Increased limit for better results
-                if (response.success && response.data) {
-                    setSearchResults(response.data);
-                } else {
-                    setSearchResults([]);
-                }
-            } catch (error: any) {
-                console.error('Search error:', error);
-                setSearchResults([]);
-            } finally {
-                setIsSearching(false);
-            }
-        }, 300);
-
-        setSearchTimeout(timeout);
-    };
-
-    // Cleanup timeout on unmount
-    useEffect(() => {
-        return () => {
-            if (searchTimeout) {
-                clearTimeout(searchTimeout);
-            }
-        };
-    }, [searchTimeout]);
 
     // Handle barcode scan
     const handleBarcodeScan = async (barcode: string) => {
@@ -246,8 +199,6 @@ const BillingScreen: React.FC = () => {
                                                     };
                                                     setCart([...cart, newItem]);
                                                     setShowProductSearch(false);
-                                                    setSearchQuery('');
-                                                    setSearchResults([]);
                                                     resolve(newItem);
                                                 }
                                             }
@@ -297,8 +248,6 @@ const BillingScreen: React.FC = () => {
             }
 
             setShowProductSearch(false);
-            setSearchQuery('');
-            setSearchResults([]);
         } catch (error: any) {
             Alert.alert('Error', error.message || 'Failed to add product to cart');
         }
@@ -587,79 +536,6 @@ const BillingScreen: React.FC = () => {
         );
     };
 
-    const renderSearchResult = ({ item }: { item: Product }) => {
-        const isLowStock = item.currentStock <= 5;
-        const isOutOfStock = item.currentStock === 0;
-
-        return (
-            <TouchableOpacity
-                style={[
-                    styles.searchResultItem,
-                    {
-                        backgroundColor: theme.colors.background,
-                        borderColor: isOutOfStock ? theme.colors.error[200] : theme.colors.gray[200]
-                    }
-                ]}
-                onPress={() => addToCart(item)}
-                disabled={isOutOfStock}
-                activeOpacity={isOutOfStock ? 1 : 0.7}
-            >
-                <View style={styles.searchResultInfo}>
-                    <Text
-                        style={[
-                            styles.searchResultName,
-                            {
-                                color: isOutOfStock ? theme.colors.textSecondary : theme.colors.text
-                            }
-                        ]}
-                    >
-                        {item.name}
-                    </Text>
-                    <Text style={[styles.searchResultDetails, { color: theme.colors.textSecondary }]}>
-                        {item.sku}
-                        {item.barcode && ` • ${item.barcode}`}
-                        {item.brand && ` • ${item.brand}`}
-                    </Text>
-                    <View style={styles.stockBadgeContainer}>
-                        <Text
-                            style={[
-                                styles.stockBadge,
-                                {
-                                    color: isOutOfStock
-                                        ? theme.colors.error[600]
-                                        : isLowStock
-                                            ? theme.colors.warning[600]
-                                            : theme.colors.success[600],
-                                    backgroundColor: isOutOfStock
-                                        ? theme.colors.error[100]
-                                        : isLowStock
-                                            ? theme.colors.warning[100]
-                                            : theme.colors.success[100]
-                                }
-                            ]}
-                        >
-                            {isOutOfStock ? 'Out of Stock' : `Stock: ${item.currentStock}`}
-                        </Text>
-                    </View>
-                </View>
-                <View style={styles.searchResultPriceContainer}>
-                    <Text
-                        style={[
-                            styles.searchResultPrice,
-                            {
-                                color: isOutOfStock ? theme.colors.textSecondary : theme.colors.primary[500]
-                            }
-                        ]}
-                    >
-                        {formatCurrency(item.sellingPrice)}
-                    </Text>
-                    {!isOutOfStock && (
-                        <Icon name="add-circle" size={24} color={theme.colors.primary[500]} />
-                    )}
-                </View>
-            </TouchableOpacity>
-        );
-    };
 
     return (
         <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
@@ -791,8 +667,6 @@ const BillingScreen: React.FC = () => {
                     <View style={[styles.searchHeader, { backgroundColor: theme.colors.primary[500] }]}>
                         <TouchableOpacity onPress={() => {
                             setShowProductSearch(false);
-                            setSearchQuery('');
-                            setSearchResults([]);
                         }}>
                             <Icon name="close" size={24} color={theme.colors.white} />
                         </TouchableOpacity>
@@ -800,74 +674,17 @@ const BillingScreen: React.FC = () => {
                         <View style={{ width: 24 }} />
                     </View>
                     <View style={styles.searchContainer}>
-                        <View style={styles.searchInputWrapper}>
-                            <Icon name="search" size={20} color={theme.colors.textSecondary} style={styles.searchIcon} />
-                            <TextInput
-                                style={[styles.searchInput, { backgroundColor: theme.colors.white, color: theme.colors.text }]}
-                                placeholder="Type product name, SKU, barcode, or brand..."
-                                placeholderTextColor={theme.colors.textSecondary}
-                                value={searchQuery}
-                                onChangeText={(text) => {
-                                    setSearchQuery(text);
-                                    searchProducts(text);
-                                }}
-                                autoFocus
-                                autoCapitalize="none"
-                                autoCorrect={false}
-                            />
-                            {searchQuery.length > 0 && (
-                                <TouchableOpacity
-                                    onPress={() => {
-                                        setSearchQuery('');
-                                        setSearchResults([]);
-                                    }}
-                                    style={styles.clearSearchButton}
-                                >
-                                    <Icon name="close" size={20} color={theme.colors.textSecondary} />
-                                </TouchableOpacity>
-                            )}
-                        </View>
-                        {searchQuery.length > 0 && searchQuery.length < 2 && (
-                            <Text style={[styles.searchHint, { color: theme.colors.textSecondary }]}>
-                                Type at least 2 characters to search
-                            </Text>
-                        )}
-                    </View>
-                    {isSearching ? (
-                        <View style={styles.searchingContainer}>
-                            <LoadingSpinner text="Searching products..." />
-                        </View>
-                    ) : (
-                        <FlatList
-                            data={searchResults}
-                            renderItem={renderSearchResult}
-                            keyExtractor={(item) => item._id}
-                            contentContainerStyle={styles.searchResults}
-                            ListEmptyComponent={
-                                searchQuery.length >= 2 ? (
-                                    <View style={styles.emptySearch}>
-                                        <Icon name="search-off" size={56} color={theme.colors.gray[300]} />
-                                        <Text style={[styles.emptySearchText, { color: theme.colors.text }]}>
-                                            No products found
-                                        </Text>
-                                        <Text style={[styles.emptySearchSubtext, { color: theme.colors.textSecondary }]}>
-                                            Try searching with different keywords
-                                        </Text>
-                                    </View>
-                                ) : searchQuery.length === 0 ? (
-                                    <View style={styles.emptySearch}>
-                                        <Icon name="inventory" size={56} color={theme.colors.gray[300]} />
-                                        <Text style={[styles.emptySearchText, { color: theme.colors.text }]}>
-                                            Start typing to search
-                                        </Text>
-                                        <Text style={[styles.emptySearchSubtext, { color: theme.colors.textSecondary }]}>
-                                            Search by name, SKU, barcode, or brand
-                                        </Text>
-                                    </View>
-                                ) : null
-                            }
+                        <ProductSearch
+                            placeholder="Type product name, SKU, barcode, or brand..."
+                            onProductSelect={addToCart}
+                            showStockInfo={true}
+                            showPrice={true}
+                            maxResults={50}
+                            minSearchLength={2}
+                            debounceMs={300}
+                            autoFocus={true}
                         />
-                    )}
+                    </View>
                 </View>
             </Modal>
 

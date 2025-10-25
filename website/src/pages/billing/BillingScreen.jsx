@@ -6,6 +6,7 @@ import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Modal from '../../components/common/Modal';
 import Loading from '../../components/common/Loading';
+import ProductSearch from '../../components/common/ProductSearch';
 import { productsAPI, batchesAPI, inventoryAPI } from '../../services/api';
 import { formatCurrency } from '../../utils/helpers';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,64 +23,12 @@ const BillingScreen = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
     const [cart, setCart] = useState([]);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [searchResults, setSearchResults] = useState([]);
-    const [isSearching, setIsSearching] = useState(false);
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showReceiptModal, setShowReceiptModal] = useState(false);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cash');
     const [amountReceived, setAmountReceived] = useState('');
     const [receiptData, setReceiptData] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
-
-    // Debounce search with improved performance
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            if (searchQuery && searchQuery.length >= 2) {
-                console.log('Web search triggered for:', searchQuery);
-                searchProducts(searchQuery);
-            } else if (searchQuery.length === 0) {
-                console.log('Web search cleared');
-                setSearchResults([]);
-            }
-        }, 250);
-
-        return () => clearTimeout(timer);
-    }, [searchQuery]);
-
-    const searchProducts = async (query = searchQuery) => {
-        try {
-            console.log('Web searchProducts called with query:', query);
-            setIsSearching(true);
-
-            // Use fuzzy search for better results
-            const response = await productsAPI.search(query);
-            console.log('Web search response:', response);
-
-            if (response.success && response.data) {
-                // Filter out invalid products and ensure data integrity
-                const validProducts = Array.isArray(response.data)
-                    ? response.data.filter(product =>
-                        product &&
-                        product._id &&
-                        product.name &&
-                        product.currentStock > 0 // Only show products in stock
-                    )
-                    : [];
-                console.log('Web search valid products:', validProducts.length);
-                setSearchResults(validProducts);
-            } else {
-                console.warn('Invalid search response:', response);
-                setSearchResults([]);
-            }
-        } catch (error) {
-            console.error('Web search error:', error);
-            toast.error('Search failed. Please try again.');
-            setSearchResults([]);
-        } finally {
-            setIsSearching(false);
-        }
-    };
 
     const addToCart = async (product) => {
         try {
@@ -168,9 +117,6 @@ const BillingScreen = () => {
                 setCart([...cart, newItem]);
                 toast.success(`${product.name} added to cart`);
             }
-
-            setSearchQuery('');
-            setSearchResults([]);
         } catch (error) {
             toast.error(error.message || 'Failed to add product to cart');
         }
@@ -333,68 +279,16 @@ const BillingScreen = () => {
                 <div className="lg:col-span-2 space-y-4">
                     {/* Search */}
                     <Card>
-                        <Input
+                        <ProductSearch
                             placeholder="Search products by name, SKU, or barcode..."
-                            icon={<Search size={18} />}
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            autoFocus
+                            onProductSelect={addToCart}
+                            showStockInfo={true}
+                            showPrice={true}
+                            maxResults={20}
+                            minSearchLength={2}
+                            debounceMs={250}
+                            autoFocus={true}
                         />
-                        {isSearching && <Loading text="Searching..." />}
-                        {!isSearching && searchQuery && searchResults.length === 0 && (
-                            <div className="mt-4 p-4 text-center text-gray-500">
-                                <p>No products found for "{searchQuery}"</p>
-                                <p className="text-sm mt-1">Try a different search term</p>
-                            </div>
-                        )}
-                        {searchResults.length > 0 && (
-                            <div className="mt-4 space-y-2 max-h-64 overflow-y-auto">
-                                {searchResults.map((product) => {
-                                    // Validate product data before rendering
-                                    if (!product || !product._id || !product.name) {
-                                        return null;
-                                    }
-
-                                    const isOutOfStock = (product.currentStock || 0) === 0;
-                                    const isLowStock = (product.currentStock || 0) <= 5;
-                                    const sellingPrice = product.sellingPrice || 0;
-
-                                    return (
-                                        <button
-                                            key={product._id}
-                                            onClick={() => !isOutOfStock && addToCart(product)}
-                                            disabled={isOutOfStock}
-                                            className={`w-full p-3 border rounded-lg text-left hover:bg-gray-50 transition-colors ${isOutOfStock ? 'opacity-50 cursor-not-allowed' : ''
-                                                }`}
-                                        >
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex-1">
-                                                    <p className="font-medium text-gray-900">{product.name}</p>
-                                                    <p className="text-sm text-gray-600">
-                                                        {product.sku || 'N/A'} {product.barcode && `• ${product.barcode}`}
-                                                    </p>
-                                                    <div className="mt-1">
-                                                        <span className={`text-xs px-2 py-1 rounded ${isOutOfStock
-                                                            ? 'bg-red-100 text-red-700'
-                                                            : isLowStock
-                                                                ? 'bg-orange-100 text-orange-700'
-                                                                : 'bg-green-100 text-green-700'
-                                                            }`}>
-                                                            {isOutOfStock ? 'Out of Stock' : `Stock: ${product.currentStock || 0}`}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className="text-lg font-bold text-blue-600">
-                                                        {formatCurrency(sellingPrice)}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        )}
                     </Card>
 
                     {/* Cart Items */}

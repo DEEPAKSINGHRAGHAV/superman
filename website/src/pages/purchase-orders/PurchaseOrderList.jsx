@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Eye, CheckCircle, XCircle } from 'lucide-react';
+import { Search, Eye, CheckCircle, XCircle } from 'lucide-react';
 import Card from '../../components/common/Card';
-import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Badge from '../../components/common/Badge';
 import Table from '../../components/common/Table';
@@ -195,16 +194,6 @@ const PurchaseOrderList = () => {
                     <h1 className="text-2xl font-bold text-gray-900">Purchase Orders</h1>
                     <p className="text-gray-600 mt-1">Manage purchase orders and inventory receipts</p>
                 </div>
-                {hasPermission('write_purchase_orders') && (
-                    <Button
-                        variant="primary"
-                        icon={<Plus size={18} />}
-                        onClick={() => navigate('/purchase-orders/new')}
-                        className="mt-4 sm:mt-0"
-                    >
-                        Create PO
-                    </Button>
-                )}
             </div>
 
             {/* Filters */}
