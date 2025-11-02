@@ -116,6 +116,7 @@ export const purchaseOrdersAPI = {
 export const inventoryAPI = {
     getMovements: (params) => api.get('/inventory/movements', { params }),
     createMovement: (data) => api.post('/inventory/movements', data),
+    processSale: (data) => api.post('/inventory/sales', data),
     getSummary: () => api.get('/inventory/summary'),
     getLowStock: () => api.get('/inventory/low-stock'),
     getExpiringBatches: (days) => api.get('/inventory/expiring', { params: { days } }),

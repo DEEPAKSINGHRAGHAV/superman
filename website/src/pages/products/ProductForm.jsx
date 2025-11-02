@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, ArrowLeft } from 'lucide-react';
 import Card from '../../components/common/Card';
@@ -24,7 +24,7 @@ const ProductForm = () => {
         costPrice: '',
         sellingPrice: '',
         mrp: '',
-        gstRate: '18',
+        gstRate: '0',
         minStockLevel: '10',
         maxStockLevel: '1000',
         isActive: true,
@@ -36,10 +36,25 @@ const ProductForm = () => {
     const [loading, setLoading] = useState(false);
     const [fetchLoading, setFetchLoading] = useState(false);
 
+    // Refs for input fields to enable auto-focus and keyboard navigation
+    const nameRef = useRef(null);
+    const skuRef = useRef(null);
+    const barcodeRef = useRef(null);
+    const descriptionRef = useRef(null);
+    const costPriceRef = useRef(null);
+    const sellingPriceRef = useRef(null);
+    const mrpRef = useRef(null);
+    const gstRateRef = useRef(null);
+
     useEffect(() => {
         fetchDropdownData();
         if (isEditMode) {
             fetchProduct();
+        } else {
+            // Auto-focus on product name field when creating new product
+            setTimeout(() => {
+                nameRef.current?.focus();
+            }, 100);
         }
     }, [id]);
 
@@ -80,7 +95,7 @@ const ProductForm = () => {
                     costPrice: product.costPrice || '',
                     sellingPrice: product.sellingPrice || '',
                     mrp: product.mrp || '',
-                    gstRate: product.gstRate || '18',
+                    gstRate: product.gstRate !== undefined && product.gstRate !== null ? String(product.gstRate) : '0',
                     minStockLevel: product.minStockLevel || '10',
                     maxStockLevel: product.maxStockLevel || '1000',
                     isActive: product.isActive !== undefined ? product.isActive : true,
@@ -205,27 +220,48 @@ const ProductForm = () => {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="md:col-span-2">
                                     <Input
+                                        ref={nameRef}
                                         label="Product Name"
                                         name="name"
                                         value={formData.name}
                                         onChange={handleChange}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                skuRef.current?.focus();
+                                            }
+                                        }}
                                         error={errors.name}
                                         required
                                     />
                                 </div>
                                 <Input
+                                    ref={skuRef}
                                     label="SKU"
                                     name="sku"
                                     value={formData.sku}
                                     onChange={handleChange}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            barcodeRef.current?.focus();
+                                        }
+                                    }}
                                     error={errors.sku}
                                     required
                                 />
                                 <Input
+                                    ref={barcodeRef}
                                     label="Barcode"
                                     name="barcode"
                                     value={formData.barcode}
                                     onChange={handleChange}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            costPriceRef.current?.focus();
+                                        }
+                                    }}
                                     error={errors.barcode}
                                 />
                                 <div className="md:col-span-2">
@@ -233,9 +269,22 @@ const ProductForm = () => {
                                         Description
                                     </label>
                                     <textarea
+                                        ref={descriptionRef}
                                         name="description"
                                         value={formData.description}
                                         onChange={handleChange}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Tab' && !e.shiftKey) {
+                                                // Tab moves to next field
+                                                e.preventDefault();
+                                                costPriceRef.current?.focus();
+                                            } else if (e.key === 'Enter' && e.ctrlKey) {
+                                                // Ctrl+Enter submits the form
+                                                e.preventDefault();
+                                                handleSubmit(e);
+                                            }
+                                            // Enter allows new line (default behavior)
+                                        }}
                                         rows={3}
                                         className="input"
                                     />
@@ -247,42 +296,72 @@ const ProductForm = () => {
                         <Card title="Pricing" className="mt-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <Input
+                                    ref={costPriceRef}
                                     label="Cost Price"
                                     name="costPrice"
                                     type="number"
                                     step="0.01"
                                     value={formData.costPrice}
                                     onChange={handleChange}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            sellingPriceRef.current?.focus();
+                                        }
+                                    }}
                                     error={errors.costPrice}
                                     required
                                 />
                                 <Input
+                                    ref={sellingPriceRef}
                                     label="Selling Price"
                                     name="sellingPrice"
                                     type="number"
                                     step="0.01"
                                     value={formData.sellingPrice}
                                     onChange={handleChange}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            mrpRef.current?.focus();
+                                        }
+                                    }}
                                     error={errors.sellingPrice}
                                     required
                                 />
                                 <Input
+                                    ref={mrpRef}
                                     label="MRP"
                                     name="mrp"
                                     type="number"
                                     step="0.01"
                                     value={formData.mrp}
                                     onChange={handleChange}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            gstRateRef.current?.focus();
+                                        }
+                                    }}
                                     error={errors.mrp}
                                     required
                                 />
                                 <Input
+                                    ref={gstRateRef}
                                     label="GST Rate (%)"
                                     name="gstRate"
                                     type="number"
                                     step="0.01"
                                     value={formData.gstRate}
                                     onChange={handleChange}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            // Move to category dropdown or submit if all required fields filled
+                                            const categorySelect = document.querySelector('select[name="category"]');
+                                            categorySelect?.focus();
+                                        }
+                                    }}
                                 />
                             </div>
                         </Card>

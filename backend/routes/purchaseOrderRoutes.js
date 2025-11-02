@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const PurchaseOrder = require('../models/PurchaseOrder');
-const InventoryService = require('../services/inventoryService');
+const InventoryBatch = require('../models/InventoryBatch');
+const Product = require('../models/Product');
+const StockMovement = require('../models/StockMovement');
 const BatchService = require('../services/batchService');
 const asyncHandler = require('../middleware/asyncHandler');
 const { protect, requirePermission } = require('../middleware/auth');
@@ -11,6 +13,48 @@ const { purchaseOrderLimiter } = require('../middleware/rateLimiter');
 
 // Apply rate limiting - Industry standard limits
 router.use(purchaseOrderLimiter);
+
+// Helper function to clean up batches on failure
+async function cleanupFailedBatches(purchaseOrder, createdBatches) {
+    // 1. Rollback PO status to original
+    await PurchaseOrder.findByIdAndUpdate(
+        purchaseOrder._id,
+        { $set: { status: purchaseOrder.status } }
+    );
+
+    // 2. Delete any batches that were created for this PO
+    if (createdBatches.length > 0) {
+        const batchIds = createdBatches.map(b => b._id);
+        
+        // Get batches to rollback stock
+        const batchesToDelete = await InventoryBatch.find({
+            _id: { $in: batchIds }
+        });
+
+        // Rollback product stock for each batch
+        for (const batch of batchesToDelete) {
+            await Product.findByIdAndUpdate(
+                batch.product,
+                { 
+                    $inc: { currentStock: -batch.currentQuantity }
+                }
+            );
+        }
+
+        // Delete stock movements for these batches
+        const batchNumbers = batchesToDelete.map(b => b.batchNumber);
+        await StockMovement.deleteMany({
+            referenceId: purchaseOrder._id,
+            referenceType: 'purchase_order',
+            batchNumber: { $in: batchNumbers }
+        });
+
+        // Delete the batches
+        await InventoryBatch.deleteMany({
+            _id: { $in: batchIds }
+        });
+    }
+}
 
 // @desc    Get all purchase orders with pagination and filters
 // @route   GET /api/v1/purchase-orders
@@ -297,70 +341,118 @@ router.patch('/:id/receive',
             });
         }
 
-        const purchaseOrder = await PurchaseOrder.findById(req.params.id)
-            .populate('supplier');
+        // OPTIMISTIC LOCKING: Atomically update status ONLY if it's 'approved' or 'ordered'
+        // This prevents duplicate receives - if status is already 'received', update returns null
+        const purchaseOrder = await PurchaseOrder.findOneAndUpdate(
+            {
+                _id: req.params.id,
+                status: { $in: ['approved', 'ordered'] } // Only update if in these states
+            },
+            {
+                $set: {
+                    status: 'received',
+                    actualDeliveryDate: new Date()
+                }
+            },
+            {
+                new: false, // Return original document
+                runValidators: false // Skip validators for performance
+            }
+        ).populate('supplier');
 
+        // If no document was found or updated, check why
         if (!purchaseOrder) {
-            return res.status(404).json({
-                success: false,
-                message: 'Purchase order not found'
-            });
-        }
-
-        // Validate that all items in receivedItems exist in the purchase order
-        const validItems = [];
-        const createdBatches = [];
-
-        for (const receivedItem of receivedItems) {
-            const { productId, quantity, costPrice, sellingPrice, expiryDate, manufactureDate, notes } = receivedItem;
-
-            // Find the item in the purchase order
-            const poItem = purchaseOrder.items.find(item =>
-                item.product.toString() === productId.toString()
-            );
-
-            if (!poItem) {
-                return res.status(400).json({
+            // Check if it exists at all
+            const exists = await PurchaseOrder.findById(req.params.id);
+            if (!exists) {
+                return res.status(404).json({
                     success: false,
-                    message: `Product ${productId} not found in purchase order`
+                    message: 'Purchase order not found'
                 });
             }
 
-            // Create a batch for this received item
-            const batch = await BatchService.createBatch({
-                productId,
-                quantity,
-                costPrice: costPrice || poItem.costPrice,
-                sellingPrice: sellingPrice || poItem.sellingPrice || poItem.costPrice * 1.2, // Use PO selling price or default 20% markup
-                purchaseOrderId: purchaseOrder._id,
-                supplierId: purchaseOrder.supplier._id,
-                expiryDate: expiryDate || poItem.expiryDate, // Use provided expiry date or fall back to PO item expiry date
-                manufactureDate,
-                notes: notes || `Received from PO ${purchaseOrder.orderNumber}`,
-                createdBy: req.user._id
-            });
+            // It exists but query didn't match - must be already received or wrong state
+            const currentPO = exists;
+            if (currentPO.status === 'received') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'This purchase order has already been received. Duplicate receives are not allowed.'
+                });
+            }
 
-            createdBatches.push(batch);
+            return res.status(400).json({
+                success: false,
+                message: 'Purchase order must be approved or ordered before it can be received'
+            });
         }
 
-        // Mark purchase order as received
-        await purchaseOrder.markAsReceived();
+        // Now that we have the lock, create batches
+        // If we fail here, the PO is already marked as 'received', so no duplicates possible
+        const createdBatches = [];
 
-        // Populate the purchase order for response
-        await purchaseOrder.populate([
-            { path: 'createdBy', select: 'name email' },
-            { path: 'items.product', select: 'name sku category' }
-        ]);
+        try {
+            for (const receivedItem of receivedItems) {
+                const { productId, quantity, costPrice, sellingPrice, expiryDate, manufactureDate, notes } = receivedItem;
 
-        res.status(200).json({
-            success: true,
-            message: `Purchase order received successfully. ${createdBatches.length} batch(es) created.`,
-            data: {
-                purchaseOrder,
-                batches: createdBatches,
-                batchCount: createdBatches.length
+                // Find the item in the purchase order
+                const poItem = purchaseOrder.items.find(item =>
+                    item.product.toString() === productId.toString()
+                );
+
+                if (!poItem) {
+                    // Rollback everything if validation fails
+                    await cleanupFailedBatches(purchaseOrder, createdBatches);
+
+                    return res.status(400).json({
+                        success: false,
+                        message: `Product ${productId} not found in purchase order`
+                    });
+                }
+
+                // Create a batch for this received item (no session needed)
+                const batch = await BatchService.createBatch({
+                    productId,
+                    quantity,
+                    costPrice: costPrice || poItem.costPrice,
+                    sellingPrice: sellingPrice || poItem.sellingPrice || poItem.costPrice * 1.2,
+                    purchaseOrderId: purchaseOrder._id,
+                    supplierId: purchaseOrder.supplier._id,
+                    expiryDate: expiryDate || poItem.expiryDate,
+                    manufactureDate,
+                    notes: notes || `Received from PO ${purchaseOrder.orderNumber}`,
+                    createdBy: req.user._id
+                });
+
+                createdBatches.push(batch);
             }
-        });
+
+            // Refetch the purchase order to get the updated version
+            const updatedPurchaseOrder = await PurchaseOrder.findById(req.params.id)
+                .populate('createdBy', 'name email')
+                .populate('items.product', 'name sku category');
+
+            res.status(200).json({
+                success: true,
+                message: `Purchase order received successfully. ${createdBatches.length} batch(es) created.`,
+                data: {
+                    purchaseOrder: updatedPurchaseOrder,
+                    batches: createdBatches,
+                    batchCount: createdBatches.length
+                }
+            });
+
+        } catch (error) {
+            // If batch creation fails, rollback everything
+            try {
+                await cleanupFailedBatches(purchaseOrder, createdBatches);
+            } catch (rollbackError) {
+                console.error('Error during rollback:', rollbackError);
+                // Continue to throw original error even if rollback fails
+            }
+            
+            // Re-throw the original error to be handled by asyncHandler
+            throw error;
+        }
     })
 );
 

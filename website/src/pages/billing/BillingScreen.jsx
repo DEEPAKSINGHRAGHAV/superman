@@ -7,6 +7,7 @@ import Input from '../../components/common/Input';
 import Modal from '../../components/common/Modal';
 import Loading from '../../components/common/Loading';
 import ProductSearch from '../../components/common/ProductSearch';
+import ThermalReceipt from '../../components/billing/ThermalReceipt';
 import { productsAPI, batchesAPI, inventoryAPI } from '../../services/api';
 import { formatCurrency } from '../../utils/helpers';
 import { useAuth } from '../../contexts/AuthContext';
@@ -208,9 +209,8 @@ const BillingScreen = () => {
             const referenceNumber = `BILL-${Date.now()}`;
 
             // Process sale through inventory API
-            const response = await inventoryAPI.createMovement({
-                type: 'sale',
-                items: saleItems,
+            const response = await inventoryAPI.processSale({
+                saleItems,
                 referenceNumber,
             });
 
@@ -519,103 +519,53 @@ const BillingScreen = () => {
                 </div>
             </Modal>
 
-            {/* Receipt Modal */}
+            {/* Receipt Modal with Thermal Print Preview */}
             <Modal
                 isOpen={showReceiptModal}
                 onClose={() => {
                     setShowReceiptModal(false);
                     setReceiptData(null);
                 }}
-                title="Payment Successful"
-                size="lg"
+                title="Payment Successful - Print Receipt"
+                size="xl"
             >
                 {receiptData && (
-                    <div className="space-y-6">
-                        {/* Success Icon */}
-                        <div className="flex flex-col items-center">
-                            <div className="p-4 bg-green-100 rounded-full mb-4">
-                                <CheckCircle size={48} className="text-green-600" />
+                    <div className="space-y-4">
+                        {/* Success Message */}
+                        <div className="flex flex-col items-center mb-4">
+                            <div className="p-3 bg-green-100 rounded-full mb-2">
+                                <CheckCircle size={32} className="text-green-600" />
                             </div>
-                            <h3 className="text-xl font-bold text-gray-900">Payment Successful!</h3>
+                            <h3 className="text-lg font-bold text-gray-900">Payment Successful!</h3>
+                            <p className="text-sm text-gray-600 mt-1">Review your receipt below and print when ready</p>
                         </div>
 
-                        {/* Receipt Details */}
-                        <div className="space-y-3 border-t border-b py-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-gray-600">Bill No.</span>
-                                <span className="font-mono font-medium">{receiptData.billNumber}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-gray-600">Date & Time</span>
-                                <span className="font-medium">{receiptData.date}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-gray-600">Cashier</span>
-                                <span className="font-medium">{receiptData.cashier}</span>
+                        {/* Thermal Receipt Preview */}
+                        <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 overflow-x-auto">
+                            <div className="flex justify-center">
+                                <ThermalReceipt
+                                    receiptData={receiptData}
+                                    showControls={false}
+                                />
                             </div>
                         </div>
 
-                        {/* Items */}
-                        <div className="space-y-2">
-                            {receiptData.items.map((item, index) => (
-                                <div key={index} className="flex items-center justify-between text-sm">
-                                    <span className="text-gray-700">
-                                        {item.product.name} × {item.quantity}
-                                    </span>
-                                    <span className="font-medium">{formatCurrency(item.totalPrice)}</span>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Totals */}
-                        <div className="space-y-2 border-t pt-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-gray-600">Subtotal</span>
-                                <span className="font-medium">{formatCurrency(receiptData.subtotal)}</span>
-                            </div>
-                            <div className="flex items-center justify-between">
-                                <span className="text-gray-600">GST (0%)</span>
-                                <span className="font-medium">{formatCurrency(receiptData.tax)}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-lg font-bold">
-                                <span>Total</span>
-                                <span className="text-blue-600">{formatCurrency(receiptData.total)}</span>
-                            </div>
-                        </div>
-
-                        {/* Payment Info */}
-                        <div className="space-y-2 border-t pt-4">
-                            <div className="flex items-center justify-between">
-                                <span className="text-gray-600">Payment Method</span>
-                                <span className="font-medium">{receiptData.paymentMethod}</span>
-                            </div>
-                            {receiptData.paymentMethod === 'Cash' && (
-                                <>
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-gray-600">Amount Received</span>
-                                        <span className="font-medium">{formatCurrency(receiptData.amountReceived)}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-green-600 font-semibold">
-                                        <span>Change</span>
-                                        <span>{formatCurrency(receiptData.change)}</span>
-                                    </div>
-                                </>
-                            )}
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex items-center space-x-3">
+                        {/* Quick Actions */}
+                        <div className="flex items-center justify-center space-x-3 pt-4 border-t">
                             <Button
-                                variant="outline"
-                                fullWidth
+                                variant="primary"
                                 icon={<Printer size={18} />}
-                                onClick={() => toast.info('Print functionality coming soon')}
+                                onClick={() => {
+                                    // Small delay to ensure styles are applied
+                                    setTimeout(() => {
+                                        window.print();
+                                    }, 250);
+                                }}
                             >
                                 Print Receipt
                             </Button>
                             <Button
-                                variant="primary"
-                                fullWidth
+                                variant="secondary"
                                 onClick={() => {
                                     setShowReceiptModal(false);
                                     setReceiptData(null);

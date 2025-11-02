@@ -8,9 +8,8 @@ import Badge from '../../components/common/Badge';
 import Table from '../../components/common/Table';
 import Pagination from '../../components/common/Pagination';
 import Modal from '../../components/common/Modal';
-import ProductSearch from '../../components/common/ProductSearch';
 import { productsAPI } from '../../services/api';
-import { formatCurrency, formatDate, getStockStatus, debounce } from '../../utils/helpers';
+import { formatCurrency, getStockStatus, debounce } from '../../utils/helpers';
 import toast from 'react-hot-toast';
 
 const ProductList = () => {
@@ -34,8 +33,6 @@ const ProductList = () => {
         sortOrder: 'desc',
     });
     const [deleteModal, setDeleteModal] = useState({ isOpen: false, product: null });
-    const [searchResults, setSearchResults] = useState([]);
-    const [isSearching, setIsSearching] = useState(false);
 
     useEffect(() => {
         fetchProducts();
@@ -73,30 +70,6 @@ const ProductList = () => {
         setPagination((prev) => ({ ...prev, page: 1 }));
         fetchProducts();
     }, 300);
-
-    const handleProductSearch = async (query) => {
-        try {
-            setIsSearching(true);
-            const response = await productsAPI.search(query);
-
-            if (response.success && response.data) {
-                setSearchResults(response.data);
-            } else {
-                setSearchResults([]);
-            }
-        } catch (error) {
-            console.error('Product search error:', error);
-            toast.error('Search failed. Please try again.');
-            setSearchResults([]);
-        } finally {
-            setIsSearching(false);
-        }
-    };
-
-    const handleProductSelect = (product) => {
-        // Navigate to product detail when selected from search
-        navigate(`/products/${product._id}`);
-    };
 
     const handleSort = (column, order) => {
         setSortConfig({ sortBy: column, sortOrder: order });
@@ -245,16 +218,6 @@ const ProductList = () => {
             {/* Filters */}
             <Card>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <ProductSearch
-                        placeholder="Search products..."
-                        onProductSelect={handleProductSelect}
-                        showStockInfo={true}
-                        showPrice={true}
-                        maxResults={10}
-                        minSearchLength={1}
-                        debounceMs={300}
-                        className="md:col-span-1"
-                    />
                     <Input
                         placeholder="Filter by search term..."
                         icon={<Search size={18} />}

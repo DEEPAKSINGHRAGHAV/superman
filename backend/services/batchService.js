@@ -7,11 +7,21 @@ class BatchService {
     /**
      * Create a new inventory batch
      * @param {Object} batchData - Batch data
+     * @param {Object} options - Optional session if part of a larger transaction
      * @returns {Promise<Object>} Created batch
      */
-    static async createBatch(batchData) {
-        const session = await mongoose.startSession();
-        session.startTransaction();
+    static async createBatch(batchData, options = {}) {
+        const { session: providedSession } = options;
+
+        // If a session is provided, use it. Otherwise, create a new one
+        let shouldEndSession = false;
+        let session = providedSession;
+
+        if (!session) {
+            session = await mongoose.startSession();
+            session.startTransaction();
+            shouldEndSession = true;
+        }
 
         try {
             const {
@@ -85,15 +95,24 @@ class BatchService {
                 createdBy
             }], { session });
 
-            await session.commitTransaction();
+            // Only commit if we created the session
+            if (shouldEndSession) {
+                await session.commitTransaction();
+            }
 
             return batch[0];
 
         } catch (error) {
-            await session.abortTransaction();
+            // Only abort if we created the session
+            if (shouldEndSession) {
+                await session.abortTransaction();
+            }
             throw error;
         } finally {
-            session.endSession();
+            // Only end session if we created it
+            if (shouldEndSession) {
+                session.endSession();
+            }
         }
     }
 

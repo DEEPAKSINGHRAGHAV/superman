@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Eye, CheckCircle, XCircle } from 'lucide-react';
+import { Search, Eye, CheckCircle, XCircle, Plus, Package } from 'lucide-react';
 import Card from '../../components/common/Card';
+import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Badge from '../../components/common/Badge';
 import Table from '../../components/common/Table';
@@ -16,6 +17,7 @@ const PurchaseOrderList = () => {
     const { hasPermission } = useAuth();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [processingIds, setProcessingIds] = useState(new Set()); // Track which orders are being processed
     const [search, setSearch] = useState('');
     const [filters, setFilters] = useState({
         status: '',
@@ -86,6 +88,63 @@ const PurchaseOrderList = () => {
             }
         } catch (error) {
             toast.error(error.message || 'Failed to cancel purchase order');
+        }
+    };
+
+    const handleReceive = async (order, e) => {
+        e.stopPropagation();
+
+        // Prevent double-clicking
+        if (processingIds.has(order._id)) {
+            return;
+        }
+
+        // Confirm before receiving
+        if (!window.confirm(`Are you sure you want to receive all items from ${order.orderNumber}? This will create inventory batches and cannot be undone.`)) {
+            return;
+        }
+
+        // Mark as processing
+        setProcessingIds(prev => new Set(prev).add(order._id));
+
+        try {
+            // Create receivedItems array from purchase order items
+            const receivedItems = order.items.map(item => {
+                const itemData = {
+                    productId: typeof item.product === 'string' ? item.product : item.product._id,
+                    quantity: item.quantity,
+                    costPrice: item.costPrice,
+                };
+
+                // Add optional fields if they exist
+                if (item.sellingPrice) {
+                    itemData.sellingPrice = item.sellingPrice;
+                }
+
+                // Handle expiryDate - convert Date object to ISO string if needed
+                if (item.expiryDate) {
+                    itemData.expiryDate = item.expiryDate instanceof Date
+                        ? item.expiryDate.toISOString()
+                        : item.expiryDate;
+                }
+
+                return itemData;
+            });
+
+            const response = await purchaseOrdersAPI.receive(order._id, { receivedItems });
+            if (response.success) {
+                toast.success(response.message || 'Purchase order received successfully');
+                fetchOrders();
+            }
+        } catch (error) {
+            toast.error(error.message || 'Failed to receive purchase order');
+        } finally {
+            // Always remove from processing set
+            setProcessingIds(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(order._id);
+                return newSet;
+            });
         }
     };
 
@@ -181,6 +240,16 @@ const PurchaseOrderList = () => {
                             <XCircle size={18} />
                         </button>
                     )}
+                    {(row.status === 'approved' || row.status === 'ordered') && (
+                        <button
+                            onClick={(e) => handleReceive(row, e)}
+                            disabled={processingIds.has(row._id)}
+                            className="p-1 text-purple-600 hover:bg-purple-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={processingIds.has(row._id) ? 'Processing...' : 'Receive'}
+                        >
+                            <Package size={18} />
+                        </button>
+                    )}
                 </div>
             ),
         },
@@ -194,6 +263,16 @@ const PurchaseOrderList = () => {
                     <h1 className="text-2xl font-bold text-gray-900">Purchase Orders</h1>
                     <p className="text-gray-600 mt-1">Manage purchase orders and inventory receipts</p>
                 </div>
+                {hasPermission('write_purchase_orders') && (
+                    <Button
+                        variant="primary"
+                        icon={<Plus size={18} />}
+                        onClick={() => navigate('/purchase-orders/new')}
+                        className="mt-4 sm:mt-0"
+                    >
+                        +PO
+                    </Button>
+                )}
             </div>
 
             {/* Filters */}

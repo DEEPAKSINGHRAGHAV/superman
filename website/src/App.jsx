@@ -17,6 +17,7 @@ import SupplierList from './pages/suppliers/SupplierList';
 import SupplierDetail from './pages/suppliers/SupplierDetail';
 import SupplierForm from './pages/suppliers/SupplierForm';
 import PurchaseOrderList from './pages/purchase-orders/PurchaseOrderList';
+import PurchaseOrderForm from './pages/purchase-orders/PurchaseOrderForm';
 import InventoryList from './pages/inventory/InventoryList';
 import BatchList from './pages/batches/BatchList';
 import BatchHistory from './pages/batches/BatchHistory';
@@ -89,6 +90,8 @@ function App() {
                     {/* Purchase Orders */}
                     <Route path="purchase-orders">
                         <Route index element={<PurchaseOrderList />} />
+                        <Route path="new" element={<PurchaseOrderForm />} />
+                        <Route path=":id" element={<PurchaseOrderForm />} />
                     </Route>
 
                     {/* Inventory */}

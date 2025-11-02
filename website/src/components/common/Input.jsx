@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useRef, useEffect, useImperativeHandle } from 'react';
 
-const Input = ({
+const Input = React.forwardRef(({
     label,
     type = 'text',
     name,
@@ -14,7 +14,31 @@ const Input = ({
     className = '',
     icon,
     ...props
-}) => {
+}, ref) => {
+    const inputRef = useRef(null);
+
+    // Combine internal ref with forwarded ref
+    useImperativeHandle(ref, () => inputRef.current, []);
+
+    useEffect(() => {
+        const input = inputRef.current;
+        if (!input || type !== 'number') return;
+
+        const handleWheel = (e) => {
+            // Prevent scroll from incrementing/decrementing number inputs when focused
+            if (document.activeElement === input) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+
+        input.addEventListener('wheel', handleWheel, { passive: false });
+
+        return () => {
+            input.removeEventListener('wheel', handleWheel);
+        };
+    }, [type]);
+
     return (
         <div className={`mb-4 ${className}`}>
             {label && (
@@ -30,6 +54,7 @@ const Input = ({
                     </div>
                 )}
                 <input
+                    ref={inputRef}
                     type={type}
                     id={name}
                     name={name}
@@ -54,7 +79,9 @@ const Input = ({
             )}
         </div>
     );
-};
+});
+
+Input.displayName = 'Input';
 
 export default Input;
 
