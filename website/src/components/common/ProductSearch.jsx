@@ -8,7 +8,7 @@ import toast from 'react-hot-toast';
 
 const ProductSearch = React.forwardRef(({
     onProductSelect,
-    placeholder = "Search products by name, SKU, or barcode...",
+    placeholder = "Scan barcode or search products...",
     showStockInfo = true,
     showPrice = true,
     maxResults = 20,
@@ -26,6 +26,10 @@ const ProductSearch = React.forwardRef(({
     const [highlightedIndex, setHighlightedIndex] = useState(-1);
     const resultsContainerRef = useRef(null);
     const itemRefs = useRef([]);
+
+    // Barcode detection: Track typing speed
+    const lastTypingTime = useRef(0);
+    const isBarcodeScan = useRef(false);
 
     // Reset highlighted index when search query changes
     useEffect(() => {
@@ -97,7 +101,16 @@ const ProductSearch = React.forwardRef(({
     };
 
     const handleInputChange = (e) => {
-        setSearchQuery(e.target.value);
+        const value = e.target.value;
+        const now = Date.now();
+        const timeSinceLastChar = now - lastTypingTime.current;
+
+        // Detect barcode scanner: Very fast typing (< 50ms between chars) = barcode scanner
+        // Barcode scanners type much faster than humans (typically < 20ms per character)
+        isBarcodeScan.current = timeSinceLastChar > 0 && timeSinceLastChar < 50;
+        lastTypingTime.current = now;
+
+        setSearchQuery(value);
     };
 
     const handleProductSelect = (product) => {
@@ -121,7 +134,52 @@ const ProductSearch = React.forwardRef(({
         setTimeout(() => setShowResults(false), 150);
     };
 
-    const handleKeyDown = (e) => {
+    const handleKeyDown = async (e) => {
+        // Handle Enter key - barcode scanner detection
+        if (e.key === 'Enter' && searchQuery.trim()) {
+            e.preventDefault();
+
+            // If it looks like a barcode scan (fast typing + Enter), try direct barcode lookup
+            if (isBarcodeScan.current || searchQuery.trim().length >= 8) {
+                // Try barcode lookup first
+                try {
+                    setIsSearching(true);
+                    const response = await productsAPI.getByBarcode(searchQuery.trim());
+
+                    if (response.success && response.data) {
+                        // Found product by barcode - add directly
+                        handleProductSelect(response.data);
+                        toast.success('Product added');
+                        return;
+                    }
+                } catch (error) {
+                    // Not found by barcode, continue with normal search
+                    console.log('Barcode not found, trying search');
+                } finally {
+                    setIsSearching(false);
+                }
+            }
+
+            // Normal Enter key behavior - select from search results
+            if (showResults && searchResults.length > 0) {
+                const selectableResults = searchResults.filter((product) => {
+                    const isOutOfStock = (product.currentStock || 0) === 0;
+                    return allowOutOfStock || !isOutOfStock;
+                });
+
+                if (selectableResults.length > 0) {
+                    if (highlightedIndex >= 0 && highlightedIndex < selectableResults.length) {
+                        handleProductSelect(selectableResults[highlightedIndex]);
+                    } else {
+                        // Select first item if none highlighted
+                        handleProductSelect(selectableResults[0]);
+                    }
+                }
+                return;
+            }
+        }
+
+        // Handle other keys only if results are shown
         if (!showResults || searchResults.length === 0) {
             return;
         }
@@ -151,16 +209,6 @@ const ProductSearch = React.forwardRef(({
                     const nextIndex = prev > 0 ? prev - 1 : -1;
                     return nextIndex;
                 });
-                break;
-
-            case 'Enter':
-                e.preventDefault();
-                if (highlightedIndex >= 0 && highlightedIndex < selectableResults.length) {
-                    handleProductSelect(selectableResults[highlightedIndex]);
-                } else if (selectableResults.length > 0) {
-                    // Select first item if none highlighted
-                    handleProductSelect(selectableResults[0]);
-                }
                 break;
 
             case 'Escape':
@@ -259,10 +307,10 @@ const ProductSearch = React.forwardRef(({
                                     onMouseEnter={() => !shouldDisable && selectableIndex !== undefined && handleMouseEnter(selectableIndex)}
                                     disabled={shouldDisable}
                                     className={`w-full p-3 text-left transition-colors border-b border-gray-100 last:border-b-0 ${shouldDisable
-                                            ? 'opacity-60 cursor-not-allowed'
-                                            : isHighlighted
-                                                ? 'bg-blue-50 hover:bg-blue-100'
-                                                : 'hover:bg-gray-50'
+                                        ? 'opacity-60 cursor-not-allowed'
+                                        : isHighlighted
+                                            ? 'bg-blue-50 hover:bg-blue-100'
+                                            : 'hover:bg-gray-50'
                                         }`}
                                 >
                                     <div className="flex items-center justify-between">

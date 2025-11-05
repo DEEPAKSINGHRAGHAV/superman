@@ -26,8 +26,14 @@ export const formatDateTime = (date) => {
  * Format currency
  */
 export const formatCurrency = (amount, currency = '₹') => {
-    if (amount === null || amount === undefined) return `${currency}0.00`;
-    return `${currency}${parseFloat(amount).toFixed(2)}`;
+    if (amount === null || amount === undefined) return `${currency}0`;
+    const num = parseFloat(amount);
+    const formatted = num.toFixed(2);
+    // Remove .00 if decimal part is zero
+    if (formatted.endsWith('.00')) {
+        return `${currency}${formatted.slice(0, -3)}`;
+    }
+    return `${currency}${formatted}`;
 };
 
 /**

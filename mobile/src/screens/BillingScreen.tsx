@@ -11,6 +11,7 @@ import {
     Modal,
     KeyboardAvoidingView,
     Platform,
+    Animated,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -408,86 +409,61 @@ const BillingScreen: React.FC = () => {
         return (
             <Card variant="outlined" style={styles.cartItem}>
                 <View style={styles.cartItemWrapper}>
-                    {/* Product Info Section */}
-                    <TouchableOpacity
-                        onPress={() => handleProductClick(item.product)}
-                        activeOpacity={0.7}
-                        style={styles.productInfoSection}
-                    >
-                        <View style={styles.productHeader}>
-                            <View style={styles.productDetails}>
-                                <Text style={[styles.cartItemName, { color: theme.colors.text }]}>
-                                    {item.product.name}
+                    {/* Product Name - BIG and CLEAR */}
+                    <View style={styles.productHeader}>
+                        <View style={styles.productDetails}>
+                            <Text style={[styles.cartItemName, { color: theme.colors.text }]} numberOfLines={2}>
+                                {item.product.name}
+                            </Text>
+                            <Text style={[styles.productCode, { color: theme.colors.textSecondary }]}>
+                                Code: {item.product.sku}
+                            </Text>
+                        </View>
+                        <TouchableOpacity
+                            onPress={() => removeFromCart(item.product._id)}
+                            style={[styles.removeButton, { backgroundColor: theme.colors.error[500] + '15' }]}
+                            accessibilityLabel={`Remove ${item.product.name} from cart`}
+                            accessibilityRole="button"
+                        >
+                            <Icon name="close" size={24} color={theme.colors.error[500]} />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Quantity Controls - EXTRA LARGE */}
+                    <View style={styles.quantitySectionContainer}>
+                        <Text style={[styles.quantityLabel, { color: theme.colors.textSecondary }]}>
+                            QUANTITY
+                        </Text>
+                        <View style={styles.quantityControls}>
+                            <TouchableOpacity
+                                onPress={() => updateQuantity(item.product._id, -1)}
+                                style={[styles.quantityButton, styles.quantityButtonMinus, { backgroundColor: theme.colors.error[100] }]}
+                                accessibilityLabel="Decrease quantity"
+                                accessibilityRole="button"
+                            >
+                                <Icon name="remove" size={28} color={theme.colors.error[500]} />
+                            </TouchableOpacity>
+                            <View style={[styles.quantityDisplay, { backgroundColor: theme.colors.gray[50] }]}>
+                                <Text style={[styles.quantityNumber, { color: theme.colors.text }]}>
+                                    {item.quantity}
                                 </Text>
-                                <View style={styles.productMeta}>
-                                    <Text style={[styles.productSku, { color: theme.colors.textSecondary }]}>
-                                        {item.product.sku}
-                                    </Text>
-                                    {item.product.barcode && (
-                                        <>
-                                            <Text style={[styles.metaDivider, { color: theme.colors.textSecondary }]}>•</Text>
-                                            <Text style={[styles.productBarcode, { color: theme.colors.textSecondary }]}>
-                                                {item.product.barcode}
-                                            </Text>
-                                        </>
-                                    )}
-                                </View>
-                                <View style={styles.priceInfo}>
-                                    <Text style={[styles.costPriceLabel, { color: theme.colors.textSecondary }]}>
-                                        Cost: {formatCurrency(costPrice)} {item.batchInfo && '(FIFO)'}
-                                    </Text>
-                                    {isProfitable && profitPerUnit > 0 && (
-                                        <View style={[styles.profitBadge, { backgroundColor: theme.colors.success[100] }]}>
-                                            <Icon name="trending-up" size={12} color={theme.colors.success[600]} />
-                                            <Text style={[styles.profitText, { color: theme.colors.success[600] }]}>
-                                                {profitMargin}% profit
-                                            </Text>
-                                        </View>
-                                    )}
-                                </View>
-                                {item.batchInfo && (
-                                    <Text style={[styles.batchInfoLabel, { color: theme.colors.textSecondary }]}>
-                                        Batch: {item.batchInfo.batchNumber}
-                                    </Text>
-                                )}
                             </View>
                             <TouchableOpacity
-                                onPress={() => removeFromCart(item.product._id)}
-                                style={styles.removeButton}
+                                onPress={() => updateQuantity(item.product._id, 1)}
+                                style={[styles.quantityButton, styles.quantityButtonPlus, { backgroundColor: theme.colors.success[100] }]}
+                                accessibilityLabel="Increase quantity"
+                                accessibilityRole="button"
                             >
-                                <Icon name="close" size={20} color={theme.colors.error[500]} />
+                                <Icon name="add" size={28} color={theme.colors.success[500]} />
                             </TouchableOpacity>
                         </View>
-                    </TouchableOpacity>
+                    </View>
 
-                    {/* Controls Section - Row 1: Quantity & Price */}
-                    <View style={styles.controlsRow}>
-                        {/* Quantity Controls */}
-                        <View style={styles.quantitySection}>
-                            <Text style={[styles.controlLabel, { color: theme.colors.textSecondary }]}>
-                                Quantity
-                            </Text>
-                            <View style={styles.quantityControls}>
-                                <TouchableOpacity
-                                    onPress={() => updateQuantity(item.product._id, -1)}
-                                    style={[styles.quantityButton, { backgroundColor: theme.colors.error[100] }]}
-                                >
-                                    <Icon name="remove" size={16} color={theme.colors.error[500]} />
-                                </TouchableOpacity>
-                                <Text style={[styles.quantity, { color: theme.colors.text }]}>{item.quantity}</Text>
-                                <TouchableOpacity
-                                    onPress={() => updateQuantity(item.product._id, 1)}
-                                    style={[styles.quantityButton, { backgroundColor: theme.colors.success[100] }]}
-                                >
-                                    <Icon name="add" size={16} color={theme.colors.success[500]} />
-                                </TouchableOpacity>
-                            </View>
-                        </View>
-
-                        {/* Price Section */}
-                        <View style={styles.priceSection}>
-                            <Text style={[styles.controlLabel, { color: theme.colors.textSecondary }]}>
-                                Selling Price
+                    {/* Price Section - CLEAR */}
+                    <View style={styles.priceSectionContainer}>
+                        <View style={styles.priceRow}>
+                            <Text style={[styles.priceLabel, { color: theme.colors.textSecondary }]}>
+                                PRICE PER UNIT
                             </Text>
                             {item.isEditingPrice ? (
                                 <View style={styles.priceEditContainer}>
@@ -501,8 +477,16 @@ const BillingScreen: React.FC = () => {
                                         keyboardType="decimal-pad"
                                         autoFocus
                                         selectTextOnFocus
-                                        onSubmitEditing={(e) => updateSellingPrice(item.product._id, e.nativeEvent.text)}
-                                        onBlur={(e) => updateSellingPrice(item.product._id, e.nativeEvent.text)}
+                                        onSubmitEditing={(e) => {
+                                            updateSellingPrice(item.product._id, e.nativeEvent.text);
+                                        }}
+                                        onBlur={() => {
+                                            // Toggle back if user clicks away without submitting
+                                            togglePriceEdit(item.product._id);
+                                        }}
+                                        placeholder="0.00"
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        accessibilityLabel="Edit price per unit"
                                     />
                                 </View>
                             ) : (
@@ -510,23 +494,23 @@ const BillingScreen: React.FC = () => {
                                     onPress={() => togglePriceEdit(item.product._id)}
                                     style={styles.priceDisplay}
                                     activeOpacity={0.7}
+                                    accessibilityLabel={`Price per unit: ${formatCurrency(item.unitPrice)}. Tap to edit`}
+                                    accessibilityRole="button"
                                 >
                                     <Text style={[styles.priceValue, { color: theme.colors.text }]}>
                                         {formatCurrency(item.unitPrice)}
                                     </Text>
-                                    <Icon name="edit" size={14} color={theme.colors.primary[500]} />
+                                    <Icon name="edit" size={18} color={theme.colors.primary[500]} />
                                 </TouchableOpacity>
                             )}
                         </View>
-                    </View>
 
-                    {/* Controls Section - Row 2: Total */}
-                    <View style={styles.totalRow}>
-                        <View style={styles.totalContainer}>
-                            <Text style={[styles.totalLabel, { color: theme.colors.textSecondary }]}>
-                                Item Total
+                        {/* Item Total - BIG and CLEAR */}
+                        <View style={[styles.itemTotalRow, { borderTopColor: theme.colors.gray[200] }]}>
+                            <Text style={[styles.itemTotalLabel, { color: theme.colors.text }]}>
+                                ITEM TOTAL
                             </Text>
-                            <Text style={[styles.totalValue, { color: theme.colors.text }]}>
+                            <Text style={[styles.itemTotalValue, { color: theme.colors.primary[500] }]}>
                                 {formatCurrency(item.totalPrice)}
                             </Text>
                         </View>
@@ -538,104 +522,160 @@ const BillingScreen: React.FC = () => {
 
 
     return (
-        <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-            {/* Header */}
+        <View style={[styles.container, { backgroundColor: theme.colors.background }]} accessibilityLabel="Billing screen">
+            {/* Simple Header */}
             <View style={[styles.header, { backgroundColor: theme.colors.primary[500] }]}>
-                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                    <Icon name="arrow-back" size={24} color={theme.colors.white} />
-                </TouchableOpacity>
-                <Text style={[styles.headerTitle, { color: theme.colors.white }]}>Billing</Text>
                 <TouchableOpacity
-                    onPress={() => {
-                        Alert.alert(
-                            'Clear Cart',
-                            'Are you sure you want to clear all items?',
-                            [
-                                { text: 'Cancel', style: 'cancel' },
-                                { text: 'Clear', style: 'destructive', onPress: () => setCart([]) },
-                            ]
-                        );
-                    }}
-                    style={styles.clearButton}
+                    onPress={() => navigation.goBack()}
+                    style={styles.backButton}
+                    accessibilityLabel="Go back"
+                    accessibilityRole="button"
                 >
-                    <Icon name="delete-outline" size={24} color={theme.colors.white} />
+                    <Icon name="arrow-back" size={28} color={theme.colors.white} />
                 </TouchableOpacity>
+                <View style={styles.headerCenter}>
+                    <Text style={[styles.headerTitle, { color: theme.colors.white }]}>BILLING</Text>
+                    {cart.length > 0 && (
+                        <Text style={[styles.headerSubtitle, { color: theme.colors.white }]}>
+                            {totalItems} {totalItems === 1 ? 'item' : 'items'} in cart
+                        </Text>
+                    )}
+                </View>
+                {cart.length > 0 && (
+                    <TouchableOpacity
+                        onPress={() => {
+                            Alert.alert(
+                                'Clear All Items?',
+                                'This will remove all items from your cart.',
+                                [
+                                    { text: 'No, Keep Items', style: 'cancel' },
+                                    { text: 'Yes, Clear All', style: 'destructive', onPress: () => setCart([]) },
+                                ]
+                            );
+                        }}
+                        style={styles.clearButton}
+                        accessibilityLabel="Clear cart"
+                        accessibilityRole="button"
+                    >
+                        <Icon name="delete-outline" size={28} color={theme.colors.white} />
+                    </TouchableOpacity>
+                )}
             </View>
 
-            {/* Add Product Actions */}
-            <View style={styles.actionBar}>
-                <Button
-                    title="Scan Barcode"
-                    onPress={() => setShowScanner(true)}
-                    variant="primary"
-                    size="sm"
-                    leftIcon={<Icon name="qr-code-scanner" size={18} color="white" />}
-                    style={styles.actionButton}
-                />
-                <Button
-                    title="Manual Select"
-                    onPress={() => setShowProductSearch(true)}
-                    variant="outline"
-                    size="sm"
-                    leftIcon={<Icon name="search" size={18} color={theme.colors.primary[500]} />}
-                    style={styles.actionButton}
-                />
-            </View>
-
-            {/* Cart Items */}
-            {cart.length > 0 ? (
-                <FlatList
-                    data={cart}
-                    renderItem={renderCartItem}
-                    keyExtractor={(item) => item.product._id}
-                    contentContainerStyle={styles.cartList}
-                    showsVerticalScrollIndicator={false}
-                />
-            ) : (
-                <View style={styles.emptyCart}>
-                    <Icon name="shopping-cart" size={64} color={theme.colors.gray[300]} />
-                    <Text style={[styles.emptyCartText, { color: theme.colors.textSecondary }]}>
-                        Cart is empty
+            {/* Main Action Buttons - EXTRA LARGE for easy tapping */}
+            {cart.length === 0 && (
+                <View style={styles.mainActionsContainer}>
+                    <Text style={[styles.instructionText, { color: theme.colors.textSecondary }]}>
+                        Start by adding products to cart
                     </Text>
-                    <Text style={[styles.emptyCartSubtext, { color: theme.colors.textSecondary }]}>
-                        Scan barcode or search products to add items
-                    </Text>
+                    <TouchableOpacity
+                        style={[styles.megaButton, styles.scanButton, { backgroundColor: theme.colors.primary[500] }]}
+                        onPress={() => setShowScanner(true)}
+                        activeOpacity={0.8}
+                        accessibilityLabel="Scan barcode to add product"
+                        accessibilityRole="button"
+                    >
+                        <View style={styles.megaButtonContent}>
+                            <Icon name="qr-code-scanner" size={48} color={theme.colors.white} />
+                            <Text style={styles.megaButtonText}>SCAN BARCODE</Text>
+                            <Text style={styles.megaButtonSubtext}>Point camera at product barcode</Text>
+                        </View>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.megaButton, styles.searchButton, { backgroundColor: theme.colors.white, borderColor: theme.colors.primary[500] }]}
+                        onPress={() => setShowProductSearch(true)}
+                        activeOpacity={0.8}
+                        accessibilityLabel="Search for product manually"
+                        accessibilityRole="button"
+                    >
+                        <View style={styles.megaButtonContent}>
+                            <Icon name="search" size={48} color={theme.colors.primary[500]} />
+                            <Text style={[styles.megaButtonText, { color: theme.colors.primary[500] }]}>SEARCH PRODUCT</Text>
+                            <Text style={[styles.megaButtonSubtext, { color: theme.colors.textSecondary }]}>Type product name or code</Text>
+                        </View>
+                    </TouchableOpacity>
                 </View>
             )}
 
-            {/* Bill Summary */}
+            {/* Cart Items with Add More Button */}
+            {cart.length > 0 && (
+                <>
+                    <View style={styles.addMoreContainer}>
+                        <TouchableOpacity
+                            style={[styles.addMoreButton, { backgroundColor: theme.colors.gray[100], borderColor: theme.colors.primary[500] }]}
+                            onPress={() => setShowProductSearch(true)}
+                            activeOpacity={0.7}
+                            accessibilityLabel="Add more products"
+                            accessibilityRole="button"
+                        >
+                            <Icon name="add" size={28} color={theme.colors.primary[500]} />
+                            <Text style={[styles.addMoreText, { color: theme.colors.primary[500] }]}>
+                                ADD MORE PRODUCTS
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <FlatList
+                        data={cart}
+                        renderItem={renderCartItem}
+                        keyExtractor={(item) => item.product._id}
+                        contentContainerStyle={styles.cartList}
+                        showsVerticalScrollIndicator={false}
+                        ListFooterComponent={<View style={{ height: 20 }} />}
+                    />
+                </>
+            )}
+
+            {/* Bill Summary - EXTRA LARGE and CLEAR */}
             {cart.length > 0 && (
                 <View style={[styles.billSummary, { backgroundColor: theme.colors.white, borderTopColor: theme.colors.gray[200] }]}>
-                    <View style={styles.summaryRow}>
-                        <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>
-                            Items ({totalItems})
-                        </Text>
-                        <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-                            {formatCurrency(subtotal)}
+                    <View style={styles.summaryHeader}>
+                        <Text style={[styles.summaryHeaderText, { color: theme.colors.textSecondary }]}>
+                            BILL SUMMARY
                         </Text>
                     </View>
-                    <View style={styles.summaryRow}>
-                        <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>
-                            GST (0%)
-                        </Text>
-                        <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
-                            {formatCurrency(tax)}
-                        </Text>
+
+                    <View style={styles.summaryDetails}>
+                        <View style={styles.summaryRow}>
+                            <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>
+                                Items ({totalItems})
+                            </Text>
+                            <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
+                                {formatCurrency(subtotal)}
+                            </Text>
+                        </View>
+                        <View style={styles.summaryRow}>
+                            <Text style={[styles.summaryLabel, { color: theme.colors.textSecondary }]}>
+                                Tax (0%)
+                            </Text>
+                            <Text style={[styles.summaryValue, { color: theme.colors.text }]}>
+                                {formatCurrency(tax)}
+                            </Text>
+                        </View>
+                        <View style={[styles.summaryRow, styles.totalRow]}>
+                            <Text style={[styles.totalLabel, { color: theme.colors.text }]}>TOTAL AMOUNT</Text>
+                            <Text style={[styles.totalValue, { color: theme.colors.primary[500] }]}>
+                                {formatCurrency(total)}
+                            </Text>
+                        </View>
                     </View>
-                    <View style={[styles.summaryRow, styles.totalRow]}>
-                        <Text style={[styles.totalLabel, { color: theme.colors.text }]}>Total</Text>
-                        <Text style={[styles.totalValue, { color: theme.colors.primary[500] }]}>
-                            {formatCurrency(total)}
-                        </Text>
-                    </View>
-                    <Button
-                        title={`Pay ${formatCurrency(total)}`}
+
+                    {/* MEGA PAY BUTTON */}
+                    <TouchableOpacity
+                        style={[styles.megaPayButton, { backgroundColor: theme.colors.primary[500] }]}
                         onPress={() => setShowPaymentModal(true)}
-                        variant="primary"
-                        size="lg"
-                        fullWidth
-                        style={styles.payButton}
-                    />
+                        activeOpacity={0.8}
+                        accessibilityLabel={`Pay ${formatCurrency(total)}`}
+                        accessibilityRole="button"
+                    >
+                        <View style={styles.megaPayButtonContent}>
+                            <Icon name="payment" size={32} color={theme.colors.white} />
+                            <View style={styles.megaPayButtonTextContainer}>
+                                <Text style={styles.megaPayButtonLabel}>TAP TO PAY</Text>
+                                <Text style={styles.megaPayButtonAmount}>{formatCurrency(total)}</Text>
+                            </View>
+                        </View>
+                    </TouchableOpacity>
                 </View>
             )}
 
@@ -688,7 +728,7 @@ const BillingScreen: React.FC = () => {
                 </View>
             </Modal>
 
-            {/* Payment Modal */}
+            {/* Payment Modal - SIMPLIFIED */}
             <Modal
                 visible={showPaymentModal}
                 animationType="slide"
@@ -701,9 +741,13 @@ const BillingScreen: React.FC = () => {
                 >
                     <View style={[styles.paymentModal, { backgroundColor: theme.colors.white }]}>
                         <View style={styles.paymentHeader}>
-                            <Text style={[styles.paymentTitle, { color: theme.colors.text }]}>Payment</Text>
-                            <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
-                                <Icon name="close" size={24} color={theme.colors.text} />
+                            <Text style={[styles.paymentTitle, { color: theme.colors.text }]}>PAYMENT</Text>
+                            <TouchableOpacity
+                                onPress={() => setShowPaymentModal(false)}
+                                accessibilityLabel="Close payment"
+                                accessibilityRole="button"
+                            >
+                                <Icon name="close" size={28} color={theme.colors.text} />
                             </TouchableOpacity>
                         </View>
 
@@ -712,54 +756,59 @@ const BillingScreen: React.FC = () => {
                             showsVerticalScrollIndicator={false}
                             keyboardShouldPersistTaps="handled"
                         >
-                            <View style={styles.paymentAmount}>
+                            {/* Total Amount - EXTRA LARGE */}
+                            <View style={[styles.paymentAmount, { backgroundColor: theme.colors.primary[50] }]}>
                                 <Text style={[styles.paymentAmountLabel, { color: theme.colors.textSecondary }]}>
-                                    Total Amount
+                                    TOTAL TO PAY
                                 </Text>
                                 <Text style={[styles.paymentAmountValue, { color: theme.colors.primary[500] }]}>
                                     {formatCurrency(total)}
                                 </Text>
                             </View>
 
+                            {/* Payment Methods - LARGE BUTTONS */}
                             <View style={styles.paymentMethods}>
                                 <Text style={[styles.paymentMethodsTitle, { color: theme.colors.text }]}>
-                                    Payment Method
+                                    SELECT PAYMENT METHOD
                                 </Text>
                                 <View style={styles.paymentMethodsGrid}>
                                     {PAYMENT_METHODS.map((method) => (
                                         <TouchableOpacity
                                             key={method.id}
                                             style={[
-                                                styles.paymentMethodButton,
+                                                styles.paymentMethodButtonLarge,
                                                 {
                                                     backgroundColor:
                                                         selectedPaymentMethod === method.id
-                                                            ? theme.colors.primary[100]
+                                                            ? theme.colors.primary[500]
                                                             : theme.colors.gray[100],
                                                     borderColor:
                                                         selectedPaymentMethod === method.id
                                                             ? theme.colors.primary[500]
-                                                            : theme.colors.gray[200],
+                                                            : theme.colors.gray[300],
                                                 },
                                             ]}
                                             onPress={() => setSelectedPaymentMethod(method.id)}
+                                            activeOpacity={0.7}
+                                            accessibilityLabel={`Select ${method.name} payment`}
+                                            accessibilityRole="button"
                                         >
                                             <Icon
                                                 name={method.icon}
-                                                size={28}
+                                                size={36}
                                                 color={
                                                     selectedPaymentMethod === method.id
-                                                        ? theme.colors.primary[500]
-                                                        : theme.colors.gray[500]
+                                                        ? theme.colors.white
+                                                        : theme.colors.gray[600]
                                                 }
                                             />
                                             <Text
                                                 style={[
-                                                    styles.paymentMethodText,
+                                                    styles.paymentMethodTextLarge,
                                                     {
                                                         color:
                                                             selectedPaymentMethod === method.id
-                                                                ? theme.colors.primary[500]
+                                                                ? theme.colors.white
                                                                 : theme.colors.text,
                                                     },
                                                 ]}
@@ -771,38 +820,76 @@ const BillingScreen: React.FC = () => {
                                 </View>
                             </View>
 
+                            {/* Cash Input - SIMPLE and CLEAR */}
                             {selectedPaymentMethod === 'cash' && (
                                 <View style={styles.cashInput}>
                                     <Text style={[styles.cashInputLabel, { color: theme.colors.text }]}>
-                                        Amount Received
+                                        ENTER CASH RECEIVED
                                     </Text>
                                     <TextInput
-                                        style={[styles.cashInputField, { backgroundColor: theme.colors.gray[100], color: theme.colors.text }]}
-                                        placeholder="0.00"
+                                        style={[styles.cashInputFieldLarge, {
+                                            backgroundColor: theme.colors.gray[50],
+                                            color: theme.colors.text,
+                                            borderColor: theme.colors.primary[500]
+                                        }]}
+                                        placeholder="Enter amount..."
                                         placeholderTextColor={theme.colors.textSecondary}
                                         keyboardType="decimal-pad"
                                         value={amountReceived}
                                         onChangeText={setAmountReceived}
+                                        autoFocus
+                                        accessibilityLabel="Enter cash amount received"
                                     />
-                                    {amountReceived && parseFloat(amountReceived) >= total && (
-                                        <Text style={[styles.changeText, { color: theme.colors.success[500] }]}>
-                                            Change: {formatCurrency(parseFloat(amountReceived) - total)}
-                                        </Text>
+                                    {amountReceived && !isNaN(parseFloat(amountReceived)) && (
+                                        <View style={styles.changeContainer}>
+                                            {parseFloat(amountReceived) >= total ? (
+                                                <View style={[styles.changeDisplay, { backgroundColor: theme.colors.success[50] }]}>
+                                                    <Text style={[styles.changeLabel, { color: theme.colors.success[700] }]}>
+                                                        CHANGE TO GIVE BACK
+                                                    </Text>
+                                                    <Text style={[styles.changeAmount, { color: theme.colors.success[700] }]}>
+                                                        {formatCurrency(parseFloat(amountReceived) - total)}
+                                                    </Text>
+                                                </View>
+                                            ) : (
+                                                <View style={[styles.changeDisplay, { backgroundColor: theme.colors.error[500] + '15' }]}>
+                                                    <Text style={[styles.changeLabel, { color: theme.colors.error[700] }]}>
+                                                        INSUFFICIENT AMOUNT
+                                                    </Text>
+                                                    <Text style={[styles.changeAmount, { color: theme.colors.error[700] }]}>
+                                                        Need {formatCurrency(total - parseFloat(amountReceived))} more
+                                                    </Text>
+                                                </View>
+                                            )}
+                                        </View>
                                     )}
                                 </View>
                             )}
                         </ScrollView>
 
+                        {/* Complete Payment Button - MEGA SIZE */}
                         <View style={styles.paymentButtonContainer}>
-                            <Button
-                                title="Complete Payment"
+                            <TouchableOpacity
+                                style={[styles.completePaymentButtonLarge, {
+                                    backgroundColor: isProcessing ? theme.colors.gray[400] : theme.colors.primary[500]
+                                }]}
                                 onPress={handlePayment}
-                                variant="primary"
-                                size="lg"
-                                fullWidth
-                                loading={isProcessing}
-                                style={styles.completePaymentButton}
-                            />
+                                disabled={isProcessing || (selectedPaymentMethod === 'cash' && (!amountReceived || parseFloat(amountReceived) < total))}
+                                activeOpacity={0.8}
+                                accessibilityLabel="Complete payment"
+                                accessibilityRole="button"
+                            >
+                                {isProcessing ? (
+                                    <LoadingSpinner size="sm" color={theme.colors.white} />
+                                ) : (
+                                    <>
+                                        <Icon name="check-circle" size={32} color={theme.colors.white} />
+                                        <Text style={styles.completePaymentButtonText}>
+                                            COMPLETE PAYMENT
+                                        </Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
                         </View>
                     </View>
                 </KeyboardAvoidingView>
@@ -961,18 +1048,108 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'space-between',
         paddingTop: 50,
-        paddingBottom: 16,
-        paddingHorizontal: 16,
+        paddingBottom: 20,
+        paddingHorizontal: 20,
+        minHeight: 80,
+    },
+    headerCenter: {
+        flex: 1,
+        alignItems: 'center',
     },
     backButton: {
-        padding: 8,
+        padding: 12,
+        minWidth: 48,
+        minHeight: 48,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
     headerTitle: {
-        fontSize: 20,
-        fontWeight: '600',
+        fontSize: 22,
+        fontWeight: '700',
+        letterSpacing: 1,
+    },
+    headerSubtitle: {
+        fontSize: 14,
+        fontWeight: '500',
+        marginTop: 4,
+        opacity: 0.9,
     },
     clearButton: {
-        padding: 8,
+        padding: 12,
+        minWidth: 48,
+        minHeight: 48,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    // Main Action Buttons
+    mainActionsContainer: {
+        flex: 1,
+        padding: 24,
+        justifyContent: 'center',
+        alignItems: 'stretch',
+    },
+    instructionText: {
+        fontSize: 16,
+        textAlign: 'center',
+        marginBottom: 32,
+        fontWeight: '500',
+    },
+    megaButton: {
+        borderRadius: 16,
+        padding: 32,
+        marginBottom: 20,
+        borderWidth: 3,
+        minHeight: 180,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    megaButtonContent: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    megaButtonText: {
+        fontSize: 20,
+        fontWeight: '700',
+        marginTop: 16,
+        letterSpacing: 1,
+        color: '#FFFFFF',
+    },
+    megaButtonSubtext: {
+        fontSize: 14,
+        marginTop: 8,
+        fontWeight: '500',
+        opacity: 0.9,
+        color: '#FFFFFF',
+    },
+    scanButton: {
+        // Already styled via backgroundColor prop
+    },
+    searchButton: {
+        borderWidth: 3,
+    },
+    // Add More Button
+    addMoreContainer: {
+        padding: 16,
+        paddingTop: 20,
+    },
+    addMoreButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 16,
+        borderRadius: 12,
+        borderWidth: 2,
+        gap: 12,
+    },
+    addMoreText: {
+        fontSize: 16,
+        fontWeight: '700',
+        letterSpacing: 0.5,
     },
     actionBar: {
         flexDirection: 'row',
@@ -987,31 +1164,33 @@ const styles = StyleSheet.create({
         paddingTop: 0,
     },
     cartItem: {
-        marginBottom: 16,
+        marginBottom: 20,
         padding: 0,
         overflow: 'hidden',
+        marginHorizontal: 16,
     },
     cartItemWrapper: {
-        padding: 14,
-    },
-    productInfoSection: {
-        marginBottom: 12,
+        padding: 20,
     },
     productHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
+        marginBottom: 20,
     },
     productDetails: {
         flex: 1,
-        marginRight: 12,
+        marginRight: 16,
     },
     cartItemName: {
-        fontSize: 16,
-        fontWeight: '600',
-        lineHeight: 22,
-        marginBottom: 6,
-        flexWrap: 'wrap',
+        fontSize: 20,
+        fontWeight: '700',
+        lineHeight: 28,
+        marginBottom: 8,
+    },
+    productCode: {
+        fontSize: 14,
+        fontWeight: '500',
     },
     productMeta: {
         flexDirection: 'row',
@@ -1058,91 +1237,114 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     removeButton: {
-        padding: 4,
-        marginTop: -4,
+        padding: 12,
+        borderRadius: 12,
+        minWidth: 48,
+        minHeight: 48,
+        justifyContent: 'center',
+        alignItems: 'center',
     },
-    controlsRow: {
-        flexDirection: 'row',
-        gap: 16,
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: '#F0F0F0',
+    // Quantity Section
+    quantitySectionContainer: {
+        marginBottom: 20,
     },
-    quantitySection: {
-        flex: 1,
-    },
-    priceSection: {
-        flex: 1,
-    },
-    controlLabel: {
-        fontSize: 11,
-        fontWeight: '500',
-        marginBottom: 6,
+    quantityLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        marginBottom: 12,
         textTransform: 'uppercase',
-        letterSpacing: 0.5,
+        letterSpacing: 1,
     },
     quantityControls: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        justifyContent: 'center',
+        gap: 16,
     },
     quantityButton: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 2,
+    },
+    quantityButtonMinus: {
+        borderColor: '#E57373',
+    },
+    quantityButtonPlus: {
+        borderColor: '#81C784',
+    },
+    quantityDisplay: {
+        minWidth: 80,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
     },
-    quantity: {
-        fontSize: 16,
+    quantityNumber: {
+        fontSize: 28,
         fontWeight: '700',
-        minWidth: 30,
-        textAlign: 'center',
+    },
+    // Price Section
+    priceSectionContainer: {
+        paddingTop: 20,
+        borderTopWidth: 2,
+        borderTopColor: '#E0E0E0',
+    },
+    priceRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    priceLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
     priceEditContainer: {
         flexDirection: 'row',
         alignItems: 'center',
     },
     priceInput: {
-        height: 38,
-        borderRadius: 8,
+        height: 48,
+        borderRadius: 12,
         borderWidth: 2,
-        paddingHorizontal: 10,
-        fontSize: 15,
-        fontWeight: '600',
-        minWidth: 100,
+        paddingHorizontal: 16,
+        fontSize: 18,
+        fontWeight: '700',
+        minWidth: 120,
+        textAlign: 'right',
     },
     priceDisplay: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
-        paddingVertical: 6,
+        gap: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 12,
     },
     priceValue: {
-        fontSize: 15,
-        fontWeight: '600',
+        fontSize: 20,
+        fontWeight: '700',
     },
-    totalRow: {
+    itemTotalRow: {
         flexDirection: 'row',
-        justifyContent: 'flex-end',
+        justifyContent: 'space-between',
         alignItems: 'center',
-        paddingTop: 12,
-        marginTop: 8,
-        borderTopWidth: 1,
-        borderTopColor: '#E8E8E8',
+        paddingTop: 16,
+        borderTopWidth: 2,
     },
-    totalContainer: {
-        alignItems: 'flex-end',
-    },
-    totalLabel: {
-        fontSize: 12,
-        fontWeight: '600',
+    itemTotalLabel: {
+        fontSize: 16,
+        fontWeight: '700',
         textTransform: 'uppercase',
-        letterSpacing: 0.5,
-        marginBottom: 4,
+        letterSpacing: 1,
     },
-    totalValue: {
-        fontSize: 18,
+    itemTotalValue: {
+        fontSize: 24,
         fontWeight: '700',
     },
     emptyCart: {
@@ -1162,43 +1364,91 @@ const styles = StyleSheet.create({
         textAlign: 'center',
     },
     billSummary: {
-        padding: 16,
-        borderTopWidth: 1,
+        padding: 24,
+        borderTopWidth: 3,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 5,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    summaryHeader: {
+        marginBottom: 20,
+    },
+    summaryHeaderText: {
+        fontSize: 14,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    summaryDetails: {
+        marginBottom: 24,
     },
     summaryRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 8,
+        marginBottom: 12,
     },
     summaryLabel: {
-        fontSize: 14,
-    },
-    summaryValue: {
-        fontSize: 14,
+        fontSize: 16,
         fontWeight: '500',
     },
+    summaryValue: {
+        fontSize: 16,
+        fontWeight: '600',
+    },
     totalRow: {
-        marginTop: 8,
-        paddingTop: 12,
-        borderTopWidth: 1,
+        marginTop: 12,
+        paddingTop: 16,
+        borderTopWidth: 2,
         borderTopColor: '#E0E0E0',
     },
     totalLabel: {
         fontSize: 18,
-        fontWeight: '600',
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
     totalValue: {
-        fontSize: 20,
+        fontSize: 28,
         fontWeight: '700',
     },
-    payButton: {
-        marginTop: 16,
+    // Mega Pay Button
+    megaPayButton: {
+        borderRadius: 16,
+        padding: 20,
+        minHeight: 80,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    megaPayButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 16,
+    },
+    megaPayButtonTextContainer: {
+        alignItems: 'flex-start',
+    },
+    megaPayButtonLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        letterSpacing: 1,
+        color: '#FFFFFF',
+        opacity: 0.9,
+    },
+    megaPayButtonAmount: {
+        fontSize: 24,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        marginTop: 2,
     },
     modalContainer: {
         flex: 1,
@@ -1342,97 +1592,142 @@ const styles = StyleSheet.create({
     },
     paymentModalOverlay: {
         flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
         justifyContent: 'flex-end',
     },
     paymentModal: {
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        maxHeight: '85%',
-        paddingTop: 24,
+        borderTopLeftRadius: 24,
+        borderTopRightRadius: 24,
+        maxHeight: '90%',
+        paddingTop: 28,
     },
     paymentHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 20,
+        marginBottom: 24,
         paddingHorizontal: 24,
+    },
+    paymentTitle: {
+        fontSize: 24,
+        fontWeight: '700',
+        letterSpacing: 1,
     },
     paymentContent: {
         paddingHorizontal: 24,
     },
-    paymentTitle: {
-        fontSize: 20,
-        fontWeight: '600',
-    },
     paymentAmount: {
         alignItems: 'center',
-        marginBottom: 24,
+        marginBottom: 32,
+        padding: 24,
+        borderRadius: 16,
     },
     paymentAmountLabel: {
         fontSize: 14,
-        marginBottom: 8,
+        marginBottom: 12,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
     paymentAmountValue: {
-        fontSize: 32,
+        fontSize: 42,
         fontWeight: '700',
     },
     paymentMethods: {
-        marginBottom: 24,
+        marginBottom: 32,
     },
     paymentMethodsTitle: {
         fontSize: 16,
-        fontWeight: '600',
-        marginBottom: 12,
+        fontWeight: '700',
+        marginBottom: 16,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
     },
     paymentMethodsGrid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         gap: 12,
     },
-    paymentMethodButton: {
+    paymentMethodButtonLarge: {
         flex: 1,
         minWidth: '45%',
         alignItems: 'center',
-        padding: 16,
-        borderRadius: 12,
-        borderWidth: 2,
+        padding: 20,
+        borderRadius: 16,
+        borderWidth: 3,
+        minHeight: 120,
+        justifyContent: 'center',
+        gap: 12,
     },
-    paymentMethodText: {
-        fontSize: 14,
-        fontWeight: '500',
-        marginTop: 8,
+    paymentMethodTextLarge: {
+        fontSize: 16,
+        fontWeight: '700',
+        letterSpacing: 0.5,
     },
     cashInput: {
         marginBottom: 24,
     },
     cashInputLabel: {
-        fontSize: 14,
-        fontWeight: '500',
+        fontSize: 16,
+        fontWeight: '700',
+        marginBottom: 12,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    cashInputFieldLarge: {
+        height: 64,
+        borderRadius: 12,
+        paddingHorizontal: 20,
+        fontSize: 24,
+        fontWeight: '700',
+        borderWidth: 3,
+        textAlign: 'center',
+    },
+    changeContainer: {
+        marginTop: 16,
+    },
+    changeDisplay: {
+        padding: 16,
+        borderRadius: 12,
+        alignItems: 'center',
+    },
+    changeLabel: {
+        fontSize: 12,
+        fontWeight: '700',
+        textTransform: 'uppercase',
+        letterSpacing: 1,
         marginBottom: 8,
     },
-    cashInputField: {
-        height: 48,
-        borderRadius: 8,
-        paddingHorizontal: 16,
-        fontSize: 18,
-        fontWeight: '600',
-    },
-    changeText: {
-        fontSize: 16,
-        fontWeight: '600',
-        marginTop: 8,
-        textAlign: 'right',
+    changeAmount: {
+        fontSize: 28,
+        fontWeight: '700',
     },
     paymentButtonContainer: {
         paddingHorizontal: 24,
-        paddingTop: 16,
-        paddingBottom: Platform.OS === 'ios' ? 34 : 24, // Extra padding for iOS home indicator and Android navigation
-        borderTopWidth: 1,
+        paddingTop: 20,
+        paddingBottom: Platform.OS === 'ios' ? 40 : 28,
+        borderTopWidth: 2,
         borderTopColor: '#E0E0E0',
     },
-    completePaymentButton: {
-        marginTop: 0,
+    completePaymentButtonLarge: {
+        borderRadius: 16,
+        padding: 20,
+        minHeight: 72,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 8,
+    },
+    completePaymentButtonText: {
+        fontSize: 18,
+        fontWeight: '700',
+        letterSpacing: 1,
+        color: '#FFFFFF',
     },
     receiptModalOverlay: {
         flex: 1,

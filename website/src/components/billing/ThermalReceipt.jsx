@@ -19,9 +19,19 @@ const ThermalReceipt = ({ receiptData, onClose, onPrint, showControls = false })
                 body * {
                     visibility: hidden;
                 }
+                .print-only {
+                    visibility: visible !important;
+                    display: block !important;
+                    position: absolute !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                }
+                .print-only * {
+                    visibility: visible !important;
+                }
                 .thermal-receipt-print,
                 .thermal-receipt-print * {
-                    visibility: visible;
+                    visibility: visible !important;
                 }
                 .thermal-receipt-print {
                     position: absolute;
@@ -72,7 +82,7 @@ const ThermalReceipt = ({ receiptData, onClose, onPrint, showControls = false })
                     <div className="receipt-header">
                         <div className="receipt-title">SHIVIK MART</div>
                         <div className="receipt-address">
-                            Thank you for your visit!
+                            Sabse sasta, Sabse accha!
                         </div>
                     </div>
 
@@ -81,20 +91,14 @@ const ThermalReceipt = ({ receiptData, onClose, onPrint, showControls = false })
 
                     {/* Bill Info */}
                     <div className="receipt-section">
-                        <div className="receipt-row">
+                        <div className="receipt-row receipt-bill-info">
                             <span>Bill No:</span>
                             <span className="receipt-value">{receiptData.billNumber}</span>
                         </div>
-                        <div className="receipt-row">
+                        <div className="receipt-row receipt-bill-info">
                             <span>Date:</span>
                             <span className="receipt-value">{receiptData.date}</span>
                         </div>
-                        {receiptData.cashier && (
-                            <div className="receipt-row">
-                                <span>Cashier:</span>
-                                <span className="receipt-value">{receiptData.cashier}</span>
-                            </div>
-                        )}
                     </div>
 
                     {/* Divider */}
@@ -102,64 +106,90 @@ const ThermalReceipt = ({ receiptData, onClose, onPrint, showControls = false })
 
                     {/* Items */}
                     <div className="receipt-section">
-                        <div className="receipt-items-header">
+                        <div className="receipt-items-header-compact">
                             <span>Item</span>
-                            <span>Qty</span>
-                            <span>Price</span>
+                            <span>Total</span>
                         </div>
-                        {receiptData.items.map((item, index) => (
-                            <div key={index} className="receipt-item">
-                                <div className="receipt-item-name">{item.product.name}</div>
-                                <div className="receipt-item-details">
-                                    <span>{item.quantity} × {formatCurrency(item.unitPrice)}</span>
-                                    <span className="receipt-item-total">{formatCurrency(item.totalPrice)}</span>
+                        {receiptData.items.map((item, index) => {
+                            const mrp = item.product.mrp || item.unitPrice;
+                            const unitPrice = item.unitPrice;
+
+                            return (
+                                <div key={index} className="receipt-item-compact">
+                                    <div className="receipt-item-name">{item.product.name}</div>
+                                    <div className="receipt-item-price-line">
+                                        <span className="receipt-mrp">
+                                            <span className="receipt-mrp-label">MRP</span>
+                                            <span className="receipt-mrp-price receipt-strikethrough">{formatCurrency(mrp)}</span>
+                                        </span>
+                                        <span className="receipt-price">{formatCurrency(unitPrice)}</span>
+                                        <span className="receipt-qty">x{item.quantity}</span>
+                                        <span className="receipt-total-price">{formatCurrency(item.totalPrice)}</span>
+                                    </div>
                                 </div>
+                            );
+                        })}
+
+                        {/* Final Pay - Right after all products */}
+                        {(() => {
+                            // Get the actual total from receiptData (billing screen total)
+                            const actualTotal = parseFloat((receiptData.total || 0).toFixed(2));
+                            const finalPayPrice = actualTotal;
+
+                            return (
+                                <div className="receipt-row receipt-total">
+                                    <span>Final Pay:</span>
+                                    <span className="receipt-value">{formatCurrency(finalPayPrice)}</span>
+                                </div>
+                            );
+                        })()}
+                    </div>
+
+                    {/* Totals - Hidden for now, can be re-enabled later */}
+                    {false && (() => {
+                        // Calculate Total MRP and Total Discount for display
+                        // IMPORTANT: Use item.totalPrice from cart to match billing screen calculations
+                        // The billing screen rounds per-item totals, so we must use the same values
+                        let totalMRP = 0;
+                        let totalDiscount = 0;
+
+                        receiptData.items.forEach(item => {
+                            // Use same MRP logic as in item display
+                            const mrp = parseFloat(item.product.mrp || item.unitPrice || 0);
+                            const unitPrice = parseFloat(item.unitPrice || 0);
+                            const qty = parseFloat(item.quantity || 0);
+
+                            // Calculate item-level MRP and discount for display purposes only
+                            const itemMRPTotal = mrp * qty;
+                            const itemDiscountPerUnit = mrp > unitPrice ? (mrp - unitPrice) : 0;
+                            const itemDiscountTotal = itemDiscountPerUnit * qty;
+
+                            // Accumulate totals for display
+                            totalMRP += itemMRPTotal;
+                            totalDiscount += itemDiscountTotal;
+                        });
+
+                        // Round final totals to 2 decimal places
+                        totalMRP = Math.round(totalMRP * 100) / 100;
+                        totalDiscount = Math.round(totalDiscount * 100) / 100;
+
+                        return (
+                            <div className="receipt-section">
+                                <div className="receipt-row receipt-totals-row">
+                                    <span>Total MRP:</span>
+                                    <span className="receipt-value">{formatCurrency(totalMRP)}</span>
+                                </div>
+                                {totalDiscount > 0 && (
+                                    <div className="receipt-row receipt-totals-row">
+                                        <span>Total Discount:</span>
+                                        <span className="receipt-value">-{formatCurrency(totalDiscount)}</span>
+                                    </div>
+                                )}
                             </div>
-                        ))}
-                    </div>
-
-                    {/* Divider */}
-                    <div className="receipt-divider">━━━━━━━━━━━━━━━━━━━━</div>
-
-                    {/* Totals */}
-                    <div className="receipt-section">
-                        <div className="receipt-row">
-                            <span>Subtotal:</span>
-                            <span className="receipt-value">{formatCurrency(receiptData.subtotal)}</span>
-                        </div>
-                        <div className="receipt-row">
-                            <span>GST (0%):</span>
-                            <span className="receipt-value">{formatCurrency(receiptData.tax)}</span>
-                        </div>
-                        <div className="receipt-row receipt-total">
-                            <span>TOTAL:</span>
-                            <span className="receipt-value">{formatCurrency(receiptData.total)}</span>
-                        </div>
-                    </div>
-
-                    {/* Payment Info */}
-                    <div className="receipt-divider">━━━━━━━━━━━━━━━━━━━━</div>
-                    <div className="receipt-section">
-                        <div className="receipt-row">
-                            <span>Payment:</span>
-                            <span className="receipt-value">{receiptData.paymentMethod}</span>
-                        </div>
-                        {receiptData.paymentMethod === 'Cash' && (
-                            <>
-                                <div className="receipt-row">
-                                    <span>Received:</span>
-                                    <span className="receipt-value">{formatCurrency(receiptData.amountReceived)}</span>
-                                </div>
-                                <div className="receipt-row">
-                                    <span>Change:</span>
-                                    <span className="receipt-value">{formatCurrency(receiptData.change)}</span>
-                                </div>
-                            </>
-                        )}
-                    </div>
+                        );
+                    })()}
 
                     {/* Footer */}
-                    <div className="receipt-divider">━━━━━━━━━━━━━━━━━━━━</div>
                     <div className="receipt-footer">
                         <div className="receipt-thankyou">Thank You!</div>
                         <div className="receipt-thankyou">Visit Again</div>
