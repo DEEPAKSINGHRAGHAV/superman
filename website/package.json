@@ -24,9 +24,13 @@
     "eslint-plugin-react-hooks": "^4.6.0"
   },
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
+    "dev": "vite --mode development",
+    "dev:uat": "vite --mode uat",
+    "build": "vite build --mode production",
+    "build:uat": "vite build --mode uat",
+    "build:dev": "vite build --mode development",
     "preview": "vite preview",
+    "preview:uat": "vite preview --mode uat",
     "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0"
   },
   "browserslist": {
