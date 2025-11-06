@@ -26,6 +26,7 @@ import BrandList from './pages/brands/BrandList';
 import CategoryList from './pages/categories/CategoryList';
 import UserList from './pages/users/UserList';
 import BillingScreen from './pages/billing/BillingScreen';
+import SalesHistory from './pages/billing/SalesHistory';
 
 function App() {
     return (
@@ -106,6 +107,7 @@ function App() {
 
                     {/* Billing */}
                     <Route path="billing" element={<BillingScreen />} />
+                    <Route path="billing/sales-history" element={<SalesHistory />} />
 
                     {/* Brands */}
                     <Route path="brands" element={<BrandList />} />

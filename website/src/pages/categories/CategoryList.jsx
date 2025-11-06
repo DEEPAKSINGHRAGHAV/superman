@@ -29,10 +29,20 @@ const CategoryList = () => {
 
     useEffect(() => {
         if (formModal.category) {
+            // Handle parentCategory - it might be an object (populated) or an ID
+            let parentCategoryId = '';
+            if (formModal.category.parentCategory) {
+                if (typeof formModal.category.parentCategory === 'object' && formModal.category.parentCategory !== null) {
+                    parentCategoryId = formModal.category.parentCategory._id || '';
+                } else {
+                    parentCategoryId = formModal.category.parentCategory;
+                }
+            }
+
             setFormData({
                 name: formModal.category.name || '',
                 description: formModal.category.description || '',
-                parentCategory: formModal.category.parentCategory || '',
+                parentCategory: parentCategoryId,
             });
         } else {
             setFormData({ name: '', description: '', parentCategory: '' });
@@ -42,14 +52,22 @@ const CategoryList = () => {
     const fetchCategories = async () => {
         try {
             setLoading(true);
-            const response = await categoriesAPI.getAll({ search });
+            // Fetch all categories (no pagination limit) to show complete list
+            const response = await categoriesAPI.getAll({
+                search,
+                limit: 1000,  // Fetch all categories, not just first 10
+                isActive: 'all'  // Show all categories (active and inactive) for management
+            });
 
-            if (response.success) {
-                setCategories(response.data);
+            if (response && response.success) {
+                setCategories(response.data || []);
+            } else {
+                setCategories([]);
             }
         } catch (error) {
             toast.error('Failed to load categories');
             console.error('Categories fetch error:', error);
+            setCategories([]);
         } finally {
             setLoading(false);
         }
@@ -70,11 +88,17 @@ const CategoryList = () => {
         }
 
         try {
+            // Prepare form data - convert empty parentCategory to null
+            const submitData = {
+                ...formData,
+                parentCategory: formData.parentCategory || null
+            };
+
             let response;
             if (formModal.category) {
-                response = await categoriesAPI.update(formModal.category._id, formData);
+                response = await categoriesAPI.update(formModal.category._id, submitData);
             } else {
-                response = await categoriesAPI.create(formData);
+                response = await categoriesAPI.create(submitData);
             }
 
             if (response.success) {
@@ -102,7 +126,9 @@ const CategoryList = () => {
         }
     };
 
-    const parentCategories = categories.filter((cat) => !cat.parentCategory);
+    const parentCategories = Array.isArray(categories)
+        ? categories.filter((cat) => cat && !cat.parentCategory)
+        : [];
 
     const columns = [
         {
@@ -124,7 +150,15 @@ const CategoryList = () => {
         {
             key: 'parentCategory',
             label: 'Parent',
-            render: (row) => row.parentCategory || '-',
+            render: (row) => {
+                if (!row.parentCategory) return '-';
+                // Handle populated parentCategory object
+                if (typeof row.parentCategory === 'object') {
+                    return row.parentCategory.name || '-';
+                }
+                // Handle parentCategory as ID string
+                return row.parentCategory;
+            },
         },
         {
             key: 'productCount',
@@ -249,7 +283,7 @@ const CategoryList = () => {
                         >
                             <option value="">None (Top Level)</option>
                             {parentCategories.map((cat) => (
-                                <option key={cat._id} value={cat.name}>
+                                <option key={cat._id} value={cat._id}>
                                     {cat.name}
                                 </option>
                             ))}

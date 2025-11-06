@@ -177,8 +177,8 @@ const validateDateRange = (startDateParam = 'startDate', endDateParam = 'endDate
             req.query[endDateParam] = parsedEndDate;
         }
 
-        // Validate date range
-        if (startDate && endDate && parsedStartDate > parsedEndDate) {
+        // Validate date range - use the parsed dates from req.query
+        if (startDate && endDate && req.query[startDateParam] > req.query[endDateParam]) {
             return res.status(400).json({
                 success: false,
                 message: 'Start date cannot be greater than end date'

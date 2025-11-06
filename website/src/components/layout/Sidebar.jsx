@@ -14,6 +14,7 @@ import {
     CreditCard,
     AlertTriangle,
     Clock,
+    Receipt,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -32,6 +33,12 @@ const Sidebar = ({ isOpen, onClose }) => {
             href: '/billing',
             icon: CreditCard,
             permission: null,
+        },
+        {
+            name: 'Sales History',
+            href: '/billing/sales-history',
+            icon: Receipt,
+            permission: 'read_inventory',
         },
         {
             name: 'Products',
@@ -131,6 +138,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                                 <NavLink
                                     key={item.name}
                                     to={item.href}
+                                    end={item.href === '/billing'} // Only exact match for /billing
                                     onClick={() => onClose && onClose()}
                                     className={({ isActive }) =>
                                         `flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${isActive

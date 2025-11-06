@@ -25,6 +25,7 @@ const BillingScreen = () => {
     const [receiptData, setReceiptData] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [showReceiptModal, setShowReceiptModal] = useState(false);
+    const [isPaymentCompleted, setIsPaymentCompleted] = useState(false);
     const productSearchRef = useRef(null);
 
     const addToCart = async (product) => {
@@ -193,26 +194,41 @@ const BillingScreen = () => {
             }));
 
             const referenceNumber = `BILL-${Date.now()}`;
+
+            // Prepare complete receipt data as shown to customer
+            const receiptData = {
+                billNumber: referenceNumber,
+                date: new Date().toLocaleString(),
+                items: cart.map(item => ({
+                    product: {
+                        _id: item.product._id,
+                        name: item.product.name,
+                        sku: item.product.sku,
+                        category: item.product.category
+                    },
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    totalPrice: item.totalPrice,
+                    costPrice: item.costPrice || 0
+                })),
+                subtotal: subtotal,
+                tax: tax,
+                total: total,
+                paymentMethod: PAYMENT_METHODS.find(pm => pm.id === selectedPaymentMethod)?.name || 'Cash',
+                amountReceived: selectedPaymentMethod === 'cash' ? parseFloat(amountReceived) : total,
+                change: selectedPaymentMethod === 'cash' ? parseFloat(amountReceived) - total : 0,
+                cashier: user?.name,
+            };
+
             const response = await inventoryAPI.processSale({
                 saleItems,
                 referenceNumber,
+                receiptData, // Send complete receipt data to be stored
             });
 
             if (response.success) {
-                const receipt = {
-                    billNumber: referenceNumber,
-                    date: new Date().toLocaleString(),
-                    items: cart,
-                    subtotal,
-                    tax,
-                    total,
-                    paymentMethod: PAYMENT_METHODS.find(pm => pm.id === selectedPaymentMethod)?.name,
-                    amountReceived: selectedPaymentMethod === 'cash' ? parseFloat(amountReceived) : total,
-                    change: selectedPaymentMethod === 'cash' ? parseFloat(amountReceived) - total : 0,
-                    cashier: user?.name,
-                };
-
-                setReceiptData(receipt);
+                setReceiptData(receiptData);
+                setIsPaymentCompleted(true); // Mark payment as completed
                 toast.success('Payment processed successfully');
 
                 // Don't clear immediately - let user see receipt and print
@@ -238,7 +254,7 @@ const BillingScreen = () => {
                                 </p>
                             )}
                         </div>
-                        {cart.length > 0 && (
+                        {cart.length > 0 && !isPaymentCompleted && (
                             <button
                                 onClick={() => {
                                     if (window.confirm('Clear all items from cart?')) {
@@ -268,7 +284,7 @@ const BillingScreen = () => {
             <div className="max-w-7xl mx-auto px-6 py-4">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     {/* Left Panel - Search & Cart */}
-                    <div className="lg:col-span-2 space-y-4">
+                    <div className={`lg:col-span-2 space-y-4 ${isPaymentCompleted ? 'opacity-50 pointer-events-none' : ''}`}>
                         {/* Product Search - ALWAYS VISIBLE, AUTO-FOCUSED */}
                         <Card className="p-4">
                             <ProductSearch
@@ -280,10 +296,11 @@ const BillingScreen = () => {
                                 maxResults={20}
                                 minSearchLength={1}
                                 debounceMs={250}
-                                autoFocus={true}
+                                autoFocus={!isPaymentCompleted}
+                                disabled={isPaymentCompleted}
                             />
                             <p className="text-xs text-gray-500 mt-2 text-center">
-                                Scan barcode or type to search • Press Enter to add
+                                {isPaymentCompleted ? 'Payment completed. Click "New Sale" to start a new transaction.' : 'Scan barcode or type to search • Press Enter to add'}
                             </p>
                         </Card>
 
@@ -309,8 +326,9 @@ const BillingScreen = () => {
                                             {/* Quantity Controls - Inline */}
                                             <div className="flex items-center gap-1">
                                                 <button
-                                                    onClick={() => updateQuantity(item.product._id, -1)}
-                                                    className="w-8 h-8 bg-red-100 hover:bg-red-200 text-red-600 rounded flex items-center justify-center transition-colors"
+                                                    onClick={() => !isPaymentCompleted && updateQuantity(item.product._id, -1)}
+                                                    disabled={isPaymentCompleted}
+                                                    className={`w-8 h-8 bg-red-100 hover:bg-red-200 text-red-600 rounded flex items-center justify-center transition-colors ${isPaymentCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                     aria-label="Decrease"
                                                 >
                                                     <Minus size={16} />
@@ -319,8 +337,9 @@ const BillingScreen = () => {
                                                     <span className="text-base font-bold text-gray-900">{item.quantity}</span>
                                                 </div>
                                                 <button
-                                                    onClick={() => updateQuantity(item.product._id, 1)}
-                                                    className="w-8 h-8 bg-green-100 hover:bg-green-200 text-green-600 rounded flex items-center justify-center transition-colors"
+                                                    onClick={() => !isPaymentCompleted && updateQuantity(item.product._id, 1)}
+                                                    disabled={isPaymentCompleted}
+                                                    className={`w-8 h-8 bg-green-100 hover:bg-green-200 text-green-600 rounded flex items-center justify-center transition-colors ${isPaymentCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                     aria-label="Increase"
                                                 >
                                                     <Plus size={16} />
@@ -352,8 +371,9 @@ const BillingScreen = () => {
                                                     </div>
                                                 ) : (
                                                     <button
-                                                        onClick={() => togglePriceEdit(item.product._id)}
-                                                        className="flex items-center gap-1 px-2 py-1 hover:bg-blue-50 rounded transition-colors"
+                                                        onClick={() => !isPaymentCompleted && togglePriceEdit(item.product._id)}
+                                                        disabled={isPaymentCompleted}
+                                                        className={`flex items-center gap-1 px-2 py-1 hover:bg-blue-50 rounded transition-colors ${isPaymentCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                     >
                                                         <span className="text-sm font-bold text-gray-900">
                                                             {formatCurrency(item.unitPrice)}
@@ -372,8 +392,9 @@ const BillingScreen = () => {
 
                                             {/* Remove Button */}
                                             <button
-                                                onClick={() => removeFromCart(item.product._id)}
-                                                className="p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded transition-colors flex-shrink-0"
+                                                onClick={() => !isPaymentCompleted && removeFromCart(item.product._id)}
+                                                disabled={isPaymentCompleted}
+                                                className={`p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded transition-colors flex-shrink-0 ${isPaymentCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                 aria-label="Remove"
                                             >
                                                 <Trash2 size={18} />
@@ -406,32 +427,34 @@ const BillingScreen = () => {
                             </div>
 
                             {/* Payment Method Selection */}
-                            <div className="mb-4">
-                                <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">PAYMENT METHOD</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {PAYMENT_METHODS.map((method) => (
-                                        <button
-                                            key={method.id}
-                                            onClick={() => {
-                                                setSelectedPaymentMethod(method.id);
-                                                if (method.id !== 'cash') {
-                                                    setAmountReceived('');
-                                                }
-                                            }}
-                                            className={`p-2 border-2 rounded-lg flex flex-col items-center gap-1 transition-all ${selectedPaymentMethod === method.id
-                                                ? 'border-blue-500 bg-blue-50 text-blue-600 shadow-md'
-                                                : 'border-gray-300 hover:border-gray-400 bg-white'
-                                                }`}
-                                        >
-                                            <div className="text-blue-600 scale-90">{method.icon}</div>
-                                            <span className="font-bold text-xs">{method.name}</span>
-                                        </button>
-                                    ))}
+                            {!isPaymentCompleted && (
+                                <div className="mb-4">
+                                    <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">PAYMENT METHOD</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {PAYMENT_METHODS.map((method) => (
+                                            <button
+                                                key={method.id}
+                                                onClick={() => {
+                                                    setSelectedPaymentMethod(method.id);
+                                                    if (method.id !== 'cash') {
+                                                        setAmountReceived('');
+                                                    }
+                                                }}
+                                                className={`p-2 border-2 rounded-lg flex flex-col items-center gap-1 transition-all ${selectedPaymentMethod === method.id
+                                                    ? 'border-blue-500 bg-blue-50 text-blue-600 shadow-md'
+                                                    : 'border-gray-300 hover:border-gray-400 bg-white'
+                                                    }`}
+                                            >
+                                                <div className="text-blue-600 scale-90">{method.icon}</div>
+                                                <span className="font-bold text-xs">{method.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
-                            </div>
+                            )}
 
                             {/* Cash Amount Received - Only for Cash */}
-                            {selectedPaymentMethod === 'cash' && (
+                            {selectedPaymentMethod === 'cash' && !isPaymentCompleted && (
                                 <div className="mb-4">
                                     <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">
                                         AMOUNT RECEIVED
@@ -466,28 +489,30 @@ const BillingScreen = () => {
                                 </div>
                             )}
 
-                            {/* Complete Payment Button */}
-                            <button
-                                onClick={handlePayment}
-                                disabled={
-                                    cart.length === 0 ||
-                                    isProcessing ||
-                                    (selectedPaymentMethod === 'cash' && (!amountReceived || parseFloat(amountReceived) < total))
-                                }
-                                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl p-3 font-bold text-base transition-colors flex items-center justify-center gap-2 shadow-lg mb-2"
-                            >
-                                {isProcessing ? (
-                                    <>
-                                        <Loading />
-                                        <span>Processing...</span>
-                                    </>
-                                ) : (
-                                    <>
-                                        <CheckCircle size={20} />
-                                        <span>COMPLETE PAYMENT</span>
-                                    </>
-                                )}
-                            </button>
+                            {/* Complete Payment Button - Hide after successful payment */}
+                            {!isPaymentCompleted && (
+                                <button
+                                    onClick={handlePayment}
+                                    disabled={
+                                        cart.length === 0 ||
+                                        isProcessing ||
+                                        (selectedPaymentMethod === 'cash' && (!amountReceived || parseFloat(amountReceived) < total))
+                                    }
+                                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl p-3 font-bold text-base transition-colors flex items-center justify-center gap-2 shadow-lg mb-2"
+                                >
+                                    {isProcessing ? (
+                                        <>
+                                            <Loading />
+                                            <span>Processing...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <CheckCircle size={20} />
+                                            <span>COMPLETE PAYMENT</span>
+                                        </>
+                                    )}
+                                </button>
+                            )}
 
                             {/* Receipt Actions - Only show after payment */}
                             {receiptData && (
@@ -519,6 +544,7 @@ const BillingScreen = () => {
                                             setAmountReceived('');
                                             setSelectedPaymentMethod('cash');
                                             setShowReceiptModal(false);
+                                            setIsPaymentCompleted(false); // Re-enable for new sale
                                             // Focus the product search input
                                             setTimeout(() => {
                                                 if (productSearchRef.current) {

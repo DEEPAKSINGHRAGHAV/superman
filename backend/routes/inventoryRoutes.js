@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const StockMovement = require('../models/StockMovement');
+const Bill = require('../models/Bill');
 const InventoryService = require('../services/inventoryService');
 const asyncHandler = require('../middleware/asyncHandler');
 const { protect, requirePermission } = require('../middleware/auth');
@@ -286,7 +287,11 @@ router.post('/sales',
     protect,
     requirePermission('write_inventory'),
     asyncHandler(async (req, res) => {
-        const { saleItems, referenceNumber = '' } = req.body;
+        const {
+            saleItems,
+            referenceNumber = '',
+            receiptData = null // Complete receipt data from frontend
+        } = req.body;
 
         if (!Array.isArray(saleItems) || saleItems.length === 0) {
             return res.status(400).json({
@@ -305,16 +310,206 @@ router.post('/sales',
             }
         }
 
+        // Process the sale (updates inventory)
         const results = await InventoryService.processSale(
             saleItems,
             req.user._id,
             referenceNumber
         );
 
-        res.status(201).json({
+        // Save the complete receipt/bill data as it was shown to the customer
+        if (receiptData) {
+            try {
+                // Calculate total cost from sale results (FIFO batch costs)
+                const totalCost = results.reduce((sum, result) => sum + (result.totalCost || 0), 0);
+
+                // Use actual billed amount as revenue (what customer was charged)
+                const actualRevenue = receiptData.total || receiptData.subtotal || 0;
+
+                // Calculate profit: actual revenue - actual cost
+                const profit = actualRevenue - totalCost;
+                const profitMargin = actualRevenue > 0 ? parseFloat(((profit / actualRevenue) * 100).toFixed(2)) : 0;
+
+                // Map receipt items to bill items format
+                // Note: results array corresponds to saleItems array in same order
+                const billItems = receiptData.items.map((item, index) => {
+                    const saleResult = results[index] || {};
+
+                    return {
+                        product: item.product._id || item.product,
+                        productName: item.product.name || '',
+                        productSku: item.product.sku || '',
+                        quantity: item.quantity,
+                        unitPrice: item.unitPrice, // Exact price shown at billing
+                        totalPrice: item.totalPrice, // Exact total shown at billing
+                        costPrice: saleResult.averageCostPrice || item.costPrice || 0,
+                        batchNumber: saleResult.batchesUsed?.[0]?.batchNumber || null
+                    };
+                });
+
+                const bill = await Bill.create({
+                    billNumber: receiptData.billNumber || referenceNumber,
+                    items: billItems,
+                    subtotal: receiptData.subtotal || 0,
+                    taxAmount: receiptData.tax || 0,
+                    discountAmount: receiptData.discountAmount || 0,
+                    totalAmount: receiptData.total || receiptData.subtotal || 0,
+                    totalCost: totalCost,
+                    profit: profit,
+                    profitMargin: profitMargin,
+                    paymentMethod: receiptData.paymentMethod || 'Cash',
+                    amountReceived: receiptData.amountReceived || receiptData.total || 0,
+                    change: receiptData.change || 0,
+                    cashier: req.user._id,
+                    cashierName: req.user.name || 'Unknown',
+                    referenceNumber: referenceNumber,
+                    notes: receiptData.notes || ''
+                });
+
+                res.status(201).json({
+                    success: true,
+                    message: 'Sales processed successfully',
+                    data: results,
+                    bill: bill
+                });
+            } catch (billError) {
+                // If bill saving fails, still return success for sale processing
+                // but log the error
+                console.error('Failed to save bill:', billError);
+                res.status(201).json({
+                    success: true,
+                    message: 'Sales processed successfully, but bill record failed to save',
+                    data: results,
+                    warning: 'Bill record not saved'
+                });
+            }
+        } else {
+            res.status(201).json({
+                success: true,
+                message: 'Sales processed successfully',
+                data: results
+            });
+        }
+    })
+);
+
+// @desc    Get sales history grouped by bill number
+// @route   GET /api/v1/inventory/sales-history
+// @access  Private (requires read_inventory permission)
+router.get('/sales-history',
+    protect,
+    requirePermission('read_inventory'),
+    validatePagination,
+    validateDateRange('startDate', 'endDate'),
+    asyncHandler(async (req, res) => {
+        const { page, limit, skip } = req.pagination;
+        const { startDate, endDate, billNumber } = req.query;
+
+        // Build filter for bills
+        const filter = {};
+
+        // Filter by bill number if provided
+        if (billNumber) {
+            filter.billNumber = { $regex: billNumber, $options: 'i' };
+        }
+
+        // Add date filters - default to current day if no dates provided
+        // Note: validation middleware may have already converted dates to Date objects
+        if (startDate || endDate) {
+            filter.createdAt = {};
+            if (startDate) {
+                // Use date directly if it's already a Date object, otherwise parse it
+                filter.createdAt.$gte = startDate instanceof Date ? startDate : new Date(startDate);
+            }
+            if (endDate) {
+                // Use date directly if it's already a Date object, otherwise parse it
+                const end = endDate instanceof Date ? new Date(endDate) : new Date(endDate);
+                // Ensure end date is set to end of day (validation middleware should have done this, but ensure it)
+                end.setHours(23, 59, 59, 999);
+                filter.createdAt.$lte = end;
+            }
+        } else {
+            // Default to current day if no date filters provided
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const endOfToday = new Date();
+            endOfToday.setHours(23, 59, 59, 999);
+            filter.createdAt = {
+                $gte: today,
+                $lte: endOfToday
+            };
+        }
+
+        // Get total count for pagination
+        const total = await Bill.countDocuments(filter);
+
+        // Calculate summary for all matching bills (not just current page)
+        const summaryBills = await Bill.find(filter)
+            .select('subtotal totalAmount profit')
+            .lean();
+
+        const summary = {
+            totalBills: total,
+            totalRevenue: summaryBills.reduce((sum, bill) => sum + (bill.subtotal || 0), 0),
+            totalProfit: summaryBills.reduce((sum, bill) => sum + (bill.profit || 0), 0)
+        };
+
+        // Fetch bills with pagination
+        const bills = await Bill.find(filter)
+            .populate('cashier', 'name email')
+            .populate('items.product', 'name sku category')
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit)
+            .lean();
+
+        // Format bills for response (preserve exact data as shown at billing time)
+        const formattedBills = bills.map(bill => {
+            // Calculate total items
+            const totalItems = bill.items.reduce((sum, item) => sum + item.quantity, 0);
+
+            return {
+                billNumber: bill.billNumber,
+                date: bill.createdAt,
+                cashier: bill.cashier || { name: bill.cashierName || 'Unknown' },
+                items: bill.items.map(item => ({
+                    product: item.product || {
+                        _id: item.product,
+                        name: item.productName,
+                        sku: item.productSku
+                    },
+                    quantity: item.quantity,
+                    sellingPrice: item.unitPrice, // Exact price shown at billing
+                    costPrice: item.costPrice,
+                    total: item.totalPrice, // Exact total shown at billing
+                    batchNumber: item.batchNumber
+                })),
+                totalItems: totalItems,
+                subtotal: bill.subtotal, // Exact subtotal shown at billing
+                tax: bill.taxAmount,
+                total: bill.totalAmount, // Exact total shown at billing
+                totalCost: bill.totalCost,
+                profit: bill.profit,
+                profitMargin: bill.profitMargin,
+                paymentMethod: bill.paymentMethod,
+                amountReceived: bill.amountReceived,
+                change: bill.change
+            };
+        });
+
+        res.status(200).json({
             success: true,
-            message: 'Sales processed successfully',
-            data: results
+            count: formattedBills.length,
+            total,
+            summary,
+            pagination: {
+                currentPage: page,
+                totalPages: Math.ceil(total / limit),
+                hasNext: page < Math.ceil(total / limit),
+                hasPrev: page > 1,
+                limit
+            },
+            data: formattedBills
         });
     })
 );

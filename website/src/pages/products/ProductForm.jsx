@@ -4,6 +4,7 @@ import { Save, ArrowLeft } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
+import SearchableSelect from '../../components/common/SearchableSelect';
 import { productsAPI, brandsAPI, categoriesAPI } from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -62,18 +63,21 @@ const ProductForm = () => {
         try {
             const [brandsRes, categoriesRes] = await Promise.all([
                 brandsAPI.getAll({ limit: 1000 }),
-                categoriesAPI.getAll({ limit: 1000 }),
+                categoriesAPI.getAll({ limit: 1000, isActive: 'true' }),
             ]);
 
-            if (brandsRes.success) {
-                setBrands(brandsRes.data);
+            if (brandsRes && brandsRes.success) {
+                setBrands(brandsRes.data || []);
             }
 
-            if (categoriesRes.success) {
-                setCategories(categoriesRes.data);
+            if (categoriesRes && categoriesRes.success) {
+                setCategories(categoriesRes.data || []);
+            } else {
+                console.error('Categories API response:', categoriesRes);
             }
         } catch (error) {
             console.error('Failed to fetch dropdown data:', error);
+            toast.error('Failed to load categories and brands');
         }
     };
 
@@ -85,7 +89,7 @@ const ProductForm = () => {
                 const product = response.data;
                 setFormData({
                     name: product.name || '',
-                    sku: product.sku || '',
+                    sku: product.sku ? product.sku.replace(/\s/g, '').toUpperCase() : '',
                     barcode: product.barcode || '',
                     description: product.description || '',
                     category: product.category || '',
@@ -111,9 +115,16 @@ const ProductForm = () => {
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
+
+        // Special handling for SKU: remove spaces and convert to uppercase
+        let processedValue = value;
+        if (name === 'sku') {
+            processedValue = value.replace(/\s/g, '').toUpperCase();
+        }
+
         setFormData((prev) => ({
             ...prev,
-            [name]: type === 'checkbox' ? checked : value,
+            [name]: type === 'checkbox' ? checked : processedValue,
         }));
         if (errors[name]) {
             setErrors((prev) => ({ ...prev, [name]: '' }));
@@ -157,9 +168,12 @@ const ProductForm = () => {
         try {
             setLoading(true);
 
-            // Convert string numbers to actual numbers
+            // Convert string numbers to actual numbers and ensure category is lowercase slug
+            // Ensure SKU is uppercase and has no spaces
             const submitData = {
                 ...formData,
+                sku: formData.sku ? formData.sku.replace(/\s/g, '').toUpperCase() : '',
+                category: formData.category ? formData.category.toLowerCase().trim() : '',
                 costPrice: parseFloat(formData.costPrice),
                 sellingPrice: parseFloat(formData.sellingPrice),
                 mrp: parseFloat(formData.mrp),
@@ -241,6 +255,19 @@ const ProductForm = () => {
                                     name="sku"
                                     value={formData.sku}
                                     onChange={handleChange}
+                                    onPaste={(e) => {
+                                        // Handle paste: remove spaces and convert to uppercase
+                                        e.preventDefault();
+                                        const pastedText = e.clipboardData.getData('text');
+                                        const processedValue = pastedText.replace(/\s/g, '').toUpperCase();
+                                        setFormData((prev) => ({
+                                            ...prev,
+                                            sku: processedValue,
+                                        }));
+                                        if (errors.sku) {
+                                            setErrors((prev) => ({ ...prev, sku: '' }));
+                                        }
+                                    }}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
                                             e.preventDefault();
@@ -371,43 +398,35 @@ const ProductForm = () => {
                     <div>
                         <Card title="Classification">
                             <div className="space-y-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Category <span className="text-red-500">*</span>
-                                    </label>
-                                    <select
-                                        name="category"
-                                        value={formData.category}
-                                        onChange={handleChange}
-                                        className={`input ${errors.category ? 'input-error' : ''}`}
-                                        required
-                                    >
-                                        <option value="">Select Category</option>
-                                        {categories.map((cat) => (
-                                            <option key={cat._id} value={cat.name}>
-                                                {cat.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {errors.category && <p className="mt-1 text-sm text-red-600">{errors.category}</p>}
-                                </div>
+                                <SearchableSelect
+                                    label="Category"
+                                    name="category"
+                                    value={formData.category}
+                                    onChange={handleChange}
+                                    options={categories.map((cat) => ({
+                                        value: cat.slug || cat.name?.toLowerCase().replace(/\s+/g, '-'),
+                                        label: cat.name,
+                                        _id: cat._id
+                                    }))}
+                                    placeholder="Select Category"
+                                    error={errors.category}
+                                    required
+                                    searchable={true}
+                                />
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
-                                    <select
-                                        name="brand"
-                                        value={formData.brand}
-                                        onChange={handleChange}
-                                        className="input"
-                                    >
-                                        <option value="">Select Brand</option>
-                                        {brands.map((brand) => (
-                                            <option key={brand._id} value={brand.name}>
-                                                {brand.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
+                                <SearchableSelect
+                                    label="Brand"
+                                    name="brand"
+                                    value={formData.brand}
+                                    onChange={handleChange}
+                                    options={brands.map((brand) => ({
+                                        value: brand.name,
+                                        label: brand.name,
+                                        _id: brand._id
+                                    }))}
+                                    placeholder="Select Brand"
+                                    searchable={true}
+                                />
 
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Unit</label>

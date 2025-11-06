@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, Edit, Trash2, Eye, Package } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, Package } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -14,14 +14,11 @@ import toast from 'react-hot-toast';
 
 const ProductList = () => {
     const navigate = useNavigate();
+    const searchInputRef = useRef(null);
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [searchInput, setSearchInput] = useState('');
     const [search, setSearch] = useState('');
-    const [filters, setFilters] = useState({
-        isActive: 'true',
-        lowStock: '',
-        category: '',
-    });
     const [pagination, setPagination] = useState({
         page: 1,
         limit: 20,
@@ -36,7 +33,14 @@ const ProductList = () => {
 
     useEffect(() => {
         fetchProducts();
-    }, [pagination.page, pagination.limit, sortConfig, filters]);
+    }, [pagination.page, pagination.limit, sortConfig, search]);
+
+    useEffect(() => {
+        // Focus search input when component mounts
+        if (searchInputRef.current) {
+            searchInputRef.current.focus();
+        }
+    }, []);
 
     const fetchProducts = async () => {
         try {
@@ -46,7 +50,6 @@ const ProductList = () => {
                 limit: pagination.limit,
                 search,
                 ...sortConfig,
-                ...filters,
             });
 
             if (response.success) {
@@ -65,11 +68,18 @@ const ProductList = () => {
         }
     };
 
-    const handleSearch = debounce((value) => {
-        setSearch(value);
-        setPagination((prev) => ({ ...prev, page: 1 }));
-        fetchProducts();
-    }, 300);
+    const debouncedSearch = useMemo(
+        () => debounce((value) => {
+            setSearch(value);
+            setPagination((prev) => ({ ...prev, page: 1 }));
+        }, 300),
+        []
+    );
+
+    const handleSearchChange = (value) => {
+        setSearchInput(value);
+        debouncedSearch(value);
+    };
 
     const handleSort = (column, order) => {
         setSortConfig({ sortBy: column, sortOrder: order });
@@ -215,35 +225,15 @@ const ProductList = () => {
                 </Button>
             </div>
 
-            {/* Filters */}
+            {/* Search */}
             <Card>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Input
-                        placeholder="Filter by search term..."
-                        icon={<Search size={18} />}
-                        onChange={(e) => handleSearch(e.target.value)}
-                    />
-                    <select
-                        value={filters.isActive}
-                        onChange={(e) => setFilters({ ...filters, isActive: e.target.value })}
-                        className="input"
-                    >
-                        <option value="">All Status</option>
-                        <option value="true">Active</option>
-                        <option value="false">Inactive</option>
-                    </select>
-                    <select
-                        value={filters.lowStock}
-                        onChange={(e) => setFilters({ ...filters, lowStock: e.target.value })}
-                        className="input"
-                    >
-                        <option value="">All Stock Levels</option>
-                        <option value="true">Low Stock Only</option>
-                    </select>
-                    <Button variant="outline" icon={<Filter size={18} />} onClick={fetchProducts}>
-                        Apply Filters
-                    </Button>
-                </div>
+                <Input
+                    ref={searchInputRef}
+                    placeholder="Search products..."
+                    icon={<Search size={18} />}
+                    value={searchInput}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                />
             </Card>
 
             {/* Table */}

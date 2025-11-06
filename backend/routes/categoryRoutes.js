@@ -96,17 +96,24 @@ router.get('/', asyncHandler(async (req, res) => {
         search,
         level,
         parentCategory,
-        isActive = true,
+        isActive,
         isFeatured,
         sortBy = 'sortOrder',
         sortOrder = 'asc'
     } = req.query;
 
+    // Parse pagination parameters
+    const pageNum = parseInt(page) || 1;
+    const limitNum = parseInt(limit) || 10;
+
     // Build query
     const query = {};
 
-    if (isActive !== 'all') {
+    if (isActive !== undefined && isActive !== 'all') {
         query.isActive = isActive === 'true';
+    } else if (isActive === undefined) {
+        // Default to active categories if not specified
+        query.isActive = true;
     }
 
     if (isFeatured !== undefined) {
@@ -114,7 +121,10 @@ router.get('/', asyncHandler(async (req, res) => {
     }
 
     if (level !== undefined) {
-        query.level = parseInt(level);
+        const levelNum = parseInt(level);
+        if (!isNaN(levelNum)) {
+            query.level = levelNum;
+        }
     }
 
     if (parentCategory) {
@@ -139,8 +149,8 @@ router.get('/', asyncHandler(async (req, res) => {
         .populate('createdBy', 'name email')
         .populate('updatedBy', 'name email')
         .sort(sort)
-        .limit(limit * 1)
-        .skip((page - 1) * limit);
+        .limit(limitNum)
+        .skip((pageNum - 1) * limitNum);
 
     const total = await Category.countDocuments(query);
 
@@ -148,8 +158,8 @@ router.get('/', asyncHandler(async (req, res) => {
         success: true,
         count: categories.length,
         total,
-        page: parseInt(page),
-        pages: Math.ceil(total / limit),
+        page: pageNum,
+        pages: Math.ceil(total / limitNum),
         data: categories
     });
 }));
