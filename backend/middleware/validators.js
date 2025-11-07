@@ -20,7 +20,7 @@ const productValidation = {
             .withMessage('SKU can only contain uppercase letters, numbers, hyphens, and underscores'),
 
         body('barcode')
-            .optional()
+            .optional({ checkFalsy: true })
             .trim()
             .isLength({ min: 8, max: 20 })
             .withMessage('Barcode must be between 8 and 20 characters')
@@ -83,7 +83,7 @@ const productValidation = {
             .withMessage('Unit must be a string')
             .isLength({ min: 1, max: 20 })
             .withMessage('Unit must be between 1 and 20 characters'),
-            // Common units: pcs, kg, liter, gram, ml, box, pack
+        // Common units: pcs, kg, liter, gram, ml, box, pack
 
         body('brand')
             .optional()
@@ -110,7 +110,7 @@ const productValidation = {
             .withMessage('SKU can only contain uppercase letters, numbers, hyphens, and underscores'),
 
         body('barcode')
-            .optional()
+            .optional({ checkFalsy: true })
             .trim()
             .isLength({ min: 8, max: 20 })
             .withMessage('Barcode must be between 8 and 20 characters')

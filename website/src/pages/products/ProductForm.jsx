@@ -170,6 +170,8 @@ const ProductForm = () => {
 
             // Convert string numbers to actual numbers and ensure category is lowercase slug
             // Ensure SKU is uppercase and has no spaces
+            const cleanedBarcode = formData.barcode?.trim();
+
             const submitData = {
                 ...formData,
                 sku: formData.sku ? formData.sku.replace(/\s/g, '').toUpperCase() : '',
@@ -181,6 +183,12 @@ const ProductForm = () => {
                 minStockLevel: parseInt(formData.minStockLevel),
                 maxStockLevel: parseInt(formData.maxStockLevel),
             };
+
+            if (cleanedBarcode) {
+                submitData.barcode = cleanedBarcode;
+            } else {
+                delete submitData.barcode;
+            }
 
             let response;
             if (isEditMode) {
