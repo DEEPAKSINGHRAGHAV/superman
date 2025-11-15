@@ -457,7 +457,7 @@ router.get('/sales-history',
         // Fetch bills with pagination
         const bills = await Bill.find(filter)
             .populate('cashier', 'name email')
-            .populate('items.product', 'name sku category')
+            .populate('items.product', 'name sku category mrp')
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)

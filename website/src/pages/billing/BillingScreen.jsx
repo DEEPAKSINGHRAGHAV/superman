@@ -204,7 +204,8 @@ const BillingScreen = () => {
                         _id: item.product._id,
                         name: item.product.name,
                         sku: item.product.sku,
-                        category: item.product.category
+                        category: item.product.category,
+                        mrp: item.product.mrp
                     },
                     quantity: item.quantity,
                     unitPrice: item.unitPrice,

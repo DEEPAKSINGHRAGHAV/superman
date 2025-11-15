@@ -111,17 +111,20 @@ const ThermalReceipt = ({ receiptData, onClose, onPrint, showControls = false })
                             <span>Total</span>
                         </div>
                         {receiptData.items.map((item, index) => {
-                            const mrp = item.product.mrp || item.unitPrice;
+                            const mrp = item.product.mrp;
                             const unitPrice = item.unitPrice;
+                            const showMRP = mrp > unitPrice;
 
                             return (
                                 <div key={index} className="receipt-item-compact">
                                     <div className="receipt-item-name">{item.product.name}</div>
                                     <div className="receipt-item-price-line">
-                                        <span className="receipt-mrp">
-                                            <span className="receipt-mrp-label">MRP</span>
-                                            <span className="receipt-mrp-price receipt-strikethrough">{formatCurrency(mrp)}</span>
-                                        </span>
+                                        {showMRP && (
+                                            <span className="receipt-mrp">
+                                                <span className="receipt-mrp-label">MRP</span>
+                                                <span className="receipt-mrp-price receipt-strikethrough">{formatCurrency(mrp)}</span>
+                                            </span>
+                                        )}
                                         <span className="receipt-price">{formatCurrency(unitPrice)}</span>
                                         <span className="receipt-qty">x{item.quantity}</span>
                                         <span className="receipt-total-price">{formatCurrency(item.totalPrice)}</span>
@@ -154,19 +157,21 @@ const ThermalReceipt = ({ receiptData, onClose, onPrint, showControls = false })
                         let totalDiscount = 0;
 
                         receiptData.items.forEach(item => {
-                            // Use same MRP logic as in item display
-                            const mrp = parseFloat(item.product.mrp || item.unitPrice || 0);
+                            const mrp = parseFloat(item.product.mrp);
                             const unitPrice = parseFloat(item.unitPrice || 0);
                             const qty = parseFloat(item.quantity || 0);
 
-                            // Calculate item-level MRP and discount for display purposes only
-                            const itemMRPTotal = mrp * qty;
-                            const itemDiscountPerUnit = mrp > unitPrice ? (mrp - unitPrice) : 0;
-                            const itemDiscountTotal = itemDiscountPerUnit * qty;
+                            // Only include in totals if MRP is greater than unit price
+                            if (mrp > unitPrice) {
+                                // Calculate item-level MRP and discount for display purposes only
+                                const itemMRPTotal = mrp * qty;
+                                const itemDiscountPerUnit = mrp - unitPrice;
+                                const itemDiscountTotal = itemDiscountPerUnit * qty;
 
-                            // Accumulate totals for display
-                            totalMRP += itemMRPTotal;
-                            totalDiscount += itemDiscountTotal;
+                                // Accumulate totals for display
+                                totalMRP += itemMRPTotal;
+                                totalDiscount += itemDiscountTotal;
+                            }
                         });
 
                         // Round final totals to 2 decimal places
