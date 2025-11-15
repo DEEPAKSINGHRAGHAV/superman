@@ -86,16 +86,23 @@ const PurchaseOrderForm = () => {
                 const order = response.data;
                 setFormData({
                     supplier: typeof order.supplier === 'string' ? order.supplier : order.supplier._id,
-                    items: order.items.map(item => ({
-                        product: typeof item.product === 'string' ? item.product : item.product._id,
-                        productName: typeof item.product === 'object' ? item.product.name : (item.productName || ''),
-                        quantity: item.quantity,
-                        costPrice: item.costPrice,
-                        sellingPrice: item.sellingPrice || item.costPrice * 1.2,
-                        mrp: item.mrp,
-                        expiryDate: item.expiryDate ? item.expiryDate.split('T')[0] : '',
-                        totalAmount: item.quantity * item.costPrice,
-                    })),
+                    items: order.items.map(item => {
+                        const productObject = item.product && typeof item.product === 'object' ? item.product : null;
+                        const productId = typeof item.product === 'string'
+                            ? item.product
+                            : productObject?._id || '';
+
+                        return {
+                            product: productId,
+                            productName: productObject?.name || item.productName || '',
+                            quantity: item.quantity,
+                            costPrice: item.costPrice,
+                            sellingPrice: item.sellingPrice || item.costPrice * 1.2,
+                            mrp: item.mrp,
+                            expiryDate: item.expiryDate ? item.expiryDate.split('T')[0] : '',
+                            totalAmount: item.quantity * item.costPrice,
+                        };
+                    }),
                     expectedDeliveryDate: order.expectedDeliveryDate ? order.expectedDeliveryDate.split('T')[0] : getTomorrowDate(),
                     notes: order.notes || '',
                     paymentMethod: order.paymentMethod || 'credit',
