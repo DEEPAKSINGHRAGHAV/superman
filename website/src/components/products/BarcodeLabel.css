@@ -1,0 +1,285 @@
+/* Barcode Label Styles - Optimized for 50mm x 15mm thermal labels */
+
+.barcode-label-print {
+    width: 50mm;
+    height: 15mm;
+    padding: 0;
+    margin: 0;
+    background: white;
+    font-family: Arial, sans-serif;
+    font-size: 7pt;
+    line-height: 0;
+    color: #000000;
+    display: flex;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.barcode-label-container {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    align-items: flex-start;
+    justify-content: space-between;
+    box-sizing: border-box;
+}
+
+/* Left section - 80% for barcode */
+.barcode-section {
+    width: 80%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-right: 0.2mm;
+    padding-top: 0;
+    padding-bottom: 0;
+    padding-left: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    line-height: 0;
+}
+
+.barcode-wrapper {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    line-height: 0;
+}
+
+.barcode-label-print .barcode-svg {
+    width: 100%;
+    height: auto;
+    max-height: 15mm;
+    max-width: 100%;
+    display: block;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    vertical-align: top;
+    line-height: 0;
+}
+
+.barcode-label-print .barcode-svg svg {
+    margin: 0 !important;
+    padding: 0 !important;
+    display: block !important;
+    vertical-align: top !important;
+    line-height: 0 !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+.barcode-label-print .barcode-svg svg text {
+    margin: 0 !important;
+    padding: 0 !important;
+    line-height: 1 !important;
+}
+
+/* Right section - 20% for price */
+.price-section {
+    width: 20%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding-left: 0.2mm;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    box-sizing: border-box;
+    border-left: 0.5px solid #000;
+}
+
+.price-label {
+    font-size: 7pt;
+    font-weight: bold;
+    line-height: 1.1;
+    text-align: center;
+    white-space: nowrap;
+    width: 100%;
+    overflow: visible;
+    text-overflow: clip;
+    margin: 0;
+    padding: 0;
+}
+
+/* Print Styles - Optimized for 50mm x 15mm thermal printers */
+@media print {
+    @page {
+        size: 50mm 15mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+
+    html,
+    body {
+        width: 50mm !important;
+        height: 15mm !important;
+        max-width: 50mm !important;
+        max-height: 15mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
+    }
+
+    body * {
+        visibility: hidden;
+    }
+
+    /* Show print-only container and all its contents */
+    .barcode-label-print,
+    .barcode-label-print * {
+        visibility: visible !important;
+    }
+
+    .barcode-label-print {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 50mm !important;
+        height: 15mm !important;
+        max-width: 50mm !important;
+        min-width: 50mm !important;
+        max-height: 15mm !important;
+        min-height: 15mm !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        box-shadow: none !important;
+        border: none !important;
+        background: white !important;
+        page-break-after: auto !important;
+        font-family: Arial, sans-serif !important;
+        font-size: 7pt !important;
+        line-height: 0 !important;
+        color: #000000 !important;
+        font-weight: 400 !important;
+        overflow: hidden !important;
+        display: flex !important;
+        box-sizing: border-box !important;
+    }
+
+    .barcode-label-container {
+        display: flex !important;
+        width: 100% !important;
+        height: 100% !important;
+        align-items: flex-start !important;
+        justify-content: space-between !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .barcode-section {
+        width: 80% !important;
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        padding-right: 0.2mm !important;
+        padding-left: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        line-height: 0 !important;
+    }
+
+    .barcode-wrapper {
+        width: 100% !important;
+        height: 100% !important;
+        display: flex !important;
+        align-items: flex-start !important;
+        justify-content: center !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        vertical-align: top !important;
+        line-height: 0 !important;
+    }
+
+    .barcode-label-print .barcode-svg {
+        width: 100% !important;
+        height: auto !important;
+        max-height: 15mm !important;
+        max-width: 100% !important;
+        display: block !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        vertical-align: top !important;
+        line-height: 0 !important;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+    
+    .barcode-label-print .barcode-svg svg {
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block !important;
+        vertical-align: top !important;
+        overflow: visible !important;
+        line-height: 0 !important;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+    }
+    
+    .barcode-label-print .barcode-svg svg text {
+        margin: 0 !important;
+        padding: 0 !important;
+        line-height: 1 !important;
+    }
+
+    .price-section {
+        width: 20% !important;
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        padding-left: 0.2mm !important;
+        padding-right: 0 !important;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+        box-sizing: border-box !important;
+        border-left: 0.5px solid #000 !important;
+        overflow: visible !important;
+        margin: 0 !important;
+    }
+
+    .price-label {
+        font-size: 7pt !important;
+        font-weight: bold !important;
+        line-height: 1.1 !important;
+        text-align: center !important;
+        white-space: nowrap !important;
+        width: 100% !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .no-print,
+    .no-print * {
+        display: none !important;
+    }
+}
+

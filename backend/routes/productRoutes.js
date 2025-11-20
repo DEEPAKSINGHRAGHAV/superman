@@ -4,6 +4,7 @@ const router = express.Router();
 const Product = require('../models/Product');
 const InventoryService = require('../services/inventoryService');
 const PricingService = require('../services/pricingService');
+const BarcodeService = require('../services/barcodeService');
 const asyncHandler = require('../middleware/asyncHandler');
 const { protect, requirePermission, requireAnyPermission } = require('../middleware/auth');
 const { validateRequest, validatePagination, validateDateRange } = require('../middleware/validation');
@@ -454,6 +455,47 @@ router.post('/',
 
             // Set createdBy to current user
             req.body.createdBy = req.user._id;
+
+            // Auto-generate barcode if not provided
+            const barcodeValue = req.body.barcode;
+            const isEmptyBarcode = !barcodeValue || (typeof barcodeValue === 'string' && barcodeValue.trim() === '');
+            
+            if (isEmptyBarcode) {
+                try {
+                    const generatedBarcode = await BarcodeService.generateNextBarcode();
+                    req.body.barcode = generatedBarcode;
+                    console.log('Auto-generated barcode:', generatedBarcode);
+                } catch (barcodeError) {
+                    console.error('Error generating barcode:', barcodeError);
+                    // Continue without barcode if generation fails
+                    // The product can still be created without a barcode
+                    delete req.body.barcode;
+                }
+            } else {
+                // Validate provided barcode if it exists
+                const trimmedBarcode = typeof barcodeValue === 'string' ? barcodeValue.trim() : String(barcodeValue).trim();
+                if (trimmedBarcode) {
+                    // Check if barcode already exists
+                    const exists = await BarcodeService.barcodeExists(trimmedBarcode);
+                    if (exists) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Barcode already exists'
+                        });
+                    }
+                    req.body.barcode = trimmedBarcode;
+                } else {
+                    // Empty string after trim, generate barcode
+                    try {
+                        const generatedBarcode = await BarcodeService.generateNextBarcode();
+                        req.body.barcode = generatedBarcode;
+                        console.log('Auto-generated barcode (empty string):', generatedBarcode);
+                    } catch (barcodeError) {
+                        console.error('Error generating barcode:', barcodeError);
+                        delete req.body.barcode;
+                    }
+                }
+            }
 
             const product = await Product.create(req.body);
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Edit, Trash2, Eye, Package } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Eye, Package, Printer } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -8,6 +8,7 @@ import Badge from '../../components/common/Badge';
 import Table from '../../components/common/Table';
 import Pagination from '../../components/common/Pagination';
 import Modal from '../../components/common/Modal';
+import BarcodeLabel from '../../components/products/BarcodeLabel';
 import { productsAPI } from '../../services/api';
 import { formatCurrency, getStockStatus, debounce } from '../../utils/helpers';
 import toast from 'react-hot-toast';
@@ -30,6 +31,7 @@ const ProductList = () => {
         sortOrder: 'desc',
     });
     const [deleteModal, setDeleteModal] = useState({ isOpen: false, product: null });
+    const [barcodeLabelProduct, setBarcodeLabelProduct] = useState(null);
 
     useEffect(() => {
         fetchProducts();
@@ -192,6 +194,18 @@ const ProductList = () => {
                     >
                         <Edit size={18} />
                     </button>
+                    {row.barcode && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setBarcodeLabelProduct(row);
+                            }}
+                            className="p-1 text-purple-600 hover:bg-purple-50 rounded"
+                            title="Print Barcode Label"
+                        >
+                            <Printer size={18} />
+                        </button>
+                    )}
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
@@ -280,6 +294,17 @@ const ProductList = () => {
                     will deactivate the product.
                 </p>
             </Modal>
+
+            {/* Barcode Label Print Modal */}
+            {barcodeLabelProduct && (
+                <BarcodeLabel
+                    product={barcodeLabelProduct}
+                    onClose={() => setBarcodeLabelProduct(null)}
+                    onPrint={() => {
+                        window.print();
+                    }}
+                />
+            )}
         </div>
     );
 };

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Edit, Trash2, ArrowLeft, Package, DollarSign, BarChart, Layers, Clock, AlertCircle } from 'lucide-react';
+import { Edit, Trash2, ArrowLeft, Package, DollarSign, BarChart, Layers, Clock, AlertCircle, Printer } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
 import Loading from '../../components/common/Loading';
 import Modal from '../../components/common/Modal';
+import BarcodeLabel from '../../components/products/BarcodeLabel';
 import { productsAPI, batchesAPI } from '../../services/api';
 import { formatCurrency, formatDate } from '../../utils/helpers';
 import toast from 'react-hot-toast';
@@ -19,6 +20,7 @@ const ProductDetail = () => {
     const [loadingBatches, setLoadingBatches] = useState(false);
     const [showBatches, setShowBatches] = useState(true);
     const [deleteModal, setDeleteModal] = useState(false);
+    const [showBarcodeLabel, setShowBarcodeLabel] = useState(false);
 
     useEffect(() => {
         if (id) {
@@ -100,6 +102,15 @@ const ProductDetail = () => {
                     </div>
                 </div>
                 <div className="flex items-center space-x-2">
+                    {product.barcode && (
+                        <Button
+                            variant="secondary"
+                            icon={<Printer size={18} />}
+                            onClick={() => setShowBarcodeLabel(true)}
+                        >
+                            Print Label
+                        </Button>
+                    )}
                     <Button
                         variant="secondary"
                         icon={<Edit size={18} />}
@@ -285,6 +296,17 @@ const ProductDetail = () => {
                     Are you sure you want to delete <strong>{product.name}</strong>? This action will deactivate the product.
                 </p>
             </Modal>
+
+            {/* Barcode Label Print Modal */}
+            {showBarcodeLabel && product && (
+                <BarcodeLabel
+                    product={product}
+                    onClose={() => setShowBarcodeLabel(false)}
+                    onPrint={() => {
+                        window.print();
+                    }}
+                />
+            )}
         </div>
     );
 };
