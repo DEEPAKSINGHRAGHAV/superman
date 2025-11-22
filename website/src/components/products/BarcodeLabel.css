@@ -6,6 +6,7 @@
     padding: 0;
     margin: 0;
     background: white;
+    border: 1px solid #000000;
     font-family: Arial, sans-serif;
     font-size: 7pt;
     line-height: 0;
@@ -39,6 +40,7 @@
     box-sizing: border-box;
     overflow: hidden;
     line-height: 0;
+    margin: 0;
 }
 
 .barcode-wrapper {
@@ -51,6 +53,10 @@
     margin: 0;
     padding: 0;
     line-height: 0;
+    position: relative;
+    top: 0;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
 }
 
 .barcode-label-print .barcode-svg {
@@ -64,6 +70,10 @@
     padding: 0;
     vertical-align: top;
     line-height: 0;
+    position: relative;
+    top: 0;
+    margin-top: 0 !important;
+    padding-top: 0 !important;
 }
 
 .barcode-label-print .barcode-svg svg {
@@ -74,6 +84,11 @@
     line-height: 0 !important;
     margin-top: 0 !important;
     margin-bottom: 0 !important;
+    padding-top: 0 !important;
+    position: relative !important;
+    top: 0 !important;
+    overflow: visible !important;
+    /* DO NOT set fill on SVG - only on rect elements to avoid black patch */
 }
 
 .barcode-label-print .barcode-svg svg text {
@@ -160,7 +175,7 @@
         padding: 0 !important;
         margin: 0 !important;
         box-shadow: none !important;
-        border: none !important;
+        border: 1px solid #000000 !important;
         background: white !important;
         page-break-after: auto !important;
         font-family: Arial, sans-serif !important;
@@ -199,6 +214,8 @@
         overflow: hidden !important;
         margin: 0 !important;
         line-height: 0 !important;
+        position: relative !important;
+        top: 0 !important;
     }
 
     .barcode-wrapper {
@@ -211,8 +228,12 @@
         overflow: hidden !important;
         margin: 0 !important;
         padding: 0 !important;
+        margin-top: 0 !important;
+        padding-top: 0 !important;
         vertical-align: top !important;
         line-height: 0 !important;
+        position: relative !important;
+        top: 0 !important;
     }
 
     .barcode-label-print .barcode-svg {
@@ -224,21 +245,48 @@
         box-sizing: border-box !important;
         margin: 0 !important;
         padding: 0 !important;
+        margin-top: 0 !important;
+        padding-top: 0 !important;
         vertical-align: top !important;
         line-height: 0 !important;
-        margin-top: 0 !important;
         margin-bottom: 0 !important;
+        position: relative !important;
+        top: 0 !important;
     }
     
     .barcode-label-print .barcode-svg svg {
         margin: 0 !important;
         padding: 0 !important;
+        margin-top: 0 !important;
+        padding-top: 0 !important;
         display: block !important;
         vertical-align: top !important;
         overflow: visible !important;
         line-height: 0 !important;
-        margin-top: 0 !important;
         margin-bottom: 0 !important;
+        position: relative !important;
+        top: 0 !important;
+        /* DO NOT set fill on SVG element - causes black patch */
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+    
+    /* Ensure all barcode bars (rect elements only) are pure black */
+    .barcode-label-print .barcode-svg svg rect {
+        fill: #000000 !important;
+        stroke: none !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+    }
+    
+    /* Ensure barcode text is dark */
+    .barcode-label-print .barcode-svg svg text {
+        fill: #000000 !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
     }
     
     .barcode-label-print .barcode-svg svg text {
