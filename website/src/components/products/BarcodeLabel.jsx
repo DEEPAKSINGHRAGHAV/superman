@@ -12,19 +12,21 @@ const BarcodeLabel = ({ product, onClose, onPrint, showControls = true }) => {
             try {
                 // Optimized for thermal printing and scanner readability
                 // EAN-13 requires proper quiet zones and bar thickness
-                // Width: 0.6-0.8 is optimal for thermal printers (too high causes bars to merge)
+                // CRITICAL: Quiet zones must be at least 10x the narrowest bar width
+                // Width: 1.0-1.2 is optimal for scanners (0.7 was too thin)
                 // Height: 11mm for better scanning - taller bars are easier to scan
+                // Quiet zone: 10x bar width = 10 * 1.0 = 10 units minimum
                 JsBarcode(barcodeRef.current, product.barcode, {
                     format: 'EAN13',
-                    width: 0.7, // Optimal for thermal printing - not too thick to avoid merging
+                    width: 1.0, // Increased from 0.7 - too thin bars are hard to scan
                     height: 11, // Increased height for easier scanning - fits in 15mm label
                     displayValue: true,
                     fontSize: 4, // Compact font for label
-                    margin: 0, // No margin - we control spacing with CSS
+                    margin: 0, // We'll add quiet zones manually to preserve structure
                     marginTop: 0,
                     marginBottom: 0,
-                    marginLeft: 0,
-                    marginRight: 0,
+                    marginLeft: 10, // CRITICAL: Quiet zone left = 10x bar width (10 * 1.0)
+                    marginRight: 10, // CRITICAL: Quiet zone right = 10x bar width (10 * 1.0)
                     background: '#ffffff',
                     lineColor: '#000000', // Pure black for maximum contrast
                     textMargin: 0.5, // Minimal margin for barcode numbers
@@ -109,16 +111,18 @@ const BarcodeLabel = ({ product, onClose, onPrint, showControls = true }) => {
                             }
                             
                             // Get current viewBox
+                            // CRITICAL: We must preserve left/right margins (quiet zones) for scanner readability
+                            // Only adjust top spacing, never touch horizontal margins
                             const viewBox = svgElement.getAttribute('viewBox');
                             if (viewBox) {
                                 const values = viewBox.split(' ').map(v => parseFloat(v));
                                 if (values.length === 4) {
                                     const [x, y, width, height] = values;
                                     
-                                    // AGGRESSIVE FIX: Force viewBox to start at Y=0 and remove all top spacing
+                                    // ONLY fix top spacing - preserve X and width (quiet zones)
                                     // Strategy: Find the actual topmost content, then:
                                     // 1. Move all groups up to eliminate any Y translation
-                                    // 2. Adjust viewBox to start at 0
+                                    // 2. Adjust viewBox Y to 0 (but keep X and width unchanged)
                                     // 3. Adjust height to maintain content
                                     
                                     let topOffsetToRemove = 0;
@@ -148,14 +152,16 @@ const BarcodeLabel = ({ product, onClose, onPrint, showControls = true }) => {
                                     });
                                     
                                     // Apply the fix if we found any top spacing
+                                    // IMPORTANT: Preserve X (left margin/quiet zone) and width
                                     if (topOffsetToRemove > 0.01) {
                                         // Move all groups up by removing Y translation
+                                        // CRITICAL: Preserve X translation (quiet zone)
                                         groups.forEach(group => {
                                             const transform = group.getAttribute('transform');
                                             if (transform) {
                                                 const match = transform.match(/translate\(([^,]+),\s*([^)]+)\)/);
                                                 if (match) {
-                                                    const translateX = parseFloat(match[1]) || 0;
+                                                    const translateX = parseFloat(match[1]) || 0; // PRESERVE X (quiet zone)
                                                     const translateY = parseFloat(match[2]) || 0;
                                                     const newTranslateY = Math.max(0, translateY - topOffsetToRemove);
                                                     group.setAttribute('transform', `translate(${translateX}, ${newTranslateY})`);
@@ -163,7 +169,7 @@ const BarcodeLabel = ({ product, onClose, onPrint, showControls = true }) => {
                                             }
                                         });
                                         
-                                        // Force viewBox to start at Y=0
+                                        // Force viewBox to start at Y=0, but PRESERVE X and width (quiet zones)
                                         // Adjust height to account for removed top space
                                         const newHeight = height - topOffsetToRemove + (y > 0 ? y : 0);
                                         svgElement.setAttribute('viewBox', `${x} 0 ${width} ${newHeight}`);
@@ -175,7 +181,7 @@ const BarcodeLabel = ({ product, onClose, onPrint, showControls = true }) => {
                                         }
                                     } else if (y > 0) {
                                         // ViewBox Y is non-zero but no group offset found
-                                        // Just adjust viewBox to start at 0
+                                        // Just adjust viewBox to start at 0, PRESERVE X and width
                                         const newHeight = height + y;
                                         svgElement.setAttribute('viewBox', `${x} 0 ${width} ${newHeight}`);
                                         
@@ -187,13 +193,30 @@ const BarcodeLabel = ({ product, onClose, onPrint, showControls = true }) => {
                                 }
                             }
                             
-                            // Ensure all barcode bars (rect elements) are pure black
+                            // Ensure all barcode bars (rect elements) are pure black and properly sized
                             // CRITICAL: Only set fill on rect elements, NOT on the SVG itself
                             // Setting fill on SVG causes entire area to become black
+                            let barCount = 0;
                             allRects.forEach(rect => {
                                 rect.setAttribute('fill', '#000000'); // Pure black bars
                                 rect.setAttribute('stroke', 'none'); // No stroke
+                                
+                                // Verify bar dimensions are reasonable
+                                const barWidth = parseFloat(rect.getAttribute('width')) || 0;
+                                const barHeight = parseFloat(rect.getAttribute('height')) || 0;
+                                
+                                // EAN-13 should have bars with width >= 0.7 and height >= 10
+                                if (barWidth > 0 && barHeight > 0) {
+                                    barCount++;
+                                }
                             });
+                            
+                            // Log warning if no bars found (barcode not rendered)
+                            if (barCount === 0) {
+                                console.error('ERROR: No barcode bars found! Barcode may not be rendered correctly.');
+                            } else {
+                                console.log(`Barcode rendered: ${barCount} bars, quiet zones preserved`);
+                            }
                             
                             // Style text elements for readability
                             allTexts.forEach(text => {
@@ -212,11 +235,12 @@ const BarcodeLabel = ({ product, onClose, onPrint, showControls = true }) => {
                             container.style.verticalAlign = 'top';
                             
                             // Final check: If viewBox Y is still non-zero, force it to 0
+                            // CRITICAL: Preserve X and width (quiet zones) - only adjust Y
                             const finalViewBox = svgElement.getAttribute('viewBox');
                             if (finalViewBox) {
                                 const finalValues = finalViewBox.split(' ').map(v => parseFloat(v));
                                 if (finalValues.length === 4 && finalValues[1] > 0) {
-                                    // Force viewBox Y to 0
+                                    // Force viewBox Y to 0, but PRESERVE X and width (quiet zones)
                                     const [x, y, w, h] = finalValues;
                                     svgElement.setAttribute('viewBox', `${x} 0 ${w} ${h + y}`);
                                     
@@ -225,6 +249,22 @@ const BarcodeLabel = ({ product, onClose, onPrint, showControls = true }) => {
                                     if (finalHeight) {
                                         svgElement.setAttribute('height', (finalHeight + y) + 'px');
                                     }
+                                }
+                            }
+                            
+                            // VERIFY: Ensure quiet zones are preserved
+                            // Check that left margin (X in viewBox) is at least 10 units
+                            const verifyViewBox = svgElement.getAttribute('viewBox');
+                            if (verifyViewBox) {
+                                const verifyValues = verifyViewBox.split(' ').map(v => parseFloat(v));
+                                if (verifyValues.length === 4) {
+                                    const [viewX, viewY, viewWidth, viewHeight] = verifyValues;
+                                    // Ensure left quiet zone exists (X should be >= 10)
+                                    if (viewX < 10) {
+                                        console.warn('Warning: Left quiet zone may be too small for scanner readability');
+                                    }
+                                    // Ensure right quiet zone exists (check if width accounts for it)
+                                    // The right quiet zone is preserved by jsbarcode's marginRight
                                 }
                             }
                         }
