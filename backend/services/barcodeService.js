@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Product = require('../models/Product');
 
 class BarcodeService {
@@ -105,9 +106,54 @@ class BarcodeService {
 
     /**
      * Generate next available EAN-13 barcode for internal products
+     * Includes retry mechanism to handle race conditions
+     * @param {number} maxRetries - Maximum number of retry attempts (default: 5)
      * @returns {Promise<string>} Next available barcode
      */
-    static async generateNextBarcode() {
+    static async generateNextBarcode(maxRetries = 5) {
+        let lastSequence = null;
+        
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            try {
+                // Get next sequence (will be higher than lastSequence if we're retrying)
+                let nextSequence = await this.getNextSequence();
+                
+                // If we're retrying and got the same sequence, increment manually
+                if (lastSequence !== null && nextSequence <= lastSequence) {
+                    nextSequence = lastSequence + 1;
+                }
+                
+                const generatedBarcode = this.generateEAN13(nextSequence);
+                lastSequence = nextSequence;
+                
+                // Verify the generated barcode doesn't already exist (race condition check)
+                const exists = await this.barcodeExists(generatedBarcode);
+                if (!exists) {
+                    return generatedBarcode;
+                }
+                
+                // If barcode exists, increment sequence and retry
+                if (attempt < maxRetries - 1) {
+                    console.warn(`Generated barcode ${generatedBarcode} already exists, retrying with next sequence... (attempt ${attempt + 1}/${maxRetries})`);
+                    // Small delay to allow other concurrent requests to complete
+                    await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+                }
+            } catch (error) {
+                console.error(`Error generating barcode (attempt ${attempt + 1}/${maxRetries}):`, error);
+                if (attempt === maxRetries - 1) {
+                    throw error;
+                }
+                // Wait before retry
+                await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+            }
+        }
+        
+        // If all retries failed due to collisions, use lastSequence + 1
+        if (lastSequence !== null) {
+            return this.generateEAN13(lastSequence + 1);
+        }
+        
+        // Fallback: try one more time with a fresh sequence
         const nextSequence = await this.getNextSequence();
         return this.generateEAN13(nextSequence);
     }
@@ -144,9 +190,18 @@ class BarcodeService {
      * @returns {Promise<boolean>} True if barcode exists
      */
     static async barcodeExists(barcode, excludeProductId = null) {
-        const query = { barcode };
+        if (!barcode || typeof barcode !== 'string') {
+            return false;
+        }
+        
+        const query = { barcode: barcode.trim() };
         if (excludeProductId) {
-            query._id = { $ne: excludeProductId };
+            // Convert to ObjectId if it's a valid ObjectId string
+            if (mongoose.Types.ObjectId.isValid(excludeProductId)) {
+                query._id = { $ne: new mongoose.Types.ObjectId(excludeProductId) };
+            } else {
+                query._id = { $ne: excludeProductId };
+            }
         }
         const existing = await Product.findOne(query);
         return !!existing;

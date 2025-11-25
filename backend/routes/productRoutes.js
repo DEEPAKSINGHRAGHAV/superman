@@ -456,9 +456,15 @@ router.post('/',
             // Set createdBy to current user
             req.body.createdBy = req.user._id;
 
-            // Auto-generate barcode if not provided
+            // Auto-generate barcode if not provided or empty
             const barcodeValue = req.body.barcode;
-            const isEmptyBarcode = !barcodeValue || (typeof barcodeValue === 'string' && barcodeValue.trim() === '');
+            // Check if barcode is empty: null, undefined, empty string, or whitespace-only string
+            // Handle edge cases: 0 and false are valid values, so check type explicitly
+            const isEmptyBarcode = 
+                barcodeValue === null || 
+                barcodeValue === undefined || 
+                barcodeValue === '' ||
+                (typeof barcodeValue === 'string' && barcodeValue.trim() === '');
             
             if (isEmptyBarcode) {
                 try {
@@ -475,6 +481,17 @@ router.post('/',
                 // Validate provided barcode if it exists
                 const trimmedBarcode = typeof barcodeValue === 'string' ? barcodeValue.trim() : String(barcodeValue).trim();
                 if (trimmedBarcode) {
+                    // Validate EAN-13 format if it looks like a barcode (13 digits)
+                    if (trimmedBarcode.length === 13 && /^\d{13}$/.test(trimmedBarcode)) {
+                        const isValidEAN13 = BarcodeService.validateEAN13(trimmedBarcode);
+                        if (!isValidEAN13) {
+                            return res.status(400).json({
+                                success: false,
+                                message: 'Invalid EAN-13 barcode format (check digit mismatch)'
+                            });
+                        }
+                    }
+                    
                     // Check if barcode already exists
                     const exists = await BarcodeService.barcodeExists(trimmedBarcode);
                     if (exists) {
@@ -557,6 +574,93 @@ router.put('/:id',
                 success: false,
                 message: 'Invalid product ID format'
             });
+        }
+
+        // Check if product exists to get current barcode status
+        const existingProduct = await Product.findById(req.params.id).select('barcode').lean();
+        if (!existingProduct) {
+            return res.status(404).json({
+                success: false,
+                message: 'Product not found'
+            });
+        }
+
+        // Auto-generate barcode if:
+        // 1. Barcode field is not in request (treat as intentionally cleared) - always generate new
+        // 2. Barcode field is in request but is empty/cleared - generate new
+        // 3. Barcode field is in request with value - validate and use
+        const hasBarcodeInRequest = 'barcode' in req.body;
+
+        if (hasBarcodeInRequest) {
+            // Barcode field is explicitly in the request
+            const barcodeValue = req.body.barcode;
+            // Check if barcode is empty: null, undefined, empty string, or whitespace-only string
+            // Handle edge cases: 0 and false are valid values, so check type explicitly
+            const isEmptyBarcode = 
+                barcodeValue === null || 
+                barcodeValue === undefined || 
+                barcodeValue === '' ||
+                (typeof barcodeValue === 'string' && barcodeValue.trim() === '');
+            
+            if (isEmptyBarcode) {
+                // Barcode is empty/cleared - generate new one based on latest sequence
+                try {
+                    const generatedBarcode = await BarcodeService.generateNextBarcode();
+                    req.body.barcode = generatedBarcode;
+                    console.log('Auto-generated barcode on update (empty/cleared):', generatedBarcode);
+                } catch (barcodeError) {
+                    console.error('Error generating barcode on update:', barcodeError);
+                    // Continue without barcode if generation fails
+                    delete req.body.barcode;
+                }
+            } else {
+                // Validate provided barcode if it exists
+                const trimmedBarcode = typeof barcodeValue === 'string' ? barcodeValue.trim() : String(barcodeValue).trim();
+                if (trimmedBarcode) {
+                    // Validate EAN-13 format if it looks like a barcode (13 digits)
+                    if (trimmedBarcode.length === 13 && /^\d{13}$/.test(trimmedBarcode)) {
+                        const isValidEAN13 = BarcodeService.validateEAN13(trimmedBarcode);
+                        if (!isValidEAN13) {
+                            return res.status(400).json({
+                                success: false,
+                                message: 'Invalid EAN-13 barcode format (check digit mismatch)'
+                            });
+                        }
+                    }
+                    
+                    // Check if barcode already exists (excluding current product)
+                    // This allows updating with the same barcode (same product)
+                    const exists = await BarcodeService.barcodeExists(trimmedBarcode, req.params.id);
+                    if (exists) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Barcode already exists on another product'
+                        });
+                    }
+                    req.body.barcode = trimmedBarcode;
+                } else {
+                    // Empty string after trim - generate new barcode
+                    try {
+                        const generatedBarcode = await BarcodeService.generateNextBarcode();
+                        req.body.barcode = generatedBarcode;
+                        console.log('Auto-generated barcode on update (empty string after trim):', generatedBarcode);
+                    } catch (barcodeError) {
+                        console.error('Error generating barcode on update:', barcodeError);
+                        delete req.body.barcode;
+                    }
+                }
+            }
+        } else {
+            // Barcode field is NOT in request - treat as intentionally cleared
+            // Generate new barcode (will overwrite existing if product had one)
+            try {
+                const generatedBarcode = await BarcodeService.generateNextBarcode();
+                req.body.barcode = generatedBarcode;
+                console.log('Auto-generated barcode on update (key not sent, treated as cleared):', generatedBarcode);
+            } catch (barcodeError) {
+                console.error('Error generating barcode on update:', barcodeError);
+                // Continue without barcode if generation fails
+            }
         }
 
         const product = await Product.findByIdAndUpdate(
