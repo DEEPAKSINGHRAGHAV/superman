@@ -30,8 +30,8 @@ const barcodeCounterSchema = new mongoose.Schema({
     collection: 'barcodecounters' // Explicit collection name
 });
 
-// Ensure index for fast lookup (though _id is already indexed by default)
-barcodeCounterSchema.index({ _id: 1 }, { unique: true });
+// Note: _id is already indexed by default in MongoDB, no need to create custom index
+// MongoDB doesn't allow overwriting the default _id index
 
 module.exports = mongoose.model('BarcodeCounter', barcodeCounterSchema);
 
