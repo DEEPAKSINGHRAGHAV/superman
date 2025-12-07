@@ -99,9 +99,10 @@ class BarcodeService {
      * Generate next available EAN-13 barcode for internal products
      * Uses atomic counter, so no race conditions or retries needed
      * @param {mongoose.ClientSession} session - Optional MongoDB session for transactions
+     * @param {string} excludeProductId - Product ID to exclude from existence check (for updates)
      * @returns {Promise<string>} Next available barcode
      */
-    static async generateNextBarcode(session = null) {
+    static async generateNextBarcode(session = null, excludeProductId = null) {
         try {
             // Get next sequence atomically (no race conditions possible)
             const nextSequence = await this.getNextSequence(session);
@@ -111,7 +112,8 @@ class BarcodeService {
             
             // Optional: Verify barcode doesn't exist (safety check)
             // This should never happen with atomic counter, but good for safety
-            const exists = await this.barcodeExists(generatedBarcode, null, session);
+            // Exclude current product if provided (for update scenarios)
+            const exists = await this.barcodeExists(generatedBarcode, excludeProductId, session);
             if (exists) {
                 // This is extremely rare - indicates data corruption or manual intervention
                 console.error(`WARNING: Generated barcode ${generatedBarcode} already exists! This should not happen with atomic counter.`);

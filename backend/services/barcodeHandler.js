@@ -71,7 +71,7 @@ class BarcodeHandler {
     }) {
         // Case 1: Barcode field not in request (treat as intentionally cleared)
         if (!hasBarcodeInRequest) {
-            const generatedBarcode = await BarcodeService.generateNextBarcode(session);
+            const generatedBarcode = await BarcodeService.generateNextBarcode(session, excludeProductId);
             return {
                 barcode: generatedBarcode,
                 generated: true
@@ -83,7 +83,7 @@ class BarcodeHandler {
 
         if (isEmpty) {
             // Barcode is empty/cleared - generate new one
-            const generatedBarcode = await BarcodeService.generateNextBarcode(session);
+            const generatedBarcode = await BarcodeService.generateNextBarcode(session, excludeProductId);
             return {
                 barcode: generatedBarcode,
                 generated: true
@@ -95,7 +95,7 @@ class BarcodeHandler {
 
         if (!trimmedBarcode) {
             // Empty string after trim - generate barcode
-            const generatedBarcode = await BarcodeService.generateNextBarcode(session);
+            const generatedBarcode = await BarcodeService.generateNextBarcode(session, excludeProductId);
             return {
                 barcode: generatedBarcode,
                 generated: true
