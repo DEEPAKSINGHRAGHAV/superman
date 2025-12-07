@@ -589,22 +589,63 @@ router.put('/:id',
             }
 
             // Update product within transaction
-            const product = await Product.findByIdAndUpdate(
-                req.params.id,
-                req.body,
-                {
-                    new: true,
-                    runValidators: true,
-                    session
-                }
-            );
+            // Handle duplicate key errors (barcode already exists) with retry
+            let product;
+            let retryCount = 0;
+            const maxRetries = 3;
+            
+            while (retryCount < maxRetries) {
+                try {
+                    product = await Product.findByIdAndUpdate(
+                        req.params.id,
+                        req.body,
+                        {
+                            new: true,
+                            runValidators: true,
+                            session
+                        }
+                    );
 
-            if (!product) {
-                await session.abortTransaction();
-                return res.status(404).json({
-                    success: false,
-                    message: 'Product not found'
-                });
+                    if (!product) {
+                        await session.abortTransaction();
+                        return res.status(404).json({
+                            success: false,
+                            message: 'Product not found'
+                        });
+                    }
+
+                    // Success - break out of retry loop
+                    break;
+                } catch (updateError) {
+                    // Check if it's a duplicate key error for barcode
+                    if (updateError.message && updateError.message.includes('duplicate key') && 
+                        updateError.message.includes('barcode') && retryCount < maxRetries - 1) {
+                        retryCount++;
+                        console.warn(`Duplicate barcode error on update, regenerating barcode... (attempt ${retryCount}/${maxRetries})`);
+                        
+                        // Regenerate barcode and retry
+                        try {
+                            const barcodeResult = await BarcodeHandler.processBarcode({
+                                barcodeValue: undefined,
+                                hasBarcodeInRequest: false,
+                                existingBarcode: existingProduct.barcode,
+                                excludeProductId: req.params.id,
+                                session
+                            });
+                            req.body.barcode = barcodeResult.barcode;
+                            continue; // Retry the update
+                        } catch (barcodeError) {
+                            await session.abortTransaction();
+                            return res.status(400).json({
+                                success: false,
+                                message: `Failed to generate unique barcode: ${barcodeError.message}`
+                            });
+                        }
+                    } else {
+                        // Not a duplicate key error or max retries reached
+                        throw updateError;
+                    }
+                }
             }
 
             // Commit transaction
@@ -618,6 +659,15 @@ router.put('/:id',
             // Rollback transaction on any error
             await session.abortTransaction();
             console.error('Error updating product:', error);
+            
+            // Handle duplicate key error with better message
+            if (error.message && error.message.includes('duplicate key') && error.message.includes('barcode')) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Barcode already exists. Please try again or contact support if the issue persists.'
+                });
+            }
+            
             throw error;
         } finally {
             // Always end session

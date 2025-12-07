@@ -97,34 +97,81 @@ class BarcodeService {
 
     /**
      * Generate next available EAN-13 barcode for internal products
-     * Uses atomic counter, so no race conditions or retries needed
+     * Uses atomic counter with retry logic for duplicate key errors
      * @param {mongoose.ClientSession} session - Optional MongoDB session for transactions
      * @param {string} excludeProductId - Product ID to exclude from existence check (for updates)
+     * @param {number} maxRetries - Maximum retry attempts if duplicate found (default: 3)
      * @returns {Promise<string>} Next available barcode
      */
-    static async generateNextBarcode(session = null, excludeProductId = null) {
-        try {
-            // Get next sequence atomically (no race conditions possible)
-            const nextSequence = await this.getNextSequence(session);
-            
-            // Generate barcode from sequence
-            const generatedBarcode = this.generateEAN13(nextSequence);
-            
-            // Optional: Verify barcode doesn't exist (safety check)
-            // This should never happen with atomic counter, but good for safety
-            // Exclude current product if provided (for update scenarios)
-            const exists = await this.barcodeExists(generatedBarcode, excludeProductId, session);
-            if (exists) {
-                // This is extremely rare - indicates data corruption or manual intervention
-                console.error(`WARNING: Generated barcode ${generatedBarcode} already exists! This should not happen with atomic counter.`);
-                throw new Error('Barcode collision detected - please contact support');
+    static async generateNextBarcode(session = null, excludeProductId = null, maxRetries = 3) {
+        let lastSequence = null;
+        let attempts = 0;
+        
+        while (attempts < maxRetries) {
+            try {
+                // Get next sequence atomically (no race conditions possible)
+                let nextSequence = await this.getNextSequence(session);
+                
+                // If we're retrying and got the same sequence, increment manually
+                if (lastSequence !== null && nextSequence <= lastSequence) {
+                    nextSequence = lastSequence + 1;
+                    // Manually update counter to avoid future conflicts
+                    try {
+                        await BarcodeCounter.findByIdAndUpdate(
+                            'barcode_sequence',
+                            { $set: { sequence: nextSequence } },
+                            { session, upsert: true }
+                        );
+                    } catch (counterError) {
+                        // If counter update fails, continue with the sequence anyway
+                        console.warn('Could not update counter, continuing with sequence:', nextSequence);
+                    }
+                }
+                
+                // Generate barcode from sequence
+                const generatedBarcode = this.generateEAN13(nextSequence);
+                lastSequence = nextSequence;
+                
+                // Check if barcode exists (excluding current product for updates)
+                const exists = await this.barcodeExists(generatedBarcode, excludeProductId, session);
+                if (!exists) {
+                    return generatedBarcode;
+                }
+                
+                // Barcode exists, try next sequence
+                attempts++;
+                if (attempts < maxRetries) {
+                    console.warn(`Generated barcode ${generatedBarcode} already exists, trying next sequence... (attempt ${attempts}/${maxRetries})`);
+                    // Increment sequence for next attempt
+                    lastSequence = nextSequence;
+                }
+            } catch (error) {
+                // If it's a duplicate key error from database, retry with next sequence
+                if (error.message && error.message.includes('duplicate key') && attempts < maxRetries - 1) {
+                    attempts++;
+                    console.warn(`Duplicate key error, retrying with next sequence... (attempt ${attempts}/${maxRetries})`);
+                    if (lastSequence !== null) {
+                        lastSequence++;
+                    }
+                    continue;
+                }
+                // For other errors or max retries reached, throw
+                console.error('Error generating barcode:', error);
+                throw error;
             }
-            
-            return generatedBarcode;
-        } catch (error) {
-            console.error('Error generating barcode:', error);
-            throw error; // Fail fast instead of silent fallback
         }
+        
+        // If all retries failed, try one more time with incremented sequence
+        if (lastSequence !== null) {
+            const finalSequence = lastSequence + 1;
+            const finalBarcode = this.generateEAN13(finalSequence);
+            console.warn(`Using fallback barcode after ${maxRetries} retries: ${finalBarcode}`);
+            return finalBarcode;
+        }
+        
+        // Last resort: get fresh sequence
+        const nextSequence = await this.getNextSequence(session);
+        return this.generateEAN13(nextSequence);
     }
 
     /**
