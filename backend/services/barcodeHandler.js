@@ -59,6 +59,7 @@ class BarcodeHandler {
      * @param {Object} options - Processing options
      * @param {any} options.barcodeValue - Barcode value from request
      * @param {boolean} options.hasBarcodeInRequest - Whether barcode field is in request
+     * @param {string} options.existingBarcode - Existing barcode from product (for updates)
      * @param {string} options.excludeProductId - Product ID to exclude from uniqueness check (for updates)
      * @param {mongoose.ClientSession} options.session - MongoDB session for transactions
      * @returns {Promise<Object>} { barcode: string, generated: boolean } or throws error
@@ -66,11 +67,25 @@ class BarcodeHandler {
     static async processBarcode({
         barcodeValue,
         hasBarcodeInRequest = true,
+        existingBarcode = null,
         excludeProductId = null,
         session = null
     }) {
-        // Case 1: Barcode field not in request (treat as intentionally cleared)
+        // Case 1: Barcode field not in request
         if (!hasBarcodeInRequest) {
+            // For updates: Only generate if product has no barcode
+            if (excludeProductId !== null) {
+                // This is an update - check if product has existing barcode
+                const hasExistingBarcode = existingBarcode && !this.isEmptyBarcode(existingBarcode);
+                if (hasExistingBarcode) {
+                    // Product has barcode, keep it unchanged
+                    return {
+                        barcode: existingBarcode,
+                        generated: false
+                    };
+                }
+            }
+            // Product has no barcode (or this is a create) - generate new one
             const generatedBarcode = await BarcodeService.generateNextBarcode(session, excludeProductId);
             return {
                 barcode: generatedBarcode,

@@ -572,6 +572,7 @@ router.put('/:id',
                 const barcodeResult = await BarcodeHandler.processBarcode({
                     barcodeValue: req.body.barcode,
                     hasBarcodeInRequest: 'barcode' in req.body,
+                    existingBarcode: existingProduct.barcode, // Pass existing barcode for update logic
                     excludeProductId: req.params.id, // Exclude current product from uniqueness check
                     session
                 });
