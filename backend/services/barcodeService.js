@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Product = require('../models/Product');
+const BarcodeCounter = require('../models/BarcodeCounter');
 
 class BarcodeService {
     /**
@@ -57,105 +58,71 @@ class BarcodeService {
     }
 
     /**
-     * Get the next sequence number for internal barcodes
-     * Finds the highest existing barcode with prefix 21 and increments
+     * Get the next sequence number for internal barcodes using atomic counter
+     * Uses MongoDB atomic $inc operation for O(1) performance and race condition safety
+     * @param {mongoose.ClientSession} session - Optional MongoDB session for transactions
      * @returns {Promise<number>} Next sequence number
      */
-    static async getNextSequence() {
+    static async getNextSequence(session = null) {
         try {
-            // Find all products with barcodes starting with "21"
-            const products = await Product.find({
-                barcode: { $regex: /^21/, $exists: true, $ne: null }
-            })
-            .select('barcode')
-            .lean();
+            // Atomic increment - O(1) operation, no race conditions
+            const updateOptions = { 
+                new: true,           // Return updated document
+                upsert: true,        // Create if doesn't exist
+                setDefaultsOnInsert: true
+            };
+            
+            // Add session if provided (for transactions)
+            if (session) {
+                updateOptions.session = session;
+            }
+            
+            const counter = await BarcodeCounter.findByIdAndUpdate(
+                'barcode_sequence',
+                { $inc: { sequence: 1 } },
+                updateOptions
+            );
 
-            if (products.length === 0) {
-                // No existing barcodes with prefix 21, start from 0
-                return 0;
+            // Validate sequence is within valid range
+            if (counter.sequence > 9999999999) {
+                throw new Error('Barcode sequence has reached maximum value (9999999999)');
             }
 
-            // Extract sequence numbers from barcodes
-            const sequences = products
-                .map(product => {
-                    const barcode = product.barcode;
-                    if (!barcode || barcode.length !== 13 || !barcode.startsWith('21')) {
-                        return null;
-                    }
-                    // Extract sequence (digits 2-12, 0-indexed: 2-12, which is 10 digits)
-                    const sequenceStr = barcode.substring(2, 12);
-                    return parseInt(sequenceStr, 10);
-                })
-                .filter(seq => seq !== null && !isNaN(seq));
-
-            if (sequences.length === 0) {
-                return 0;
-            }
-
-            // Find maximum sequence and increment
-            const maxSequence = Math.max(...sequences);
-            return maxSequence + 1;
+            return counter.sequence;
         } catch (error) {
             console.error('Error getting next barcode sequence:', error);
-            // Fallback: try to find any barcode and use a safe default
-            const productCount = await Product.countDocuments();
-            // Use product count as a rough estimate, but ensure it's within valid range
-            return Math.min(productCount, 9999999999);
+            throw new Error(`Failed to generate barcode sequence: ${error.message}`);
         }
     }
 
     /**
      * Generate next available EAN-13 barcode for internal products
-     * Includes retry mechanism to handle race conditions
-     * @param {number} maxRetries - Maximum number of retry attempts (default: 5)
+     * Uses atomic counter, so no race conditions or retries needed
+     * @param {mongoose.ClientSession} session - Optional MongoDB session for transactions
      * @returns {Promise<string>} Next available barcode
      */
-    static async generateNextBarcode(maxRetries = 5) {
-        let lastSequence = null;
-        
-        for (let attempt = 0; attempt < maxRetries; attempt++) {
-            try {
-                // Get next sequence (will be higher than lastSequence if we're retrying)
-                let nextSequence = await this.getNextSequence();
-                
-                // If we're retrying and got the same sequence, increment manually
-                if (lastSequence !== null && nextSequence <= lastSequence) {
-                    nextSequence = lastSequence + 1;
-                }
-                
-                const generatedBarcode = this.generateEAN13(nextSequence);
-                lastSequence = nextSequence;
-                
-                // Verify the generated barcode doesn't already exist (race condition check)
-                const exists = await this.barcodeExists(generatedBarcode);
-                if (!exists) {
-                    return generatedBarcode;
-                }
-                
-                // If barcode exists, increment sequence and retry
-                if (attempt < maxRetries - 1) {
-                    console.warn(`Generated barcode ${generatedBarcode} already exists, retrying with next sequence... (attempt ${attempt + 1}/${maxRetries})`);
-                    // Small delay to allow other concurrent requests to complete
-                    await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
-                }
-            } catch (error) {
-                console.error(`Error generating barcode (attempt ${attempt + 1}/${maxRetries}):`, error);
-                if (attempt === maxRetries - 1) {
-                    throw error;
-                }
-                // Wait before retry
-                await new Promise(resolve => setTimeout(resolve, 50 * (attempt + 1)));
+    static async generateNextBarcode(session = null) {
+        try {
+            // Get next sequence atomically (no race conditions possible)
+            const nextSequence = await this.getNextSequence(session);
+            
+            // Generate barcode from sequence
+            const generatedBarcode = this.generateEAN13(nextSequence);
+            
+            // Optional: Verify barcode doesn't exist (safety check)
+            // This should never happen with atomic counter, but good for safety
+            const exists = await this.barcodeExists(generatedBarcode, null, session);
+            if (exists) {
+                // This is extremely rare - indicates data corruption or manual intervention
+                console.error(`WARNING: Generated barcode ${generatedBarcode} already exists! This should not happen with atomic counter.`);
+                throw new Error('Barcode collision detected - please contact support');
             }
+            
+            return generatedBarcode;
+        } catch (error) {
+            console.error('Error generating barcode:', error);
+            throw error; // Fail fast instead of silent fallback
         }
-        
-        // If all retries failed due to collisions, use lastSequence + 1
-        if (lastSequence !== null) {
-            return this.generateEAN13(lastSequence + 1);
-        }
-        
-        // Fallback: try one more time with a fresh sequence
-        const nextSequence = await this.getNextSequence();
-        return this.generateEAN13(nextSequence);
     }
 
     /**
@@ -187,9 +154,10 @@ class BarcodeService {
      * Check if barcode already exists
      * @param {string} barcode - Barcode to check
      * @param {string} excludeProductId - Product ID to exclude from check (for updates)
+     * @param {mongoose.ClientSession} session - Optional MongoDB session for transactions
      * @returns {Promise<boolean>} True if barcode exists
      */
-    static async barcodeExists(barcode, excludeProductId = null) {
+    static async barcodeExists(barcode, excludeProductId = null, session = null) {
         if (!barcode || typeof barcode !== 'string') {
             return false;
         }
@@ -203,7 +171,9 @@ class BarcodeService {
                 query._id = { $ne: excludeProductId };
             }
         }
-        const existing = await Product.findOne(query);
+        
+        const options = session ? { session } : {};
+        const existing = await Product.findOne(query, null, options);
         return !!existing;
     }
 }

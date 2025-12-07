@@ -5,6 +5,7 @@ const Product = require('../models/Product');
 const InventoryService = require('../services/inventoryService');
 const PricingService = require('../services/pricingService');
 const BarcodeService = require('../services/barcodeService');
+const BarcodeHandler = require('../services/barcodeHandler');
 const asyncHandler = require('../middleware/asyncHandler');
 const { protect, requirePermission, requireAnyPermission } = require('../middleware/auth');
 const { validateRequest, validatePagination, validateDateRange } = require('../middleware/validation');
@@ -450,81 +451,56 @@ router.post('/',
     requirePermission('write_products'),
     validateRequest(productValidation.create),
     asyncHandler(async (req, res) => {
+        // Start MongoDB transaction
+        const session = await mongoose.startSession();
+        session.startTransaction();
+
         try {
             console.log('Creating product with data:', JSON.stringify(req.body, null, 2));
 
             // Set createdBy to current user
             req.body.createdBy = req.user._id;
 
-            // Auto-generate barcode if not provided or empty
-            const barcodeValue = req.body.barcode;
-            // Check if barcode is empty: null, undefined, empty string, or whitespace-only string
-            // Handle edge cases: 0 and false are valid values, so check type explicitly
-            const isEmptyBarcode = 
-                barcodeValue === null || 
-                barcodeValue === undefined || 
-                barcodeValue === '' ||
-                (typeof barcodeValue === 'string' && barcodeValue.trim() === '');
-            
-            if (isEmptyBarcode) {
-                try {
-                    const generatedBarcode = await BarcodeService.generateNextBarcode();
-                    req.body.barcode = generatedBarcode;
-                    console.log('Auto-generated barcode:', generatedBarcode);
-                } catch (barcodeError) {
-                    console.error('Error generating barcode:', barcodeError);
-                    // Continue without barcode if generation fails
-                    // The product can still be created without a barcode
-                    delete req.body.barcode;
+            // Process barcode (auto-generate, validate, or use provided)
+            try {
+                const barcodeResult = await BarcodeHandler.processBarcode({
+                    barcodeValue: req.body.barcode,
+                    hasBarcodeInRequest: 'barcode' in req.body,
+                    excludeProductId: null,
+                    session
+                });
+                req.body.barcode = barcodeResult.barcode;
+                if (barcodeResult.generated) {
+                    console.log('Auto-generated barcode:', barcodeResult.barcode);
                 }
-            } else {
-                // Validate provided barcode if it exists
-                const trimmedBarcode = typeof barcodeValue === 'string' ? barcodeValue.trim() : String(barcodeValue).trim();
-                if (trimmedBarcode) {
-                    // Validate EAN-13 format if it looks like a barcode (13 digits)
-                    if (trimmedBarcode.length === 13 && /^\d{13}$/.test(trimmedBarcode)) {
-                        const isValidEAN13 = BarcodeService.validateEAN13(trimmedBarcode);
-                        if (!isValidEAN13) {
-                            return res.status(400).json({
-                                success: false,
-                                message: 'Invalid EAN-13 barcode format (check digit mismatch)'
-                            });
-                        }
-                    }
-                    
-                    // Check if barcode already exists
-                    const exists = await BarcodeService.barcodeExists(trimmedBarcode);
-                    if (exists) {
-                        return res.status(400).json({
-                            success: false,
-                            message: 'Barcode already exists'
-                        });
-                    }
-                    req.body.barcode = trimmedBarcode;
-                } else {
-                    // Empty string after trim, generate barcode
-                    try {
-                        const generatedBarcode = await BarcodeService.generateNextBarcode();
-                        req.body.barcode = generatedBarcode;
-                        console.log('Auto-generated barcode (empty string):', generatedBarcode);
-                    } catch (barcodeError) {
-                        console.error('Error generating barcode:', barcodeError);
-                        delete req.body.barcode;
-                    }
-                }
+            } catch (barcodeError) {
+                await session.abortTransaction();
+                return res.status(400).json({
+                    success: false,
+                    message: barcodeError.message
+                });
             }
 
-            const product = await Product.create(req.body);
+            // Create product within same transaction
+            const product = await Product.create([req.body], { session });
 
-            console.log('Product created successfully:', product._id);
+            // Commit transaction - all or nothing
+            await session.commitTransaction();
+
+            console.log('Product created successfully:', product[0]._id);
 
             res.status(201).json({
                 success: true,
-                data: product
+                data: product[0]
             });
         } catch (error) {
+            // Rollback transaction on any error
+            await session.abortTransaction();
             console.error('Error creating product:', error);
             throw error;
+        } finally {
+            // Always end session
+            session.endSession();
         }
     })
 );
@@ -576,113 +552,76 @@ router.put('/:id',
             });
         }
 
-        // Check if product exists to get current barcode status
-        const existingProduct = await Product.findById(req.params.id).select('barcode').lean();
-        if (!existingProduct) {
-            return res.status(404).json({
-                success: false,
-                message: 'Product not found'
-            });
-        }
+        // Start MongoDB transaction
+        const session = await mongoose.startSession();
+        session.startTransaction();
 
-        // Auto-generate barcode if:
-        // 1. Barcode field is not in request (treat as intentionally cleared) - always generate new
-        // 2. Barcode field is in request but is empty/cleared - generate new
-        // 3. Barcode field is in request with value - validate and use
-        const hasBarcodeInRequest = 'barcode' in req.body;
-
-        if (hasBarcodeInRequest) {
-            // Barcode field is explicitly in the request
-            const barcodeValue = req.body.barcode;
-            // Check if barcode is empty: null, undefined, empty string, or whitespace-only string
-            // Handle edge cases: 0 and false are valid values, so check type explicitly
-            const isEmptyBarcode = 
-                barcodeValue === null || 
-                barcodeValue === undefined || 
-                barcodeValue === '' ||
-                (typeof barcodeValue === 'string' && barcodeValue.trim() === '');
-            
-            if (isEmptyBarcode) {
-                // Barcode is empty/cleared - generate new one based on latest sequence
-                try {
-                    const generatedBarcode = await BarcodeService.generateNextBarcode();
-                    req.body.barcode = generatedBarcode;
-                    console.log('Auto-generated barcode on update (empty/cleared):', generatedBarcode);
-                } catch (barcodeError) {
-                    console.error('Error generating barcode on update:', barcodeError);
-                    // Continue without barcode if generation fails
-                    delete req.body.barcode;
-                }
-            } else {
-                // Validate provided barcode if it exists
-                const trimmedBarcode = typeof barcodeValue === 'string' ? barcodeValue.trim() : String(barcodeValue).trim();
-                if (trimmedBarcode) {
-                    // Validate EAN-13 format if it looks like a barcode (13 digits)
-                    if (trimmedBarcode.length === 13 && /^\d{13}$/.test(trimmedBarcode)) {
-                        const isValidEAN13 = BarcodeService.validateEAN13(trimmedBarcode);
-                        if (!isValidEAN13) {
-                            return res.status(400).json({
-                                success: false,
-                                message: 'Invalid EAN-13 barcode format (check digit mismatch)'
-                            });
-                        }
-                    }
-                    
-                    // Check if barcode already exists (excluding current product)
-                    // This allows updating with the same barcode (same product)
-                    const exists = await BarcodeService.barcodeExists(trimmedBarcode, req.params.id);
-                    if (exists) {
-                        return res.status(400).json({
-                            success: false,
-                            message: 'Barcode already exists on another product'
-                        });
-                    }
-                    req.body.barcode = trimmedBarcode;
-                } else {
-                    // Empty string after trim - generate new barcode
-                    try {
-                        const generatedBarcode = await BarcodeService.generateNextBarcode();
-                        req.body.barcode = generatedBarcode;
-                        console.log('Auto-generated barcode on update (empty string after trim):', generatedBarcode);
-                    } catch (barcodeError) {
-                        console.error('Error generating barcode on update:', barcodeError);
-                        delete req.body.barcode;
-                    }
-                }
+        try {
+            // Check if product exists to get current barcode status
+            const existingProduct = await Product.findById(req.params.id).select('barcode').session(session).lean();
+            if (!existingProduct) {
+                await session.abortTransaction();
+                return res.status(404).json({
+                    success: false,
+                    message: 'Product not found'
+                });
             }
-        } else {
-            // Barcode field is NOT in request - treat as intentionally cleared
-            // Generate new barcode (will overwrite existing if product had one)
+
+            // Process barcode (auto-generate, validate, or use provided)
             try {
-                const generatedBarcode = await BarcodeService.generateNextBarcode();
-                req.body.barcode = generatedBarcode;
-                console.log('Auto-generated barcode on update (key not sent, treated as cleared):', generatedBarcode);
+                const barcodeResult = await BarcodeHandler.processBarcode({
+                    barcodeValue: req.body.barcode,
+                    hasBarcodeInRequest: 'barcode' in req.body,
+                    excludeProductId: req.params.id, // Exclude current product from uniqueness check
+                    session
+                });
+                req.body.barcode = barcodeResult.barcode;
+                if (barcodeResult.generated) {
+                    console.log('Auto-generated barcode on update:', barcodeResult.barcode);
+                }
             } catch (barcodeError) {
-                console.error('Error generating barcode on update:', barcodeError);
-                // Continue without barcode if generation fails
+                await session.abortTransaction();
+                return res.status(400).json({
+                    success: false,
+                    message: barcodeError.message
+                });
             }
-        }
 
-        const product = await Product.findByIdAndUpdate(
-            req.params.id,
-            req.body,
-            {
-                new: true,
-                runValidators: true
+            // Update product within transaction
+            const product = await Product.findByIdAndUpdate(
+                req.params.id,
+                req.body,
+                {
+                    new: true,
+                    runValidators: true,
+                    session
+                }
+            );
+
+            if (!product) {
+                await session.abortTransaction();
+                return res.status(404).json({
+                    success: false,
+                    message: 'Product not found'
+                });
             }
-        );
 
-        if (!product) {
-            return res.status(404).json({
-                success: false,
-                message: 'Product not found'
+            // Commit transaction
+            await session.commitTransaction();
+
+            res.status(200).json({
+                success: true,
+                data: product
             });
+        } catch (error) {
+            // Rollback transaction on any error
+            await session.abortTransaction();
+            console.error('Error updating product:', error);
+            throw error;
+        } finally {
+            // Always end session
+            session.endSession();
         }
-
-        res.status(200).json({
-            success: true,
-            data: product
-        });
     })
 );
 
