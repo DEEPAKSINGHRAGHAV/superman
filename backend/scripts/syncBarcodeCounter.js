@@ -30,9 +30,11 @@ const syncCounter = async () => {
         console.log('🔄 Syncing barcode counter with existing barcodes...\n');
 
         // Find all products with barcodes starting with "21" (internal barcodes)
+        // Use range query instead of regex for better performance and reliability
         const products = await Product.find({
             barcode: { 
-                $regex: /^21\d{11}$/, // EAN-13 with prefix 21
+                $gte: '2100000000000',
+                $lt: '2200000000000',
                 $exists: true, 
                 $ne: null 
             }
