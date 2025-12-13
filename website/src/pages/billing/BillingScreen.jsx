@@ -162,21 +162,188 @@ const BillingScreen = () => {
         }
     }, [selectedPaymentMethod, isPaymentCompleted]);
 
+    /**
+     * Generate unique identifier for a cart item
+     * Uses productId + batchNumber to uniquely identify each cart item
+     */
+    const getCartItemId = (item) => {
+        const batchNumber = item.batchInfo?.batchNumber || item.assignedBatch?.batchNumber;
+        return batchNumber ? `${item.product._id}_${batchNumber}` : item.product._id;
+    };
+
+    /**
+     * Find next available batch for a product
+     * Checks existing cart items to see which batches are already used and finds the next available one
+     */
+    const findNextAvailableBatch = (productId, allBatches, existingCartItems) => {
+        // Get all batches already assigned in cart for this product
+        const usedBatchNumbers = existingCartItems
+            .filter(item => item.product._id === productId && item.assignedBatch)
+            .map(item => item.assignedBatch.batchNumber);
+
+        // Find the first batch that hasn't been used yet or has remaining quantity
+        for (const batch of allBatches) {
+            const batchNumber = batch.batchNumber;
+            const alreadyUsed = usedBatchNumbers.includes(batchNumber);
+            
+            if (!alreadyUsed) {
+                // New batch, use it
+                return batch;
+            } else {
+                // Batch already in cart, check if it has remaining quantity
+                const existingItem = existingCartItems.find(
+                    item => item.product._id === productId && 
+                    item.assignedBatch?.batchNumber === batchNumber
+                );
+                
+                if (existingItem) {
+                    const usedQuantity = existingItem.quantity;
+                    const availableQuantity = batch.currentQuantity || batch.availableQuantity || 0;
+                    if (usedQuantity < availableQuantity) {
+                        // This batch still has available quantity, reuse it
+                        return batch;
+                    }
+                    // This batch is exhausted, continue to next batch
+                    continue;
+                }
+            }
+        }
+
+        return null; // No available batch found
+    };
+
     const addToCart = async (product) => {
         try {
-            const existingItemIndex = cart.findIndex(item => item.product._id === product._id);
+            // Check if product already exists in cart
+            const existingItems = cart.filter(item => item.product._id === product._id);
 
-            if (existingItemIndex >= 0) {
-                const updatedCart = [...cart];
-                const newQuantity = updatedCart[existingItemIndex].quantity + 1;
-
-                if (newQuantity > product.currentStock) {
-                    toast.error(`Only ${product.currentStock} units available`);
+            if (existingItems.length > 0) {
+                // Product already in cart - check if we can add to existing item or need new item
+                if (product.currentStock === 0) {
+                    toast.error('This product is out of stock');
                     return;
                 }
 
-                updatedCart[existingItemIndex].quantity = newQuantity;
-                updatedCart[existingItemIndex].totalPrice = parseFloat((newQuantity * updatedCart[existingItemIndex].unitPrice).toFixed(2));
+                let allBatches = undefined;
+                try {
+                    const batchResponse = await batchesAPI.getByProduct(product._id);
+                    if (batchResponse.success && batchResponse.data?.batches?.length > 0) {
+                        const batches = batchResponse.data.batches;
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+
+                        const validBatches = batches.filter((batch) => {
+                            if (!batch.currentQuantity || batch.currentQuantity <= 0) return false;
+                            if (!batch.expiryDate) return true;
+                            const expiryDate = new Date(batch.expiryDate);
+                            expiryDate.setHours(0, 0, 0, 0);
+                            return expiryDate >= today;
+                        });
+
+                        if (validBatches.length === 0) {
+                            toast.error(`All batches for "${product.name}" have expired`);
+                            return;
+                        }
+
+                        allBatches = validBatches;
+
+                        // Find next available batch
+                        const nextBatch = findNextAvailableBatch(product._id, validBatches, cart);
+
+                        if (!nextBatch) {
+                            toast.error(`Insufficient stock for "${product.name}"`);
+                            return;
+                        }
+
+                        // Check if we can add to an existing item with the same batch
+                        const existingItemWithBatch = existingItems.find(
+                            item => item.assignedBatch?.batchNumber === nextBatch.batchNumber
+                        );
+
+                        if (existingItemWithBatch) {
+                            // Same batch - increase quantity of existing item
+                            const availableQuantity = nextBatch.currentQuantity || nextBatch.availableQuantity || 0;
+                            const newQuantity = existingItemWithBatch.quantity + 1;
+                            
+                            // Calculate total quantity for this product in cart
+                            const totalQuantityInCart = existingItems.reduce((sum, item) => sum + item.quantity, 0);
+                            
+                            // Check if adding 1 more would exceed stock
+                            if (totalQuantityInCart + 1 > product.currentStock) {
+                                toast.error(`Only ${product.currentStock} units available. Already have ${totalQuantityInCart} in cart.`);
+                                return;
+                            }
+                            
+                            if (newQuantity > availableQuantity) {
+                                // Current batch exhausted, need new item with next batch
+                                // This will be handled below by creating new item
+                            } else {
+                                // Can add to existing item
+                                const updatedCart = cart.map(item => {
+                                    if (item === existingItemWithBatch) {
+                                        return {
+                                            ...item,
+                                            quantity: newQuantity,
+                                            totalPrice: parseFloat((newQuantity * item.unitPrice).toFixed(2))
+                                        };
+                                    }
+                                    return item;
+                                });
+                                setCart(updatedCart);
+                                return;
+                            }
+                        }
+
+                        // Need to create new cart item with next batch (different price or exhausted batch)
+                        // Calculate total quantity for this product in cart
+                        const totalQuantityInCart = existingItems.reduce((sum, item) => sum + item.quantity, 0);
+                        
+                        // Check if adding 1 more would exceed stock
+                        if (totalQuantityInCart + 1 > product.currentStock) {
+                            toast.error(`Only ${product.currentStock} units available. Already have ${totalQuantityInCart} in cart.`);
+                            return;
+                        }
+
+                        const batchInfo = {
+                            batchNumber: nextBatch.batchNumber,
+                            availableQuantity: nextBatch.currentQuantity || nextBatch.availableQuantity
+                        };
+
+                        const newItem = {
+                            product,
+                            quantity: 1,
+                            unitPrice: parseFloat(nextBatch.sellingPrice.toFixed(2)),
+                            costPrice: parseFloat(nextBatch.costPrice.toFixed(2)),
+                            totalPrice: parseFloat(nextBatch.sellingPrice.toFixed(2)),
+                            batchInfo,
+                            assignedBatch: nextBatch, // Store the assigned batch
+                            allBatches,
+                            isEditingPrice: false,
+                        };
+                        setCart([newItem, ...cart]);
+                        return;
+                    }
+                } catch (error) {
+                    console.log('Could not fetch batch info:', error);
+                }
+
+                // Fallback: no batch info, just increase quantity of first existing item
+                const firstItem = existingItems[0];
+                const updatedCart = cart.map(item => {
+                    if (item === firstItem) {
+                        const newQuantity = item.quantity + 1;
+                        if (newQuantity > product.currentStock) {
+                            toast.error(`Only ${product.currentStock} units available`);
+                            return item;
+                        }
+                        return {
+                            ...item,
+                            quantity: newQuantity,
+                            totalPrice: parseFloat((newQuantity * item.unitPrice).toFixed(2))
+                        };
+                    }
+                    return item;
+                });
                 setCart(updatedCart);
             } else {
                 if (product.currentStock === 0) {
@@ -187,6 +354,7 @@ const BillingScreen = () => {
                 let unitPrice = product.sellingPrice;
                 let costPrice = product.costPrice || 0;
                 let batchInfo = undefined;
+                let allBatches = undefined;
 
                 try {
                     const batchResponse = await batchesAPI.getByProduct(product._id);
@@ -209,14 +377,20 @@ const BillingScreen = () => {
                             return;
                         }
 
+                        // Store all batches for finding next available batch
+                        allBatches = validBatches;
+
+                        // Use the oldest batch (FIFO - first in first out)
                         const oldestBatch = validBatches[0];
                         unitPrice = parseFloat(oldestBatch.sellingPrice.toFixed(2));
                         costPrice = parseFloat(oldestBatch.costPrice.toFixed(2));
+                        
                         batchInfo = {
                             batchNumber: oldestBatch.batchNumber,
                             availableQuantity: oldestBatch.currentQuantity || oldestBatch.availableQuantity
                         };
 
+                        // Check expiry warning for oldest batch
                         if (oldestBatch.expiryDate) {
                             const expiryDate = new Date(oldestBatch.expiryDate);
                             const daysUntilExpiry = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -240,6 +414,8 @@ const BillingScreen = () => {
                     costPrice: parseFloat(costPrice.toFixed(2)),
                     totalPrice: parseFloat(unitPrice.toFixed(2)),
                     batchInfo,
+                    assignedBatch: allBatches ? allBatches[0] : undefined, // Store the assigned batch for this cart item
+                    allBatches,
                     isEditingPrice: false,
                 };
                 setCart([newItem, ...cart]);
@@ -249,15 +425,149 @@ const BillingScreen = () => {
         }
     };
 
-    const updateQuantity = (productId, delta) => {
-        const updatedCart = cart.map(item => {
-            if (item.product._id === productId) {
-                const newQuantity = item.quantity + delta;
-                if (newQuantity <= 0) return null;
-                if (newQuantity > item.product.currentStock) {
-                    toast.error(`Only ${item.product.currentStock} units available`);
-                    return item;
+    const updateQuantity = async (itemIdentifier, delta) => {
+        // itemIdentifier can be productId (legacy) or unique item ID (productId_batchNumber)
+        let itemToUpdate;
+        if (typeof itemIdentifier === 'string' && itemIdentifier.includes('_')) {
+            // It's a unique ID (productId_batchNumber)
+            // Split from the right to handle cases where batchNumber might contain underscores
+            const lastUnderscoreIndex = itemIdentifier.lastIndexOf('_');
+            const productId = itemIdentifier.substring(0, lastUnderscoreIndex);
+            const batchNumber = itemIdentifier.substring(lastUnderscoreIndex + 1);
+            
+            itemToUpdate = cart.find(item => 
+                item.product._id === productId && 
+                (item.batchInfo?.batchNumber === batchNumber || item.assignedBatch?.batchNumber === batchNumber)
+            );
+        } else {
+            // Legacy: just productId - find first match
+            itemToUpdate = cart.find(item => item.product._id === itemIdentifier);
+        }
+        
+        if (!itemToUpdate) return;
+
+        const newQuantity = itemToUpdate.quantity + delta;
+        
+        if (newQuantity <= 0) {
+            // Remove item if quantity becomes 0
+            setCart(cart.filter(item => item !== itemToUpdate));
+            return;
+        }
+
+        const productId = itemToUpdate.product._id;
+        
+        // Calculate total quantity for this product across all cart items
+        const allItemsForProduct = cart.filter(item => item.product._id === productId);
+        const currentTotalQuantity = allItemsForProduct.reduce((sum, item) => sum + item.quantity, 0);
+        const newTotalQuantity = currentTotalQuantity - itemToUpdate.quantity + newQuantity;
+
+        // Check if new total quantity exceeds product stock
+        if (newTotalQuantity > itemToUpdate.product.currentStock) {
+            toast.error(`Only ${itemToUpdate.product.currentStock} units available. Already have ${currentTotalQuantity - itemToUpdate.quantity} in cart.`);
+            return;
+        }
+
+        // Check if assigned batch has enough quantity
+        if (itemToUpdate.assignedBatch) {
+            const availableInBatch = itemToUpdate.assignedBatch.currentQuantity || 
+                                     itemToUpdate.assignedBatch.availableQuantity || 0;
+            
+            if (newQuantity > availableInBatch) {
+                // Batch exhausted, need to create new item with next batch
+                if (itemToUpdate.allBatches && itemToUpdate.allBatches.length > 0) {
+                    const nextBatch = findNextAvailableBatch(productId, itemToUpdate.allBatches, cart);
+                    
+                    // Check if there's no next batch available or we've exhausted all batches
+                    if (!nextBatch || nextBatch.batchNumber === itemToUpdate.assignedBatch.batchNumber) {
+                        // No more batches available - show error with total stock
+                        toast.error(`Only ${itemToUpdate.product.currentStock} units available in total. Already have ${currentTotalQuantity - itemToUpdate.quantity} in cart.`);
+                        return;
+                    }
+                    
+                    if (nextBatch.batchNumber !== itemToUpdate.assignedBatch.batchNumber) {
+                        // Different batch available - keep current item at max batch quantity, add to next batch item
+                        const maxQuantityForCurrentBatch = availableInBatch;
+                        const remainingQuantity = newQuantity - maxQuantityForCurrentBatch;
+                        
+                        // Check if remaining quantity doesn't exceed stock
+                        const remainingTotal = currentTotalQuantity - itemToUpdate.quantity + maxQuantityForCurrentBatch + remainingQuantity;
+                        if (remainingTotal > itemToUpdate.product.currentStock) {
+                            toast.error(`Only ${itemToUpdate.product.currentStock} units available in total. Already have ${currentTotalQuantity - itemToUpdate.quantity} in cart.`);
+                            return;
+                        }
+                        
+                        // Check if there's already an existing cart item with the next batch
+                        const existingNextBatchItem = cart.find(item => 
+                            item.product._id === productId && 
+                            (item.batchInfo?.batchNumber === nextBatch.batchNumber || 
+                             item.assignedBatch?.batchNumber === nextBatch.batchNumber)
+                        );
+                        
+                        if (existingNextBatchItem) {
+                            // Add to existing item with next batch instead of creating new one
+                            const newNextBatchQuantity = existingNextBatchItem.quantity + remainingQuantity;
+                            
+                            // Just add to existing next batch item
+                            const updatedCart = cart.map(item => {
+                                if (item === itemToUpdate) {
+                                    return {
+                                        ...item,
+                                        quantity: maxQuantityForCurrentBatch,
+                                        totalPrice: parseFloat((maxQuantityForCurrentBatch * item.unitPrice).toFixed(2))
+                                    };
+                                } else if (item === existingNextBatchItem) {
+                                    return {
+                                        ...item,
+                                        quantity: newNextBatchQuantity,
+                                        totalPrice: parseFloat((newNextBatchQuantity * item.unitPrice).toFixed(2))
+                                    };
+                                }
+                                return item;
+                            });
+                            setCart(updatedCart);
+                        } else {
+                            // No existing item with next batch, create new item
+                            const updatedCart = cart.map(item => {
+                                if (item === itemToUpdate) {
+                                    return {
+                                        ...item,
+                                        quantity: maxQuantityForCurrentBatch,
+                                        totalPrice: parseFloat((maxQuantityForCurrentBatch * item.unitPrice).toFixed(2))
+                                    };
+                                }
+                                return item;
+                            });
+
+                            // Add remaining quantity as new item with next batch
+                            const newItem = {
+                                product: itemToUpdate.product,
+                                quantity: remainingQuantity,
+                                unitPrice: parseFloat(nextBatch.sellingPrice.toFixed(2)),
+                                costPrice: parseFloat(nextBatch.costPrice.toFixed(2)),
+                                totalPrice: parseFloat((remainingQuantity * nextBatch.sellingPrice).toFixed(2)),
+                                batchInfo: {
+                                    batchNumber: nextBatch.batchNumber,
+                                    availableQuantity: nextBatch.currentQuantity || nextBatch.availableQuantity
+                                },
+                                assignedBatch: nextBatch,
+                                allBatches: itemToUpdate.allBatches,
+                                isEditingPrice: false,
+                            };
+                            setCart([newItem, ...updatedCart]);
+                        }
+                        return;
+                    }
+                } else {
+                    // No batches available - show error with total stock
+                    toast.error(`Only ${itemToUpdate.product.currentStock} units available in total. Batch exhausted and no more batches available.`);
+                    return;
                 }
+            }
+        }
+
+        // Normal case: just update quantity (same batch, same price)
+        const updatedCart = cart.map(item => {
+            if (item === itemToUpdate) {
                 return {
                     ...item,
                     quantity: newQuantity,
@@ -265,14 +575,36 @@ const BillingScreen = () => {
                 };
             }
             return item;
-        }).filter(item => item !== null);
+        });
         setCart(updatedCart);
-        // Refocus will happen automatically via the cart useEffect
     };
 
-    const togglePriceEdit = (productId) => {
-        const updatedCart = cart.map(item => {
-            if (item.product._id === productId) {
+    const togglePriceEdit = (itemIdentifier) => {
+        // itemIdentifier can be either:
+        // - A unique key string (productId_batchNumber or productId_index)
+        // - An object reference
+        const updatedCart = cart.map((item, index) => {
+            // If it's a string identifier (productId_batchNumber)
+            if (typeof itemIdentifier === 'string' && itemIdentifier.includes('_')) {
+                // Split from the right to handle cases where batchNumber might contain underscores
+                const lastUnderscoreIndex = itemIdentifier.lastIndexOf('_');
+                const productId = itemIdentifier.substring(0, lastUnderscoreIndex);
+                const batchNumber = itemIdentifier.substring(lastUnderscoreIndex + 1);
+                
+                if (item.product._id === productId && 
+                    (item.batchInfo?.batchNumber === batchNumber || 
+                     item.assignedBatch?.batchNumber === batchNumber)) {
+                    return { ...item, isEditingPrice: !item.isEditingPrice };
+                }
+            } 
+            // If it's just productId (legacy support), find first match
+            else if (typeof itemIdentifier === 'string') {
+                if (item.product._id === itemIdentifier) {
+                    return { ...item, isEditingPrice: !item.isEditingPrice };
+                }
+            }
+            // If it's the item object itself
+            else if (item === itemIdentifier) {
                 return { ...item, isEditingPrice: !item.isEditingPrice };
             }
             return item;
@@ -280,12 +612,38 @@ const BillingScreen = () => {
         setCart(updatedCart);
     };
 
-    const updateSellingPrice = (productId, newPrice) => {
+    const updateSellingPrice = (itemIdentifier, newPrice) => {
         const price = parseFloat(newPrice);
         if (isNaN(price) || price < 0) return;
 
-        const updatedCart = cart.map(item => {
-            if (item.product._id === productId) {
+        const updatedCart = cart.map((item, index) => {
+            let shouldUpdate = false;
+            
+            // If it's a string identifier (productId_batchNumber)
+            if (typeof itemIdentifier === 'string' && itemIdentifier.includes('_')) {
+                // Split from the right to handle cases where batchNumber might contain underscores
+                const lastUnderscoreIndex = itemIdentifier.lastIndexOf('_');
+                const productId = itemIdentifier.substring(0, lastUnderscoreIndex);
+                const batchNumber = itemIdentifier.substring(lastUnderscoreIndex + 1);
+                
+                if (item.product._id === productId && 
+                    (item.batchInfo?.batchNumber === batchNumber || 
+                     item.assignedBatch?.batchNumber === batchNumber)) {
+                    shouldUpdate = true;
+                }
+            } 
+            // If it's just productId (legacy support), find first match
+            else if (typeof itemIdentifier === 'string') {
+                if (item.product._id === itemIdentifier) {
+                    shouldUpdate = true;
+                }
+            }
+            // If it's the item object itself
+            else if (item === itemIdentifier) {
+                shouldUpdate = true;
+            }
+
+            if (shouldUpdate) {
                 if (item.costPrice > 0 && price < item.costPrice) {
                     toast.error(`Selling price cannot be less than cost price (${formatCurrency(item.costPrice)})`);
                     return item;
@@ -302,8 +660,23 @@ const BillingScreen = () => {
         setCart(updatedCart);
     };
 
-    const removeFromCart = (productId) => {
-        setCart(cart.filter(item => item.product._id !== productId));
+    const removeFromCart = (itemIdentifier) => {
+        // itemIdentifier can be productId (legacy) or unique item ID (productId_batchNumber)
+        if (typeof itemIdentifier === 'string' && itemIdentifier.includes('_')) {
+            // It's a unique ID (productId_batchNumber)
+            // Split from the right to handle cases where batchNumber might contain underscores
+            const lastUnderscoreIndex = itemIdentifier.lastIndexOf('_');
+            const productId = itemIdentifier.substring(0, lastUnderscoreIndex);
+            const batchNumber = itemIdentifier.substring(lastUnderscoreIndex + 1);
+            
+            setCart(cart.filter(item => 
+                !(item.product._id === productId && 
+                  (item.batchInfo?.batchNumber === batchNumber || item.assignedBatch?.batchNumber === batchNumber))
+            ));
+        } else {
+            // Legacy: just productId - remove first match
+            setCart(cart.filter(item => item.product._id !== itemIdentifier));
+        }
     };
 
     const subtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
@@ -462,7 +835,7 @@ const BillingScreen = () => {
                                             {/* Quantity Controls - Inline */}
                                             <div className="flex items-center gap-1">
                                                 <button
-                                                    onClick={() => !isPaymentCompleted && updateQuantity(item.product._id, -1)}
+                                                    onClick={() => !isPaymentCompleted && updateQuantity(getCartItemId(item), -1)}
                                                     disabled={isPaymentCompleted}
                                                     className={`w-8 h-8 bg-red-100 hover:bg-red-200 text-red-600 rounded flex items-center justify-center transition-colors ${isPaymentCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                     aria-label="Decrease"
@@ -473,7 +846,7 @@ const BillingScreen = () => {
                                                     <span className="text-base font-bold text-gray-900">{item.quantity}</span>
                                                 </div>
                                                 <button
-                                                    onClick={() => !isPaymentCompleted && updateQuantity(item.product._id, 1)}
+                                                    onClick={() => !isPaymentCompleted && updateQuantity(getCartItemId(item), 1)}
                                                     disabled={isPaymentCompleted}
                                                     className={`w-8 h-8 bg-green-100 hover:bg-green-200 text-green-600 rounded flex items-center justify-center transition-colors ${isPaymentCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                     aria-label="Increase"
@@ -495,7 +868,7 @@ const BillingScreen = () => {
                                                                 e.target.select();
                                                             }}
                                                             onBlur={(e) => {
-                                                                updateSellingPrice(item.product._id, e.target.value);
+                                                                updateSellingPrice(getCartItemId(item), e.target.value);
                                                                 // Re-enable search refocus and focus immediately
                                                                 shouldRefocusRef.current = true;
                                                                 setTimeout(() => {
@@ -504,7 +877,7 @@ const BillingScreen = () => {
                                                             }}
                                                             onKeyPress={(e) => {
                                                                 if (e.key === 'Enter') {
-                                                                    updateSellingPrice(item.product._id, e.target.value);
+                                                                    updateSellingPrice(getCartItemId(item), e.target.value);
                                                                     // Re-enable search refocus and focus immediately
                                                                     shouldRefocusRef.current = true;
                                                                     setTimeout(() => {
@@ -516,7 +889,7 @@ const BillingScreen = () => {
                                                             autoFocus
                                                         />
                                                         <button
-                                                            onClick={() => togglePriceEdit(item.product._id)}
+                                                            onClick={() => togglePriceEdit(getCartItemId(item))}
                                                             className="p-1 text-gray-600 hover:bg-gray-100 rounded"
                                                         >
                                                             <X size={14} />
@@ -524,7 +897,7 @@ const BillingScreen = () => {
                                                     </div>
                                                 ) : (
                                                     <button
-                                                        onClick={() => !isPaymentCompleted && togglePriceEdit(item.product._id)}
+                                                        onClick={() => !isPaymentCompleted && togglePriceEdit(getCartItemId(item))}
                                                         disabled={isPaymentCompleted}
                                                         className={`flex items-center gap-1 px-2 py-1 hover:bg-blue-50 rounded transition-colors ${isPaymentCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                     >
@@ -545,7 +918,7 @@ const BillingScreen = () => {
 
                                             {/* Remove Button */}
                                             <button
-                                                onClick={() => !isPaymentCompleted && removeFromCart(item.product._id)}
+                                                onClick={() => !isPaymentCompleted && removeFromCart(getCartItemId(item))}
                                                 disabled={isPaymentCompleted}
                                                 className={`p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded transition-colors flex-shrink-0 ${isPaymentCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                 aria-label="Remove"

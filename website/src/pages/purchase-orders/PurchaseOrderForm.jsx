@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Save, Eye } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, Eye, Edit } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import DateInput from '../../components/common/DateInput';
 import ProductSearch from '../../components/common/ProductSearch';
-import { purchaseOrdersAPI, suppliersAPI, productsAPI } from '../../services/api';
+import Modal from '../../components/common/Modal';
+import { purchaseOrdersAPI, suppliersAPI } from '../../services/api';
 import toast from 'react-hot-toast';
 
 const PurchaseOrderForm = () => {
@@ -30,10 +31,10 @@ const PurchaseOrderForm = () => {
     });
 
     const [suppliers, setSuppliers] = useState([]);
-    const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(false);
     const [fetchLoading, setFetchLoading] = useState(false);
     const [errors, setErrors] = useState({});
+    const [orderStatus, setOrderStatus] = useState(null);
 
     // Item form fields
     const [selectedProduct, setSelectedProduct] = useState(null);
@@ -42,6 +43,7 @@ const PurchaseOrderForm = () => {
     const [itemCostPrice, setItemCostPrice] = useState('');
     const [itemSellingPrice, setItemSellingPrice] = useState('');
     const [itemExpiryDate, setItemExpiryDate] = useState('');
+    const [editingItemIndex, setEditingItemIndex] = useState(null); // Track which item is being edited
     const defaultMarkup = 0.20; // 20% default markup
 
     // Refs for input fields to enable auto-focus and keyboard navigation
@@ -61,21 +63,14 @@ const PurchaseOrderForm = () => {
 
     const fetchDropdownData = async () => {
         try {
-            const [suppliersRes, productsRes] = await Promise.all([
-                suppliersAPI.getAll({ limit: 100 }),
-                productsAPI.getAll({ limit: 100, isActive: 'true' }),
-            ]);
+            const suppliersRes = await suppliersAPI.getAll({ limit: 100 });
 
             if (suppliersRes.success) {
                 setSuppliers(suppliersRes.data);
             }
-
-            if (productsRes.success) {
-                setProducts(productsRes.data);
-            }
         } catch (error) {
             console.error('Failed to fetch dropdown data:', error);
-            toast.error('Failed to load suppliers or products');
+            toast.error('Failed to load suppliers');
         }
     };
 
@@ -85,6 +80,7 @@ const PurchaseOrderForm = () => {
             const response = await purchaseOrdersAPI.getById(id);
             if (response.success && response.data) {
                 const order = response.data;
+                setOrderStatus(order.status);
                 setFormData({
                     supplier: typeof order.supplier === 'string' ? order.supplier : order.supplier._id,
                     items: order.items.map(item => {
@@ -96,6 +92,7 @@ const PurchaseOrderForm = () => {
                         return {
                             product: productId,
                             productName: productObject?.name || item.productName || '',
+                            productStock: productObject?.currentStock ?? item.productStock ?? null, // For display
                             quantity: item.quantity,
                             costPrice: item.costPrice,
                             sellingPrice: item.sellingPrice || item.costPrice * 1.2,
@@ -148,6 +145,25 @@ const PurchaseOrderForm = () => {
         return ((selling - cost) / cost) * 100;
     };
 
+    const handleEditItem = (index) => {
+        const item = formData.items[index];
+        
+        // Create product object from item data (no need to look up - all data is stored with item)
+        setSelectedProduct({
+            _id: typeof item.product === 'string' ? item.product : item.product?._id,
+            name: item.productName || item.product?.name || 'Unknown Product',
+            currentStock: item.productStock ?? 0
+        });
+        
+        setItemQuantity(item.quantity.toString());
+        setItemMRP(item.mrp ? item.mrp.toString() : '');
+        setItemCostPrice(item.costPrice.toString());
+        setItemSellingPrice(item.sellingPrice.toString());
+        setItemExpiryDate(item.expiryDate ? item.expiryDate.split('T')[0] : '');
+        setEditingItemIndex(index);
+        setIsModalOpen(true);
+    };
+
     const handleAddItem = () => {
         if (!selectedProduct || !selectedProduct._id) {
             toast.error('Please select a product');
@@ -181,6 +197,7 @@ const PurchaseOrderForm = () => {
         const newItem = {
             product: selectedProduct._id,
             productName: selectedProduct.name || '',
+            productStock: selectedProduct.currentStock ?? 0, // For display only, not sent to backend
             quantity: quantity,
             costPrice: parseFloat(costPrice.toFixed(2)),
             sellingPrice: parseFloat(sellingPrice.toFixed(2)),
@@ -195,10 +212,24 @@ const PurchaseOrderForm = () => {
             newItem.expiryDate = new Date(itemExpiryDate + 'T12:00:00.000Z').toISOString();
         }
 
-        setFormData(prev => ({
-            ...prev,
-            items: [...prev.items, newItem],
-        }));
+        // Check if we're editing an existing item
+        if (editingItemIndex !== null) {
+            // Update existing item
+            setFormData(prev => ({
+                ...prev,
+                items: prev.items.map((item, idx) => 
+                    idx === editingItemIndex ? newItem : item
+                ),
+            }));
+            toast.success('Item updated successfully');
+            setIsModalOpen(false);
+        } else {
+            // Add new item
+            setFormData(prev => ({
+                ...prev,
+                items: [...prev.items, newItem],
+            }));
+        }
 
         // Reset item form
         setSelectedProduct(null);
@@ -207,11 +238,30 @@ const PurchaseOrderForm = () => {
         setItemCostPrice('');
         setItemSellingPrice('');
         setItemExpiryDate('');
+        setEditingItemIndex(null);
 
         // Refocus on product search field for next item (after a short delay to allow form reset)
-        setTimeout(() => {
-            productSearchRef.current?.focus();
-        }, 100);
+        if (editingItemIndex === null) {
+            setTimeout(() => {
+                productSearchRef.current?.focus();
+            }, 100);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setSelectedProduct(null);
+        setItemQuantity('');
+        setItemMRP('');
+        setItemCostPrice('');
+        setItemSellingPrice('');
+        setItemExpiryDate('');
+        setEditingItemIndex(null);
+        setIsModalOpen(false);
+    };
+
+    const handleAddNewItem = () => {
+        setEditingItemIndex(null);
+        handleCancelEdit();
     };
 
     const handleRemoveItem = (index) => {
@@ -222,13 +272,15 @@ const PurchaseOrderForm = () => {
     };
 
     const getProductName = (item) => {
-        // First check if productName is stored in the item
+        // productName is stored with the item
         if (item.productName) {
             return item.productName;
         }
-        // Fallback to lookup from products array
-        const product = products.find(p => p._id === item.product);
-        return product?.name || item.product;
+        // Fallback for legacy data - use product object if populated
+        if (typeof item.product === 'object' && item.product?.name) {
+            return item.product.name;
+        }
+        return 'Unknown Product';
     };
 
     const validateForm = () => {
@@ -307,6 +359,179 @@ const PurchaseOrderForm = () => {
     };
 
     const totalAmount = formData.items.reduce((sum, item) => sum + (item.quantity * item.costPrice), 0);
+    const isReadOnly = orderStatus === 'received';
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    // Reusable Product Form Component
+    const renderProductForm = () => (
+        <div className="space-y-4">
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Product
+                </label>
+                {/* Show product search only for new items, not when editing */}
+                {editingItemIndex === null ? (
+                    <>
+                        <ProductSearch
+                            ref={productSearchRef}
+                            onProductSelect={handleProductSelect}
+                            placeholder="Search products by name, SKU, or barcode..."
+                            showStockInfo={true}
+                            showPrice={true}
+                            maxResults={20}
+                            allowOutOfStock={true}
+                        />
+                        {selectedProduct && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(`/products/${selectedProduct._id}`, '_blank', 'noopener,noreferrer');
+                                }}
+                                className="mt-2 w-full p-2 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors cursor-pointer text-left group"
+                                title="Click to view product details in new tab"
+                            >
+                                <p className="text-sm font-medium text-blue-900 group-hover:text-blue-700 flex items-center gap-2">
+                                    <span>
+                                        Selected: {selectedProduct.name} {selectedProduct.sku && `(${selectedProduct.sku})`}
+                                        {selectedProduct.currentStock !== undefined && (
+                                            <span className="ml-2 text-gray-600 font-normal">
+                                                • Current Stock: {selectedProduct.currentStock}
+                                            </span>
+                                        )}
+                                    </span>
+                                    <Eye
+                                        size={14}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-700"
+                                    />
+                                </p>
+                            </button>
+                        )}
+                    </>
+                ) : (
+                    /* Show fixed product display when editing */
+                    <div className="p-3 bg-gray-100 border border-gray-200 rounded-md">
+                        <p className="text-sm font-medium text-gray-900">
+                            {selectedProduct?.name || 'Unknown Product'}
+                            {selectedProduct?.sku && (
+                                <span className="ml-2 text-gray-500">({selectedProduct.sku})</span>
+                            )}
+                        </p>
+                        {selectedProduct?.currentStock !== undefined && (
+                            <p className="text-sm text-blue-600 font-medium mt-1">
+                                Current Stock: {selectedProduct.currentStock}
+                            </p>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">Product cannot be changed while editing</p>
+                    </div>
+                )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Quantity
+                    </label>
+                    <Input
+                        ref={quantityRef}
+                        type="number"
+                        placeholder="0"
+                        value={itemQuantity}
+                        onChange={(e) => setItemQuantity(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                mrpRef.current?.focus();
+                            }
+                        }}
+                        min="1"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        MRP (₹)
+                    </label>
+                    <Input
+                        ref={mrpRef}
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={itemMRP}
+                        onChange={(e) => setItemMRP(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                costPriceRef.current?.focus();
+                            }
+                        }}
+                    />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Cost Price (₹) <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                        ref={costPriceRef}
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={itemCostPrice}
+                        onChange={(e) => handleCostPriceChange(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                sellingPriceRef.current?.focus();
+                            }
+                        }}
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Selling Price (₹) <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                        ref={sellingPriceRef}
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={itemSellingPrice}
+                        onChange={(e) => setItemSellingPrice(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                expiryDateRef.current?.focus();
+                            }
+                        }}
+                    />
+                    {itemCostPrice && itemSellingPrice && (
+                        <p className={`text-xs mt-1 ${calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)) < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                            Margin: {calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)).toFixed(1)}%
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            <div>
+                <DateInput
+                    ref={expiryDateRef}
+                    label="Expiry Date (Optional)"
+                    name="itemExpiryDate"
+                    value={itemExpiryDate}
+                    onChange={(e) => setItemExpiryDate(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddItem();
+                        }
+                    }}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="mb-0"
+                />
+            </div>
+        </div>
+    );
 
     if (fetchLoading) {
         return (
@@ -328,8 +553,11 @@ const PurchaseOrderForm = () => {
                 </button>
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">
-                        {isEditMode ? 'Edit Purchase Order' : 'Create Purchase Order'}
+                        {isReadOnly ? 'View Purchase Order' : (isEditMode ? 'Edit Purchase Order' : 'Create Purchase Order')}
                     </h1>
+                    {isReadOnly && (
+                        <p className="text-sm text-gray-500 mt-1">This order has been received and is read-only</p>
+                    )}
                 </div>
             </div>
 
@@ -348,6 +576,7 @@ const PurchaseOrderForm = () => {
                                     value={formData.supplier}
                                     onChange={(e) => setFormData(prev => ({ ...prev, supplier: e.target.value }))}
                                     className="input"
+                                    disabled={isReadOnly}
                                 >
                                     <option value="">Select supplier</option>
                                     {suppliers.map(supplier => (
@@ -370,6 +599,7 @@ const PurchaseOrderForm = () => {
                                         onChange={(e) => setFormData(prev => ({ ...prev, expectedDeliveryDate: e.target.value }))}
                                         min={new Date().toISOString().split('T')[0]}
                                         className="mb-0"
+                                        disabled={isReadOnly}
                                     />
                                 </div>
 
@@ -381,6 +611,7 @@ const PurchaseOrderForm = () => {
                                         value={formData.paymentMethod}
                                         onChange={(e) => setFormData(prev => ({ ...prev, paymentMethod: e.target.value }))}
                                         className="input"
+                                        disabled={isReadOnly}
                                     >
                                         <option value="cash">Cash</option>
                                         <option value="credit">Credit</option>
@@ -401,170 +632,26 @@ const PurchaseOrderForm = () => {
                                     className="input"
                                     rows="3"
                                     placeholder="Enter any additional notes"
+                                    disabled={isReadOnly}
                                 />
                             </div>
                         </div>
                     </Card>
 
-                    {/* Add Item Form */}
+                    {/* Add Item Form - Hide if read-only */}
+                    {!isReadOnly && (
                     <Card>
                         <h2 className="text-lg font-semibold text-gray-900 mb-4">Add Product</h2>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Product
-                                </label>
-                                <ProductSearch
-                                    ref={productSearchRef}
-                                    onProductSelect={handleProductSelect}
-                                    placeholder="Search products by name, SKU, or barcode..."
-                                    showStockInfo={true}
-                                    showPrice={true}
-                                    maxResults={20}
-                                    allowOutOfStock={true}
-                                />
-                                {selectedProduct && (
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            window.open(`/products/${selectedProduct._id}`, '_blank', 'noopener,noreferrer');
-                                        }}
-                                        className="mt-2 w-full p-2 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors cursor-pointer text-left group"
-                                        title="Click to view product details in new tab"
-                                    >
-                                        <p className="text-sm font-medium text-blue-900 group-hover:text-blue-700 flex items-center gap-2">
-                                            <span>
-                                                Selected: {selectedProduct.name} {selectedProduct.sku && `(${selectedProduct.sku})`}
-                                                {selectedProduct.currentStock !== undefined && (
-                                                    <span className="ml-2 text-gray-600 font-normal">
-                                                        • Current Stock: {selectedProduct.currentStock}
-                                                    </span>
-                                                )}
-                                            </span>
-                                            <Eye
-                                                size={14}
-                                                className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-700"
-                                            />
-                                        </p>
-                                    </button>
-                                )}
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Quantity
-                                    </label>
-                                    <Input
-                                        ref={quantityRef}
-                                        type="number"
-                                        placeholder="0"
-                                        value={itemQuantity}
-                                        onChange={(e) => setItemQuantity(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                mrpRef.current?.focus();
-                                            }
-                                        }}
-                                        min="1"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        MRP (₹)
-                                    </label>
-                                    <Input
-                                        ref={mrpRef}
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        value={itemMRP}
-                                        onChange={(e) => setItemMRP(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                costPriceRef.current?.focus();
-                                            }
-                                        }}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Cost Price (₹) <span className="text-red-500">*</span>
-                                    </label>
-                                    <Input
-                                        ref={costPriceRef}
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        value={itemCostPrice}
-                                        onChange={(e) => handleCostPriceChange(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                sellingPriceRef.current?.focus();
-                                            }
-                                        }}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Selling Price (₹) <span className="text-red-500">*</span>
-                                    </label>
-                                    <Input
-                                        ref={sellingPriceRef}
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        value={itemSellingPrice}
-                                        onChange={(e) => setItemSellingPrice(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                expiryDateRef.current?.focus();
-                                            }
-                                        }}
-                                    />
-                                    {itemCostPrice && itemSellingPrice && (
-                                        <p className={`text-xs mt-1 ${calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)) < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                                            Margin: {calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)).toFixed(1)}%
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div>
-                                <DateInput
-                                    ref={expiryDateRef}
-                                    label="Expiry Date (Optional)"
-                                    name="itemExpiryDate"
-                                    value={itemExpiryDate}
-                                    onChange={(e) => setItemExpiryDate(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            // If Enter is pressed on expiry date, trigger Add Item
-                                            handleAddItem();
-                                        }
-                                    }}
-                                    min={new Date().toISOString().split('T')[0]}
-                                    className="mb-0"
-                                />
-                            </div>
-
-                            <Button
-                                variant="outline"
-                                icon={<Plus size={18} />}
-                                onClick={handleAddItem}
-                            >
-                                Add Item
-                            </Button>
-                        </div>
+                        {renderProductForm()}
+                        <Button
+                            variant="outline"
+                            icon={<Plus size={18} />}
+                            onClick={handleAddItem}
+                        >
+                            Add Item
+                        </Button>
                     </Card>
+                    )}
 
                     {/* Items List */}
                     <Card>
@@ -579,20 +666,25 @@ const PurchaseOrderForm = () => {
                                         className="border border-gray-200 rounded-lg p-4 flex justify-between items-start"
                                     >
                                         <div className="flex-1">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    window.open(`/products/${item.product}`, '_blank', 'noopener,noreferrer');
-                                                }}
-                                                className="group flex items-center gap-2 font-semibold text-gray-900 mb-2 hover:text-blue-600 transition-colors cursor-pointer"
-                                                title="View product details in new tab"
-                                            >
-                                                <span>{getProductName(item)}</span>
-                                                <Eye
-                                                    size={16}
-                                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-600"
-                                                />
-                                            </button>
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        window.open(`/products/${item.product}`, '_blank', 'noopener,noreferrer');
+                                                    }}
+                                                    className="group flex items-center gap-2 font-semibold text-gray-900 hover:text-blue-600 transition-colors cursor-pointer"
+                                                    title="View product details in new tab"
+                                                >
+                                                    <span>{getProductName(item)}</span>
+                                                    <Eye
+                                                        size={16}
+                                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-600"
+                                                    />
+                                                </button>
+                                                <span className="text-sm font-medium px-2 py-0.5 rounded text-blue-600 bg-blue-50">
+                                                    Stock: {item.productStock ?? 'N/A'}
+                                                </span>
+                                            </div>
                                             <div className="flex flex-wrap gap-2 text-sm text-gray-600">
                                                 <span>Qty: {item.quantity}</span>
                                                 {item.mrp && <span>• MRP: ₹{item.mrp.toFixed(2)}</span>}
@@ -613,13 +705,24 @@ const PurchaseOrderForm = () => {
                                                 </div>
                                             )}
                                         </div>
-                                        <button
-                                            onClick={() => handleRemoveItem(index)}
-                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                                            title="Remove item"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
+                                        {!isReadOnly && (
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                onClick={() => handleEditItem(index)}
+                                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                title="Edit item"
+                                            >
+                                                <Edit size={18} />
+                                            </button>
+                                            <button
+                                                onClick={() => handleRemoveItem(index)}
+                                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                                title="Remove item"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
+                                        )}
                                     </div>
                                 ))}
                                 <div className="border-t pt-4 mt-4">
@@ -666,26 +769,55 @@ const PurchaseOrderForm = () => {
                         </div>
 
                         <div className="mt-6 space-y-3">
-                            <Button
-                                variant="primary"
-                                icon={<Save size={18} />}
-                                onClick={handleSubmit}
-                                loading={loading}
-                                className="w-full"
-                            >
-                                {isEditMode ? 'Update Order' : 'Create Order'}
-                            </Button>
+                            {!isReadOnly && (
+                                <Button
+                                    variant="primary"
+                                    icon={<Save size={18} />}
+                                    onClick={handleSubmit}
+                                    loading={loading}
+                                    className="w-full"
+                                >
+                                    {isEditMode ? 'Update Order' : 'Create Order'}
+                                </Button>
+                            )}
                             <Button
                                 variant="outline"
                                 onClick={() => navigate('/purchase-orders')}
                                 className="w-full"
                             >
-                                Cancel
+                                {isReadOnly ? 'Back' : 'Cancel'}
                             </Button>
                         </div>
                     </Card>
                 </div>
             </div>
+
+            {/* Edit Item Modal */}
+            <Modal
+                isOpen={isModalOpen}
+                onClose={handleCancelEdit}
+                title={editingItemIndex !== null ? 'Edit Product' : 'Add Product'}
+                size="lg"
+                footer={
+                    <div className="flex gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={handleCancelEdit}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            icon={editingItemIndex !== null ? <Save size={18} /> : <Plus size={18} />}
+                            onClick={handleAddItem}
+                        >
+                            {editingItemIndex !== null ? 'Save' : 'Add Item'}
+                        </Button>
+                    </div>
+                }
+            >
+                {renderProductForm()}
+            </Modal>
         </div>
     );
 };

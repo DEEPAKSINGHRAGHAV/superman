@@ -264,6 +264,24 @@ router.put('/:id',
     requirePermission('write_purchase_orders'),
     validateRequest(purchaseOrderValidation.update),
     asyncHandler(async (req, res) => {
+        // First check if the order exists and its status
+        const existingOrder = await PurchaseOrder.findById(req.params.id);
+        
+        if (!existingOrder) {
+            return res.status(404).json({
+                success: false,
+                message: 'Purchase order not found'
+            });
+        }
+
+        // Prevent updates to received orders
+        if (existingOrder.status === 'received') {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot update a received purchase order'
+            });
+        }
+
         const purchaseOrder = await PurchaseOrder.findByIdAndUpdate(
             req.params.id,
             req.body,
@@ -275,13 +293,6 @@ router.put('/:id',
             .populate('supplier', 'name code email')
             .populate('createdBy', 'name email')
             .populate('items.product', 'name sku category');
-
-        if (!purchaseOrder) {
-            return res.status(404).json({
-                success: false,
-                message: 'Purchase order not found'
-            });
-        }
 
         res.status(200).json({
             success: true,
