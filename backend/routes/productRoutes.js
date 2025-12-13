@@ -398,6 +398,29 @@ router.get('/barcode/:barcode',
     })
 );
 
+// @desc    Get products with barcodes starting with "21"
+// @route   GET /api/v1/products/custom-barcodes
+// @access  Private (requires read_products permission)
+router.get('/custom-barcodes',
+    protect,
+    requirePermission('read_products'),
+    asyncHandler(async (req, res) => {
+        const products = await Product.find({
+            barcode: { $regex: '^21' },
+            isActive: true
+        })
+            .select('name sellingPrice barcode')
+            .sort({ name: 1 })
+            .lean();
+
+        res.status(200).json({
+            success: true,
+            count: products.length,
+            data: products
+        });
+    })
+);
+
 // @desc    Get single product
 // @route   GET /api/v1/products/:id
 // @access  Private (requires read_products permission)

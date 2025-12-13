@@ -78,6 +78,7 @@ export const productsAPI = {
     getAll: (params) => api.get('/products', { params }),
     getById: (id) => api.get(`/products/${id}`),
     getByBarcode: (barcode) => api.get(`/products/barcode/${barcode}`),
+    getCustomBarcodes: () => api.get('/products/custom-barcodes'),
     search: (query) => api.get('/products/search', { params: { search: query, limit: 20 } }),
     create: (data) => api.post('/products', data),
     update: (id, data) => api.put(`/products/${id}`, data),

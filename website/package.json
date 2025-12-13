@@ -4,6 +4,7 @@
   "description": "ShivikMart Inventory Management Web Application",
   "private": true,
   "dependencies": {
+    "@tanstack/react-virtual": "^3.13.13",
     "axios": "^1.6.2",
     "date-fns": "^2.30.0",
     "lucide-react": "^0.294.0",
@@ -11,7 +12,8 @@
     "react-dom": "^18.2.0",
     "react-hot-toast": "^2.4.1",
     "react-router-dom": "^6.20.0",
-    "recharts": "^2.10.3"
+    "recharts": "^2.10.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
