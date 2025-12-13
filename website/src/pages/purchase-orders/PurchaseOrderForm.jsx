@@ -4,6 +4,7 @@ import { ArrowLeft, Plus, Trash2, Save, Eye } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
+import DateInput from '../../components/common/DateInput';
 import ProductSearch from '../../components/common/ProductSearch';
 import { purchaseOrdersAPI, suppliersAPI, productsAPI } from '../../services/api';
 import toast from 'react-hot-toast';
@@ -292,8 +293,17 @@ const PurchaseOrderForm = () => {
 
     const formatDate = (dateString) => {
         if (!dateString) return '';
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        try {
+            // Handle both ISO strings and YYYY-MM-DD format
+            const date = dateString.includes('T') 
+                ? new Date(dateString) 
+                : new Date(dateString + 'T12:00:00.000Z');
+            if (isNaN(date.getTime())) return '';
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch (error) {
+            console.error('Date formatting error:', error);
+            return '';
+        }
     };
 
     const totalAmount = formData.items.reduce((sum, item) => sum + (item.quantity * item.costPrice), 0);
@@ -353,14 +363,13 @@ const PurchaseOrderForm = () => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Expected Delivery Date
-                                    </label>
-                                    <Input
-                                        type="date"
+                                    <DateInput
+                                        label="Expected Delivery Date"
+                                        name="expectedDeliveryDate"
                                         value={formData.expectedDeliveryDate}
                                         onChange={(e) => setFormData(prev => ({ ...prev, expectedDeliveryDate: e.target.value }))}
                                         min={new Date().toISOString().split('T')[0]}
+                                        className="mb-0"
                                     />
                                 </div>
 
@@ -424,7 +433,14 @@ const PurchaseOrderForm = () => {
                                         title="Click to view product details in new tab"
                                     >
                                         <p className="text-sm font-medium text-blue-900 group-hover:text-blue-700 flex items-center gap-2">
-                                            <span>Selected: {selectedProduct.name} {selectedProduct.sku && `(${selectedProduct.sku})`}</span>
+                                            <span>
+                                                Selected: {selectedProduct.name} {selectedProduct.sku && `(${selectedProduct.sku})`}
+                                                {selectedProduct.currentStock !== undefined && (
+                                                    <span className="ml-2 text-gray-600 font-normal">
+                                                        • Current Stock: {selectedProduct.currentStock}
+                                                    </span>
+                                                )}
+                                            </span>
                                             <Eye
                                                 size={14}
                                                 className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-700"
@@ -522,12 +538,10 @@ const PurchaseOrderForm = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Expiry Date (Optional)
-                                </label>
-                                <Input
+                                <DateInput
                                     ref={expiryDateRef}
-                                    type="date"
+                                    label="Expiry Date (Optional)"
+                                    name="itemExpiryDate"
                                     value={itemExpiryDate}
                                     onChange={(e) => setItemExpiryDate(e.target.value)}
                                     onKeyDown={(e) => {
@@ -538,6 +552,7 @@ const PurchaseOrderForm = () => {
                                         }
                                     }}
                                     min={new Date().toISOString().split('T')[0]}
+                                    className="mb-0"
                                 />
                             </div>
 

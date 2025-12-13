@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Minus, Plus, Trash2, Edit2, X, Banknote, Smartphone, Printer, CheckCircle, Receipt } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
@@ -20,13 +20,147 @@ const PAYMENT_METHODS = [
 const BillingScreen = () => {
     const { user } = useAuth();
     const [cart, setCart] = useState([]);
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('cash');
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('upi');
     const [amountReceived, setAmountReceived] = useState('');
     const [receiptData, setReceiptData] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [showReceiptModal, setShowReceiptModal] = useState(false);
     const [isPaymentCompleted, setIsPaymentCompleted] = useState(false);
     const productSearchRef = useRef(null);
+    const amountReceivedRef = useRef(null);
+    const shouldRefocusRef = useRef(true);
+
+    // Helper function to get the actual input element
+    const getInputElement = () => {
+        if (!productSearchRef.current) return null;
+        
+        // Try direct access (if ref is the input element)
+        if (productSearchRef.current.tagName === 'INPUT') {
+            return productSearchRef.current;
+        }
+        
+        // Try to find input within the ref (if ref is a container)
+        const input = productSearchRef.current.querySelector?.('input') || 
+                     productSearchRef.current.inputRef?.current ||
+                     productSearchRef.current;
+        
+        return input && input.tagName === 'INPUT' ? input : null;
+    };
+
+    // Helper function to refocus the search input
+    const refocusSearch = () => {
+        if (isPaymentCompleted || !shouldRefocusRef.current) return;
+        
+        const inputElement = getInputElement();
+        if (inputElement && typeof inputElement.focus === 'function') {
+            // Use requestAnimationFrame for smoother focus
+            requestAnimationFrame(() => {
+                inputElement.focus();
+            });
+        }
+    };
+
+    // Keep search bar focused at all times
+    useEffect(() => {
+        if (isPaymentCompleted) return;
+
+        // Initial focus
+        setTimeout(refocusSearch, 200);
+
+        // Refocus on any click outside search results and modals
+        const handleClick = (e) => {
+            // Don't refocus if clicking on search results dropdown
+            if (e.target.closest('.absolute.top-full')) {
+                return;
+            }
+            // Don't refocus if clicking on modals
+            if (e.target.closest('[role="dialog"]') || e.target.closest('.modal')) {
+                return;
+            }
+            // Don't refocus if clicking on amount received input or its container
+            const amountInputElement = amountReceivedRef.current?.querySelector?.('input') || 
+                                      amountReceivedRef.current?.inputRef?.current ||
+                                      amountReceivedRef.current;
+            if (e.target === amountInputElement || e.target.closest('[data-amount-input-container]')) {
+                // Focus the amount input when clicking on it or its container
+                if (amountInputElement && typeof amountInputElement.focus === 'function') {
+                    setTimeout(() => {
+                        amountInputElement.focus();
+                    }, 50);
+                }
+                return;
+            }
+            // Don't refocus if clicking on price edit input or its container
+            if (e.target.closest('[data-price-edit-container]') || 
+                (e.target.tagName === 'INPUT' && e.target.closest('[data-price-edit-container]'))) {
+                // Focus the price input when clicking on it or its container
+                const priceInput = e.target.tagName === 'INPUT' ? e.target : 
+                                  e.target.closest('[data-price-edit-container]')?.querySelector('input');
+                if (priceInput && typeof priceInput.focus === 'function') {
+                    setTimeout(() => {
+                        priceInput.focus();
+                        priceInput.select(); // Select all text for easy editing
+                    }, 50);
+                }
+                return;
+            }
+            // Don't refocus if clicking on input fields (like price edit)
+            if (e.target.tagName === 'INPUT') {
+                const inputElement = getInputElement();
+                if (e.target !== inputElement) {
+                    return; // Don't refocus if clicking on other inputs
+                }
+            }
+            // Refocus after a short delay to allow the click to complete
+            setTimeout(refocusSearch, 100);
+        };
+
+        // Refocus when search loses focus
+        const handleBlur = (e) => {
+            const inputElement = getInputElement();
+            // Only refocus if the blur is from our search input
+            if (e.target === inputElement && shouldRefocusRef.current) {
+                setTimeout(refocusSearch, 100);
+            }
+        };
+
+        // Add event listeners
+        document.addEventListener('click', handleClick, true);
+        
+        // Listen for blur on the input element
+        const inputElement = getInputElement();
+        if (inputElement) {
+            inputElement.addEventListener('blur', handleBlur);
+        }
+
+        return () => {
+            document.removeEventListener('click', handleClick, true);
+            if (inputElement) {
+                inputElement.removeEventListener('blur', handleBlur);
+            }
+        };
+    }, [isPaymentCompleted]); // Re-run when payment status changes
+
+    // Refocus after cart changes (new items added, quantity updated)
+    useEffect(() => {
+        if (!isPaymentCompleted) {
+            setTimeout(refocusSearch, 150);
+        }
+    }, [cart, isPaymentCompleted]); // Refocus whenever cart changes
+
+    // Focus amount received input when cash payment method is selected
+    useEffect(() => {
+        if (selectedPaymentMethod === 'cash' && !isPaymentCompleted && amountReceivedRef.current) {
+            const inputElement = amountReceivedRef.current.querySelector?.('input') || 
+                               amountReceivedRef.current.inputRef?.current ||
+                               amountReceivedRef.current;
+            if (inputElement && typeof inputElement.focus === 'function') {
+                setTimeout(() => {
+                    inputElement.focus();
+                }, 100);
+            }
+        }
+    }, [selectedPaymentMethod, isPaymentCompleted]);
 
     const addToCart = async (product) => {
         try {
@@ -108,7 +242,7 @@ const BillingScreen = () => {
                     batchInfo,
                     isEditingPrice: false,
                 };
-                setCart([...cart, newItem]);
+                setCart([newItem, ...cart]);
             }
         } catch (error) {
             toast.error(error.message || 'Failed to add product to cart');
@@ -133,6 +267,7 @@ const BillingScreen = () => {
             return item;
         }).filter(item => item !== null);
         setCart(updatedCart);
+        // Refocus will happen automatically via the cart useEffect
     };
 
     const togglePriceEdit = (productId) => {
@@ -261,7 +396,7 @@ const BillingScreen = () => {
                                     if (window.confirm('Clear all items from cart?')) {
                                         setCart([]);
                                         setAmountReceived('');
-                                        setSelectedPaymentMethod('cash');
+                                        setSelectedPaymentMethod('upi');
                                         setReceiptData(null);
                                         setShowReceiptModal(false);
                                         // Focus the product search input
@@ -350,14 +485,31 @@ const BillingScreen = () => {
                                             {/* Price - Inline */}
                                             <div className="flex items-center gap-2 min-w-[100px]">
                                                 {item.isEditingPrice ? (
-                                                    <div className="flex items-center gap-1">
+                                                    <div className="flex items-center gap-1" data-price-edit-container>
                                                         <Input
                                                             type="number"
                                                             defaultValue={item.unitPrice}
-                                                            onBlur={(e) => updateSellingPrice(item.product._id, e.target.value)}
+                                                            onFocus={(e) => {
+                                                                // Ensure focus is maintained and select text
+                                                                shouldRefocusRef.current = false;
+                                                                e.target.select();
+                                                            }}
+                                                            onBlur={(e) => {
+                                                                updateSellingPrice(item.product._id, e.target.value);
+                                                                // Re-enable search refocus and focus immediately
+                                                                shouldRefocusRef.current = true;
+                                                                setTimeout(() => {
+                                                                    refocusSearch();
+                                                                }, 100);
+                                                            }}
                                                             onKeyPress={(e) => {
                                                                 if (e.key === 'Enter') {
                                                                     updateSellingPrice(item.product._id, e.target.value);
+                                                                    // Re-enable search refocus and focus immediately
+                                                                    shouldRefocusRef.current = true;
+                                                                    setTimeout(() => {
+                                                                        refocusSearch();
+                                                                    }, 100);
                                                                 }
                                                             }}
                                                             className="w-20 text-sm font-bold text-center py-1"
@@ -439,6 +591,8 @@ const BillingScreen = () => {
                                                     setSelectedPaymentMethod(method.id);
                                                     if (method.id !== 'cash') {
                                                         setAmountReceived('');
+                                                        // Refocus search when switching away from cash
+                                                        setTimeout(refocusSearch, 100);
                                                     }
                                                 }}
                                                 className={`p-2 border-2 rounded-lg flex flex-col items-center gap-1 transition-all ${selectedPaymentMethod === method.id
@@ -456,17 +610,37 @@ const BillingScreen = () => {
 
                             {/* Cash Amount Received - Only for Cash */}
                             {selectedPaymentMethod === 'cash' && !isPaymentCompleted && (
-                                <div className="mb-4">
-                                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">
+                                <div className="mb-4" data-amount-input-container>
+                                    <label 
+                                        className="block text-xs font-bold text-gray-700 mb-1.5 uppercase cursor-pointer"
+                                        onClick={() => {
+                                            const amountInputElement = amountReceivedRef.current?.querySelector?.('input') || 
+                                                                      amountReceivedRef.current?.inputRef?.current ||
+                                                                      amountReceivedRef.current;
+                                            if (amountInputElement && typeof amountInputElement.focus === 'function') {
+                                                amountInputElement.focus();
+                                            }
+                                        }}
+                                    >
                                         AMOUNT RECEIVED
                                     </label>
                                     <Input
+                                        ref={amountReceivedRef}
                                         type="number"
                                         placeholder="Enter amount..."
                                         value={amountReceived}
                                         onChange={(e) => setAmountReceived(e.target.value)}
+                                        onFocus={(e) => {
+                                            // Ensure focus is maintained
+                                            shouldRefocusRef.current = false;
+                                        }}
+                                        onBlur={(e) => {
+                                            // Re-enable search refocus after blur
+                                            setTimeout(() => {
+                                                shouldRefocusRef.current = true;
+                                            }, 200);
+                                        }}
                                         className="!mb-0 [&>div>input]:text-lg [&>div>input]:font-bold [&>div>input]:text-center [&>div>input]:py-2 [&>div>input]:border-2 [&>div>input]:border-blue-500 [&>div>input]:focus:border-blue-500 [&>div>input]:focus:ring-2 [&>div>input]:focus:ring-blue-500"
-                                        autoFocus={cart.length > 0}
                                     />
                                     {amountReceived && !isNaN(parseFloat(amountReceived)) && (
                                         <div className="mt-2">
@@ -543,7 +717,7 @@ const BillingScreen = () => {
                                             setReceiptData(null);
                                             setCart([]);
                                             setAmountReceived('');
-                                            setSelectedPaymentMethod('cash');
+                                            setSelectedPaymentMethod('upi');
                                             setShowReceiptModal(false);
                                             setIsPaymentCompleted(false); // Re-enable for new sale
                                             // Focus the product search input

@@ -485,6 +485,25 @@ const PurchaseOrderFormScreen: React.FC = () => {
                         emptyMessage="No products available"
                     />
 
+                    {selectedProduct && (() => {
+                        const product = products.find(p => p._id === selectedProduct);
+                        if (product) {
+                            return (
+                                <View style={[styles.selectedProductContainer, { backgroundColor: theme.colors.primary[50], borderColor: theme.colors.primary[200] }]}>
+                                    <Text style={[styles.selectedProductText, { color: theme.colors.primary[900] }]}>
+                                        Selected: {product.name} {product.sku && `(${product.sku})`}
+                                        {product.currentStock !== undefined && (
+                                            <Text style={[styles.stockText, { color: theme.colors.textSecondary }]}>
+                                                {' • '}Current Stock: {product.currentStock}
+                                            </Text>
+                                        )}
+                                    </Text>
+                                </View>
+                            );
+                        }
+                        return null;
+                    })()}
+
                     <View style={styles.itemInputRow}>
                         <View style={styles.itemInputHalf}>
                             <Input
@@ -756,6 +775,21 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         marginBottom: 12,
+    },
+    selectedProductContainer: {
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        marginTop: 8,
+        marginBottom: 12,
+    },
+    selectedProductText: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    stockText: {
+        fontSize: 14,
+        fontWeight: '400',
     },
     itemInputRow: {
         flexDirection: 'row',

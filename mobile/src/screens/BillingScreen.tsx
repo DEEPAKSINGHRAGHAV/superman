@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -63,15 +63,54 @@ const BillingScreen: React.FC = () => {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showReceiptModal, setShowReceiptModal] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('cash');
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('upi');
     const [amountReceived, setAmountReceived] = useState('');
     const [receiptData, setReceiptData] = useState<any>(null);
+    const [editingPriceValues, setEditingPriceValues] = useState<Record<string, string>>({});
+    const productSearchRef = useRef<any>(null);
+    const amountReceivedRef = useRef<TextInput>(null);
 
     // Calculate totals
     const subtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
     const tax = subtotal * 0; // 0% GST (No tax)
     const total = subtotal + tax;
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+    // Auto-open product search modal on initial load when cart is empty
+    useEffect(() => {
+        if (cart.length === 0 && !showProductSearch && !showScanner && !showPaymentModal) {
+            // Auto-open search modal on initial load
+            setShowProductSearch(true);
+        }
+    }, []); // Run only on mount
+
+    // Keep search bar focused when product search modal is open
+    useEffect(() => {
+        if (showProductSearch && productSearchRef.current) {
+            // Focus the search input when modal opens
+            setTimeout(() => {
+                productSearchRef.current?.focus();
+            }, 300);
+        }
+    }, [showProductSearch]);
+
+    // Refocus search after cart changes (new items added, quantity updated)
+    useEffect(() => {
+        if (showProductSearch && productSearchRef.current) {
+            setTimeout(() => {
+                productSearchRef.current?.focus();
+            }, 200);
+        }
+    }, [cart, showProductSearch]);
+
+    // Focus amount received input when cash payment method is selected
+    useEffect(() => {
+        if (selectedPaymentMethod === 'cash' && amountReceivedRef.current && showPaymentModal) {
+            setTimeout(() => {
+                amountReceivedRef.current?.focus();
+            }, 200);
+        }
+    }, [selectedPaymentMethod, showPaymentModal]);
 
 
     // Handle barcode scan
@@ -198,8 +237,13 @@ const BillingScreen: React.FC = () => {
                                                         totalPrice: unitPrice,
                                                         batchInfo,
                                                     };
-                                                    setCart([...cart, newItem]);
-                                                    setShowProductSearch(false);
+                                                    setCart([newItem, ...cart]);
+                                                    // Keep modal open and refocus
+                                                    setTimeout(() => {
+                                                        if (productSearchRef.current) {
+                                                            productSearchRef.current.focus();
+                                                        }
+                                                    }, 100);
                                                     resolve(newItem);
                                                 }
                                             }
@@ -218,7 +262,7 @@ const BillingScreen: React.FC = () => {
                             totalPrice: unitPrice,
                             batchInfo,
                         };
-                        setCart([...cart, newItem]);
+                        setCart([newItem, ...cart]);
                     } else if (batchResponse.success && batchResponse.data?.batches?.length === 0) {
                         // No non-expired batches available
                         Alert.alert(
@@ -245,10 +289,15 @@ const BillingScreen: React.FC = () => {
                     totalPrice: unitPrice,
                     batchInfo,
                 };
-                setCart([...cart, newItem]);
+                setCart([newItem, ...cart]);
             }
 
-            setShowProductSearch(false);
+            // Keep search modal open and refocus
+            setTimeout(() => {
+                if (productSearchRef.current) {
+                    productSearchRef.current.focus();
+                }
+            }, 100);
         } catch (error: any) {
             Alert.alert('Error', error.message || 'Failed to add product to cart');
         }
@@ -279,12 +328,14 @@ const BillingScreen: React.FC = () => {
         }).filter(item => item !== null) as CartItem[];
 
         setCart(updatedCart);
+        // Refocus will happen automatically via the cart useEffect
     };
 
     // Toggle price editing
     const togglePriceEdit = (productId: string) => {
         const updatedCart = cart.map(item => {
             if (item.product._id === productId) {
+                const isStartingEdit = !item.isEditingPrice;
                 return {
                     ...item,
                     isEditingPrice: !item.isEditingPrice,
@@ -293,6 +344,15 @@ const BillingScreen: React.FC = () => {
             return item;
         });
         setCart(updatedCart);
+        
+        // Initialize editing value when starting to edit
+        const item = cart.find(i => i.product._id === productId);
+        if (item && !item.isEditingPrice) {
+            setEditingPriceValues(prev => ({
+                ...prev,
+                [productId]: item.unitPrice.toString()
+            }));
+        }
     };
 
     // Update selling price
@@ -327,6 +387,20 @@ const BillingScreen: React.FC = () => {
         });
 
         setCart(updatedCart);
+        
+        // Clear editing price value
+        setEditingPriceValues(prev => {
+            const newValues = { ...prev };
+            delete newValues[productId];
+            return newValues;
+        });
+        
+        // Refocus search after price update
+        if (showProductSearch && productSearchRef.current) {
+            setTimeout(() => {
+                productSearchRef.current?.focus();
+            }, 150);
+        }
     };
 
     // Remove item from cart
@@ -379,7 +453,7 @@ const BillingScreen: React.FC = () => {
                 setTimeout(() => {
                     setCart([]);
                     setAmountReceived('');
-                    setSelectedPaymentMethod('cash');
+                    setSelectedPaymentMethod('upi');
                 }, 1000);
             }
         } catch (error: any) {
@@ -473,16 +547,25 @@ const BillingScreen: React.FC = () => {
                                             color: theme.colors.text,
                                             borderColor: theme.colors.primary[500]
                                         }]}
-                                        defaultValue={item.unitPrice.toString()}
+                                        value={editingPriceValues[item.product._id] || item.unitPrice.toString()}
+                                        onChangeText={(text) => {
+                                            setEditingPriceValues(prev => ({
+                                                ...prev,
+                                                [item.product._id]: text
+                                            }));
+                                        }}
                                         keyboardType="decimal-pad"
                                         autoFocus
                                         selectTextOnFocus
                                         onSubmitEditing={(e) => {
                                             updateSellingPrice(item.product._id, e.nativeEvent.text);
+                                            // Refocus search will happen in updateSellingPrice
                                         }}
                                         onBlur={() => {
-                                            // Toggle back if user clicks away without submitting
-                                            togglePriceEdit(item.product._id);
+                                            // Save price on blur (treat as final enter)
+                                            const newPrice = editingPriceValues[item.product._id] || item.unitPrice.toString();
+                                            updateSellingPrice(item.product._id, newPrice);
+                                            // Refocus search will happen in updateSellingPrice
                                         }}
                                         placeholder="0.00"
                                         placeholderTextColor={theme.colors.textSecondary}
@@ -715,6 +798,7 @@ const BillingScreen: React.FC = () => {
                     </View>
                     <View style={styles.searchContainer}>
                         <ProductSearch
+                            ref={productSearchRef}
                             placeholder="Type product name, SKU, barcode, or brand..."
                             onProductSelect={addToCart}
                             showStockInfo={true}
@@ -788,7 +872,15 @@ const BillingScreen: React.FC = () => {
                                                             : theme.colors.gray[300],
                                                 },
                                             ]}
-                                            onPress={() => setSelectedPaymentMethod(method.id)}
+                                            onPress={() => {
+                                                setSelectedPaymentMethod(method.id);
+                                                // Focus amount input if cash is selected
+                                                if (method.id === 'cash' && showPaymentModal) {
+                                                    setTimeout(() => {
+                                                        amountReceivedRef.current?.focus();
+                                                    }, 200);
+                                                }
+                                            }}
                                             activeOpacity={0.7}
                                             accessibilityLabel={`Select ${method.name} payment`}
                                             accessibilityRole="button"
@@ -823,10 +915,18 @@ const BillingScreen: React.FC = () => {
                             {/* Cash Input - SIMPLE and CLEAR */}
                             {selectedPaymentMethod === 'cash' && (
                                 <View style={styles.cashInput}>
-                                    <Text style={[styles.cashInputLabel, { color: theme.colors.text }]}>
-                                        ENTER CASH RECEIVED
-                                    </Text>
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            amountReceivedRef.current?.focus();
+                                        }}
+                                        activeOpacity={1}
+                                    >
+                                        <Text style={[styles.cashInputLabel, { color: theme.colors.text }]}>
+                                            ENTER CASH RECEIVED
+                                        </Text>
+                                    </TouchableOpacity>
                                     <TextInput
+                                        ref={amountReceivedRef}
                                         style={[styles.cashInputFieldLarge, {
                                             backgroundColor: theme.colors.gray[50],
                                             color: theme.colors.text,
@@ -837,7 +937,9 @@ const BillingScreen: React.FC = () => {
                                         keyboardType="decimal-pad"
                                         value={amountReceived}
                                         onChangeText={setAmountReceived}
-                                        autoFocus
+                                        onFocus={() => {
+                                            // Input is focused, ensure it stays focused
+                                        }}
                                         accessibilityLabel="Enter cash amount received"
                                     />
                                     {amountReceived && !isNaN(parseFloat(amountReceived)) && (

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Package, Calendar, DollarSign, TrendingDown, Filter, RefreshCw, Clock, AlertCircle } from 'lucide-react';
+import { AlertTriangle, Package, Calendar, DollarSign, TrendingDown, Filter, RefreshCw, Clock, AlertCircle, LayoutGrid, List } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Badge from '../../components/common/Badge';
@@ -21,6 +21,7 @@ const ExpiringProducts = () => {
     const [batches, setBatches] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedFilter, setSelectedFilter] = useState(30);
+    const [viewMode, setViewMode] = useState('compact'); // 'card' or 'compact'
 
     useEffect(() => {
         fetchExpiringBatches();
@@ -31,7 +32,39 @@ const ExpiringProducts = () => {
             setLoading(true);
             const response = await inventoryAPI.getExpiringBatches(selectedFilter);
             if (response.success) {
-                setBatches(response.data || []);
+                // Transform product-level data to batch-level format expected by component
+                const transformedBatches = (response.data || []).map((product) => {
+                    const today = new Date();
+                    const expiryDate = product.expiryDate ? new Date(product.expiryDate) : null;
+                    const daysUntilExpiry = expiryDate 
+                        ? Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24))
+                        : 0;
+                    
+                    // Calculate value at risk using expiringQuantity and costPrice
+                    const valueAtRisk = (product.expiringQuantity || 0) * (product.costPrice || 0);
+                    
+                    return {
+                        _id: product._id,
+                        product: {
+                            _id: product._id,
+                            name: product.name,
+                            sku: product.sku
+                        },
+                        batchNumber: product.expiringBatchCount > 1 
+                            ? `${product.expiringBatchCount} batches` 
+                            : 'N/A',
+                        currentQuantity: product.expiringQuantity || 0,
+                        expiryDate: product.expiryDate,
+                        daysUntilExpiry,
+                        valueAtRisk,
+                        expiringBatchCount: product.expiringBatchCount
+                    };
+                });
+                // Sort by daysUntilExpiry (ascending - most urgent/expired first)
+                const sortedBatches = transformedBatches.sort((a, b) => {
+                    return (a.daysUntilExpiry || 0) - (b.daysUntilExpiry || 0);
+                });
+                setBatches(sortedBatches);
             }
         } catch (error) {
             toast.error('Failed to load expiring products');
@@ -144,22 +177,49 @@ const ExpiringProducts = () => {
 
             {/* Filter Chips */}
             <Card>
-                <div className="flex items-center space-x-2 flex-wrap gap-2">
-                    <Filter size={18} className="text-gray-600" />
-                    <span className="text-sm font-medium text-gray-700">Show expiring within:</span>
-                    {FILTER_OPTIONS.map((option) => (
+                <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center space-x-2 flex-wrap gap-2">
+                        <Filter size={18} className="text-gray-600" />
+                        <span className="text-sm font-medium text-gray-700">Show expiring within:</span>
+                        {FILTER_OPTIONS.map((option) => (
+                            <button
+                                key={option.value}
+                                onClick={() => setSelectedFilter(option.value)}
+                                className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center space-x-2 transition-colors ${selectedFilter === option.value
+                                        ? 'bg-orange-500 text-white'
+                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                            >
+                                {option.icon}
+                                <span>{option.label}</span>
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex items-center space-x-2">
+                        <span className="text-sm font-medium text-gray-700">View:</span>
                         <button
-                            key={option.value}
-                            onClick={() => setSelectedFilter(option.value)}
-                            className={`px-4 py-2 rounded-lg font-medium text-sm flex items-center space-x-2 transition-colors ${selectedFilter === option.value
-                                    ? 'bg-orange-500 text-white'
+                            onClick={() => setViewMode('card')}
+                            className={`p-2 rounded-lg transition-colors ${
+                                viewMode === 'card' 
+                                    ? 'bg-blue-500 text-white' 
                                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                }`}
+                            }`}
+                            title="Card View"
                         >
-                            {option.icon}
-                            <span>{option.label}</span>
+                            <LayoutGrid size={18} />
                         </button>
-                    ))}
+                        <button
+                            onClick={() => setViewMode('compact')}
+                            className={`p-2 rounded-lg transition-colors ${
+                                viewMode === 'compact' 
+                                    ? 'bg-blue-500 text-white' 
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            }`}
+                            title="Compact View"
+                        >
+                            <List size={18} />
+                        </button>
+                    </div>
                 </div>
             </Card>
 
@@ -174,6 +234,69 @@ const ExpiringProducts = () => {
                         <p className="text-gray-600 text-center">
                             No products expiring in the next {selectedFilter} days.
                         </p>
+                    </div>
+                </Card>
+            ) : viewMode === 'compact' ? (
+                <Card>
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50 border-b">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry Date</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Days Left</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value at Risk</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batches</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {batches.map((batch) => {
+                                    const expiryColor = getExpiryColor(batch.daysUntilExpiry || 0);
+                                    const isExpired = (batch.daysUntilExpiry || 0) <= 0;
+                                    return (
+                                        <tr 
+                                            key={batch._id} 
+                                            className={`hover:bg-gray-50 cursor-pointer ${isExpired ? 'bg-red-50' : ''}`}
+                                            onClick={() => navigate(`/products/${batch.product?._id}`)}
+                                        >
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <div className="text-sm font-medium text-gray-900">{batch.product?.name || 'Unknown Product'}</div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <div className="text-sm text-gray-600">{batch.product?.sku || 'N/A'}</div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <div className="text-sm text-gray-900">
+                                                    {batch.expiryDate ? formatDate(batch.expiryDate) : 'N/A'}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                                    isExpired || expiryColor === 'red' 
+                                                        ? 'bg-red-100 text-red-800' 
+                                                        : expiryColor === 'orange' 
+                                                            ? 'bg-orange-100 text-orange-800' 
+                                                            : 'bg-yellow-100 text-yellow-800'
+                                                }`}>
+                                                    {getExpiryText(batch.daysUntilExpiry || 0)}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <div className="text-sm font-semibold text-gray-900">{batch.currentQuantity || 0} units</div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <div className="text-sm font-bold text-red-600">{formatCurrency(batch.valueAtRisk || 0)}</div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                <div className="text-sm text-gray-600">{batch.expiringBatchCount || 0}</div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                     </div>
                 </Card>
             ) : (

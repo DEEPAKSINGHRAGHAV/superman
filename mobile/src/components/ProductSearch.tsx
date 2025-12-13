@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
     View,
     Text,
@@ -26,7 +26,7 @@ interface ProductSearchProps {
     disabled?: boolean;
 }
 
-const ProductSearch: React.FC<ProductSearchProps> = ({
+const ProductSearch = forwardRef<any, ProductSearchProps>(({
     onProductSelect,
     placeholder = "Search products by name, SKU, or barcode...",
     showStockInfo = true,
@@ -37,13 +37,24 @@ const ProductSearch: React.FC<ProductSearchProps> = ({
     style,
     autoFocus = false,
     disabled = false,
-}) => {
+}, ref) => {
     const { theme } = useTheme();
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<Product[]>([]);
     const [isSearching, setIsSearching] = useState(false);
     const [showResults, setShowResults] = useState(false);
     const [searchTimeout, setSearchTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
+    const inputRef = useRef<TextInput>(null);
+
+    // Expose focus method via ref
+    useImperativeHandle(ref, () => ({
+        focus: () => {
+            inputRef.current?.focus();
+        },
+        blur: () => {
+            inputRef.current?.blur();
+        },
+    }));
 
     // Debounced search effect
     useEffect(() => {
@@ -225,6 +236,7 @@ const ProductSearch: React.FC<ProductSearchProps> = ({
                     style={styles.searchIcon}
                 />
                 <TextInput
+                    ref={inputRef}
                     style={getInputStyle()}
                     placeholder={placeholder}
                     placeholderTextColor={theme.colors.placeholder}
@@ -367,5 +379,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
     },
 });
+
+ProductSearch.displayName = 'ProductSearch';
 
 export default ProductSearch;
