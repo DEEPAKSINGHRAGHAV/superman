@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import Card from '../components/common/Card';
 import Badge from '../components/common/Badge';
-import { productsAPI, purchaseOrdersAPI, inventoryAPI } from '../services/api';
+import { productsAPI, inventoryAPI } from '../services/api';
 import { formatCurrency, formatNumber, formatDate } from '../utils/helpers';
 import toast from 'react-hot-toast';
 
@@ -19,7 +19,6 @@ const Dashboard = () => {
     const [stats, setStats] = useState(null);
     const [lowStockProducts, setLowStockProducts] = useState([]);
     const [expiringBatches, setExpiringBatches] = useState([]);
-    const [recentPOs, setRecentPOs] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -29,11 +28,10 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
         try {
             setLoading(true);
-            const [statsData, lowStock, expiring, pos] = await Promise.all([
+            const [statsData, lowStock, expiring] = await Promise.all([
                 productsAPI.getStats(),
                 productsAPI.getLowStock(),
                 inventoryAPI.getExpiringBatches(30),
-                purchaseOrdersAPI.getAll({ limit: 5, sortBy: 'createdAt', sortOrder: 'desc' }),
             ]);
 
             if (statsData.success) {
@@ -45,11 +43,38 @@ const Dashboard = () => {
             }
 
             if (expiring.success) {
-                setExpiringBatches(expiring.data);
-            }
-
-            if (pos.success) {
-                setRecentPOs(pos.data);
+                // Transform product-level data to batch-level format
+                const transformedBatches = (expiring.data || []).map((product) => {
+                    const today = new Date();
+                    const expiryDate = product.expiryDate ? new Date(product.expiryDate) : null;
+                    const daysUntilExpiry = expiryDate 
+                        ? Math.ceil((expiryDate - today) / (1000 * 60 * 60 * 24))
+                        : 0;
+                    
+                    const valueAtRisk = (product.expiringQuantity || 0) * (product.costPrice || 0);
+                    
+                    return {
+                        _id: product._id,
+                        product: {
+                            _id: product._id,
+                            name: product.name,
+                            sku: product.sku
+                        },
+                        batchNumber: product.expiringBatchCount > 1 
+                            ? `${product.expiringBatchCount} batches` 
+                            : 'N/A',
+                        currentQuantity: product.expiringQuantity || 0,
+                        expiryDate: product.expiryDate,
+                        daysUntilExpiry,
+                        valueAtRisk,
+                        expiringBatchCount: product.expiringBatchCount
+                    };
+                });
+                // Sort by daysUntilExpiry (ascending - most urgent/expired first)
+                const sortedBatches = transformedBatches.sort((a, b) => {
+                    return (a.daysUntilExpiry || 0) - (b.daysUntilExpiry || 0);
+                });
+                setExpiringBatches(sortedBatches);
             }
         } catch (error) {
             toast.error('Failed to load dashboard data');
@@ -165,69 +190,62 @@ const Dashboard = () => {
                 </Card>
 
                 {/* Expiring Batches */}
-                <Card title="Expiring Soon" subtitle={`${expiringBatches.length} batches expiring in 30 days`}>
-                    <div className="space-y-3">
-                        {expiringBatches.slice(0, 5).map((batch) => (
-                            <div key={batch._id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                <div className="flex-1">
-                                    <p className="font-medium text-gray-900">{batch.product?.name || 'N/A'}</p>
-                                    <p className="text-sm text-gray-600">Batch: {batch.batchNumber}</p>
-                                </div>
-                                <div className="text-right">
-                                    <Badge variant="danger">{formatDate(batch.expiryDate)}</Badge>
-                                    <p className="text-xs text-gray-500 mt-1">{batch.currentQuantity} units</p>
-                                </div>
-                            </div>
-                        ))}
+                <Card title="Expiring Soon" subtitle={`${expiringBatches.length} products expiring in 30 days`}>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-gray-50 border-b">
+                                <tr>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Days</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
+                                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Expiry</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {expiringBatches.slice(0, 10).map((batch) => {
+                                    const isExpired = (batch.daysUntilExpiry || 0) <= 0;
+                                    const isUrgent = (batch.daysUntilExpiry || 0) <= 7;
+                                    return (
+                                        <tr 
+                                            key={batch._id} 
+                                            className={`hover:bg-gray-50 ${isExpired ? 'bg-red-50' : isUrgent ? 'bg-orange-50' : ''}`}
+                                        >
+                                            <td className="px-3 py-2">
+                                                <div className="font-medium text-gray-900">{batch.product?.name || 'Unknown'}</div>
+                                                <div className="text-xs text-gray-500">{batch.product?.sku || 'N/A'}</div>
+                                            </td>
+                                            <td className="px-3 py-2">
+                                                <Badge 
+                                                    variant={isExpired ? 'danger' : isUrgent ? 'warning' : 'info'}
+                                                >
+                                                    {isExpired ? 'Expired' : `${batch.daysUntilExpiry || 0}d`}
+                                                </Badge>
+                                            </td>
+                                            <td className="px-3 py-2 text-gray-900">{batch.currentQuantity || 0}</td>
+                                            <td className="px-3 py-2 text-gray-600 text-xs">
+                                                {batch.expiryDate ? formatDate(batch.expiryDate) : 'N/A'}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
                         {expiringBatches.length === 0 && (
                             <p className="text-center text-gray-500 py-4">No batches expiring soon!</p>
+                        )}
+                        {expiringBatches.length > 10 && (
+                            <div className="mt-3 text-center">
+                                <a 
+                                    href="/batches/expiring" 
+                                    className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                >
+                                    View all {expiringBatches.length} expiring products →
+                                </a>
+                            </div>
                         )}
                     </div>
                 </Card>
             </div>
-
-            {/* Recent Purchase Orders */}
-            <Card title="Recent Purchase Orders" subtitle="Latest purchase activities">
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PO Number</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                            {recentPOs.map((po) => (
-                                <tr key={po._id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        {po.poNumber}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {po.supplier?.name || 'N/A'}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {formatCurrency(po.totalAmount)}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <Badge variant={po.status === 'approved' ? 'success' : po.status === 'pending' ? 'warning' : 'gray'}>
-                                            {po.status}
-                                        </Badge>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                        {formatDate(po.createdAt)}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    {recentPOs.length === 0 && (
-                        <p className="text-center text-gray-500 py-8">No purchase orders yet</p>
-                    )}
-                </div>
-            </Card>
         </div>
     );
 };
