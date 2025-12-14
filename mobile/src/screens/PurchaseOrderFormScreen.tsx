@@ -61,6 +61,11 @@ const PurchaseOrderFormScreen: React.FC = () => {
     const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null); // Track which item is being edited
     const [isModalOpen, setIsModalOpen] = useState(false);
 
+    // Product batches (existing inventory)
+    const [productBatches, setProductBatches] = useState<any[]>([]);
+    const [loadingBatches, setLoadingBatches] = useState(false);
+    const [showBatches, setShowBatches] = useState(false);
+
     useEffect(() => {
         loadSuppliers();
         // Don't load products on init - load lazily when modal opens
@@ -190,6 +195,30 @@ const PurchaseOrderFormScreen: React.FC = () => {
         return date.toLocaleDateString('en-US', options);
     };
 
+    // Fetch existing batches for a product
+    const fetchProductBatches = async (productId: string) => {
+        if (!productId) {
+            setProductBatches([]);
+            return;
+        }
+        try {
+            setLoadingBatches(true);
+            const response: any = await apiService.getBatchesByProduct(productId);
+            // Response structure: { success: true, data: { batches: [...], ... } }
+            if (response?.success && response?.data?.batches) {
+                // Batches are already filtered by backend (active + currentQuantity > 0)
+                setProductBatches(response.data.batches);
+            } else {
+                setProductBatches([]);
+            }
+        } catch (error) {
+            console.error('Failed to fetch product batches:', error);
+            setProductBatches([]);
+        } finally {
+            setLoadingBatches(false);
+        }
+    };
+
     // Handle product selection - auto-fill prices from product master
     const handleProductSelect = (productId: string) => {
         setSelectedProduct(productId);
@@ -201,6 +230,9 @@ const PurchaseOrderFormScreen: React.FC = () => {
             setItemCostPrice(product.costPrice.toString());
             setItemSellingPrice(product.sellingPrice.toString());
             setItemMRP(product.mrp.toString());
+            
+            // Fetch existing batches for this product
+            fetchProductBatches(productId);
         }
     };
 
@@ -319,6 +351,8 @@ const PurchaseOrderFormScreen: React.FC = () => {
         setItemSellingPrice('');
         setItemExpiryDate('');
         setEditingItemIndex(null);
+        setProductBatches([]);
+        setShowBatches(false);
 
         // Clear items error
         if (errors.items) {
@@ -356,6 +390,8 @@ const PurchaseOrderFormScreen: React.FC = () => {
         setItemExpiryDate('');
         setEditingItemIndex(null);
         setIsModalOpen(false);
+        setProductBatches([]);
+        setShowBatches(false);
     };
 
     const handleAddNewItem = () => {
@@ -486,16 +522,144 @@ const PurchaseOrderFormScreen: React.FC = () => {
                         const product = products.find(p => p._id === selectedProduct);
                         if (product) {
                             return (
-                                <View style={[styles.selectedProductContainer, { backgroundColor: theme.colors.primary[50], borderColor: theme.colors.primary[200] }]}>
-                                    <Text style={[styles.selectedProductText, { color: theme.colors.primary[900] }]}>
-                                        Selected: {product.name} {product.sku && `(${product.sku})`}
-                                        {product.currentStock !== undefined && (
-                                            <Text style={[styles.stockText, { color: theme.colors.textSecondary }]}>
-                                                {' • '}Current Stock: {product.currentStock}
+                                <>
+                                    <View style={[styles.selectedProductContainer, { backgroundColor: theme.colors.primary[50], borderColor: theme.colors.primary[200] }]}>
+                                        <Text style={[styles.selectedProductText, { color: theme.colors.primary[900] }]}>
+                                            Selected: {product.name} {product.sku && `(${product.sku})`}
+                                            {product.currentStock !== undefined && (
+                                                <Text style={[styles.stockText, { color: theme.colors.textSecondary }]}>
+                                                    {' • '}Current Stock: {product.currentStock}
+                                                </Text>
+                                            )}
+                                        </Text>
+                                    </View>
+
+                                    {/* Existing Batches Section */}
+                                    <TouchableOpacity
+                                        onPress={() => setShowBatches(!showBatches)}
+                                        style={[styles.batchesToggle, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                                    >
+                                        <View style={styles.batchesToggleContent}>
+                                            <Icon name="inventory" size={18} color={theme.colors.primary['500']} />
+                                            <Text style={[styles.batchesToggleText, { color: theme.colors.text }]}>
+                                                Existing Inventory
+                                                {!loadingBatches && productBatches.length > 0 && (
+                                                    <Text style={{ color: theme.colors.primary['600'] }}>
+                                                        {' '}({productBatches.length} batch{productBatches.length > 1 ? 'es' : ''})
+                                                    </Text>
+                                                )}
                                             </Text>
-                                        )}
-                                    </Text>
-                                </View>
+                                        </View>
+                                        <Icon 
+                                            name={showBatches ? "expand-less" : "expand-more"} 
+                                            size={24} 
+                                            color={theme.colors.textSecondary} 
+                                        />
+                                    </TouchableOpacity>
+
+                                    {showBatches && (
+                                        <View style={[styles.batchesContainer, { borderColor: theme.colors.border }]}>
+                                            {loadingBatches ? (
+                                                <View style={styles.batchesLoading}>
+                                                    <Text style={[styles.batchesLoadingText, { color: theme.colors.textSecondary }]}>
+                                                        Loading batches...
+                                                    </Text>
+                                                </View>
+                                            ) : productBatches.length === 0 ? (
+                                                <View style={[styles.noBatches, { backgroundColor: theme.colors.warning['50'] }]}>
+                                                    <Icon name="info-outline" size={20} color={theme.colors.warning['600']} />
+                                                    <Text style={[styles.noBatchesText, { color: theme.colors.warning['700'] }]}>
+                                                        No existing batches. This will be the first batch.
+                                                    </Text>
+                                                </View>
+                                            ) : (
+                                                <>
+                                                    {/* Batches Header */}
+                                                    <View style={[styles.batchHeader, { backgroundColor: theme.colors.gray[100] }]}>
+                                                        <Text style={[styles.batchHeaderCell, styles.batchCellBatch, { color: theme.colors.textSecondary }]}>
+                                                            Batch
+                                                        </Text>
+                                                        <Text style={[styles.batchHeaderCell, styles.batchCellQty, { color: theme.colors.textSecondary }]}>
+                                                            Qty
+                                                        </Text>
+                                                        <Text style={[styles.batchHeaderCell, styles.batchCellPrice, { color: theme.colors.textSecondary }]}>
+                                                            Cost
+                                                        </Text>
+                                                        <Text style={[styles.batchHeaderCell, styles.batchCellPrice, { color: theme.colors.textSecondary }]}>
+                                                            Sell
+                                                        </Text>
+                                                        <Text style={[styles.batchHeaderCell, styles.batchCellPrice, { color: theme.colors.textSecondary }]}>
+                                                            MRP
+                                                        </Text>
+                                                    </View>
+                                                    
+                                                    {/* Batches Rows */}
+                                                    {productBatches.map((batch: any, index: number) => (
+                                                        <View 
+                                                            key={batch._id || index} 
+                                                            style={[
+                                                                styles.batchRow, 
+                                                                { borderBottomColor: theme.colors.border },
+                                                                index === productBatches.length - 1 && { borderBottomWidth: 0 }
+                                                            ]}
+                                                        >
+                                                            <View style={[styles.batchCell, styles.batchCellBatch]}>
+                                                                <Text style={[styles.batchNumber, { color: theme.colors.text }]}>
+                                                                    {batch.batchNumber?.slice(-8) || `B${index + 1}`}
+                                                                </Text>
+                                                                {batch.expiryDate && (
+                                                                    <Text style={[
+                                                                        styles.batchExpiry,
+                                                                        { 
+                                                                            color: new Date(batch.expiryDate) < new Date() 
+                                                                                ? theme.colors.error['500']
+                                                                                : new Date(batch.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                                                                                    ? theme.colors.warning['600']
+                                                                                    : theme.colors.textSecondary
+                                                                        }
+                                                                    ]}>
+                                                                        {formatDisplayDate(batch.expiryDate)}
+                                                                    </Text>
+                                                                )}
+                                                            </View>
+                                                            <Text style={[
+                                                                styles.batchCell, 
+                                                                styles.batchCellQty,
+                                                                { 
+                                                                    color: batch.currentQuantity <= 5 
+                                                                        ? theme.colors.error['600'] 
+                                                                        : theme.colors.text,
+                                                                    fontWeight: '600'
+                                                                }
+                                                            ]}>
+                                                                {batch.currentQuantity}
+                                                            </Text>
+                                                            <Text style={[styles.batchCell, styles.batchCellPrice, { color: theme.colors.textSecondary }]}>
+                                                                ₹{batch.costPrice?.toFixed(0) || '0'}
+                                                            </Text>
+                                                            <Text style={[styles.batchCell, styles.batchCellPrice, { color: theme.colors.success['600'] }]}>
+                                                                ₹{batch.sellingPrice?.toFixed(0) || '0'}
+                                                            </Text>
+                                                            <Text style={[styles.batchCell, styles.batchCellPrice, { color: theme.colors.textSecondary }]}>
+                                                                ₹{batch.mrp?.toFixed(0) || '0'}
+                                                            </Text>
+                                                        </View>
+                                                    ))}
+                                                    
+                                                    {/* Total Row */}
+                                                    <View style={[styles.batchTotalRow, { backgroundColor: theme.colors.primary[50] }]}>
+                                                        <Text style={[styles.batchTotalLabel, { color: theme.colors.primary['800'] }]}>
+                                                            Total
+                                                        </Text>
+                                                        <Text style={[styles.batchTotalQty, { color: theme.colors.primary['800'] }]}>
+                                                            {productBatches.reduce((sum: number, b: any) => sum + (b.currentQuantity || 0), 0)}
+                                                        </Text>
+                                                    </View>
+                                                </>
+                                            )}
+                                        </View>
+                                    )}
+                                </>
                             );
                         }
                         return null;
@@ -1180,6 +1344,103 @@ const styles = StyleSheet.create({
     fixedProductNote: {
         fontSize: 12,
         fontStyle: 'italic',
+    },
+    // Existing batches styles
+    batchesToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        marginBottom: 8,
+    },
+    batchesToggleContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    batchesToggleText: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    batchesContainer: {
+        borderWidth: 1,
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginBottom: 12,
+    },
+    batchesLoading: {
+        padding: 16,
+        alignItems: 'center',
+    },
+    batchesLoadingText: {
+        fontSize: 14,
+    },
+    noBatches: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        gap: 8,
+    },
+    noBatchesText: {
+        flex: 1,
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    batchHeader: {
+        flexDirection: 'row',
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+    },
+    batchHeaderCell: {
+        fontSize: 10,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+    },
+    batchRow: {
+        flexDirection: 'row',
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+    },
+    batchCell: {
+        fontSize: 12,
+    },
+    batchCellBatch: {
+        flex: 2,
+    },
+    batchCellQty: {
+        flex: 1,
+        textAlign: 'right',
+    },
+    batchCellPrice: {
+        flex: 1.2,
+        textAlign: 'right',
+    },
+    batchNumber: {
+        fontSize: 12,
+        fontWeight: '500',
+    },
+    batchExpiry: {
+        fontSize: 10,
+        marginTop: 2,
+    },
+    batchTotalRow: {
+        flexDirection: 'row',
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+    },
+    batchTotalLabel: {
+        flex: 2,
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    batchTotalQty: {
+        flex: 1,
+        textAlign: 'right',
+        fontSize: 12,
+        fontWeight: '700',
     },
 });
 

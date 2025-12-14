@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Save, Eye, Edit } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, Eye, Edit, MoreVertical } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import DateInput from '../../components/common/DateInput';
 import ProductSearch from '../../components/common/ProductSearch';
 import Modal from '../../components/common/Modal';
-import { purchaseOrdersAPI, suppliersAPI } from '../../services/api';
+import { purchaseOrdersAPI, suppliersAPI, batchesAPI } from '../../services/api';
+import useBatchActions from '../../hooks/useBatchActions';
+import BatchActionsModals from '../../components/batches/BatchActionsModals';
 import toast from 'react-hot-toast';
+import { Package, AlertCircle } from 'lucide-react';
 
 const PurchaseOrderForm = () => {
     const navigate = useNavigate();
@@ -45,6 +48,20 @@ const PurchaseOrderForm = () => {
     const [itemExpiryDate, setItemExpiryDate] = useState('');
     const [editingItemIndex, setEditingItemIndex] = useState(null); // Track which item is being edited
     const defaultMarkup = 0.20; // 20% default markup
+
+    // Product batches (existing inventory)
+    const [productBatches, setProductBatches] = useState([]);
+    const [loadingBatches, setLoadingBatches] = useState(false);
+
+    // Batch actions hook - shared logic for adjust/status/deplete actions
+    const batchActions = useBatchActions({
+        onSuccess: () => {
+            // Refresh batches for current product after any action
+            if (selectedProduct?._id) {
+                fetchProductBatches(selectedProduct._id);
+            }
+        },
+    });
 
     // Refs for input fields to enable auto-focus and keyboard navigation
     const productSearchRef = useRef(null);
@@ -114,6 +131,29 @@ const PurchaseOrderForm = () => {
         }
     };
 
+    const fetchProductBatches = async (productId) => {
+        if (!productId) {
+            setProductBatches([]);
+            return;
+        }
+        try {
+            setLoadingBatches(true);
+            const response = await batchesAPI.getByProduct(productId);
+            // Response structure: { success: true, data: { batches: [...], ... } }
+            if (response?.success && response?.data?.batches) {
+                // Batches are already filtered by backend (active + currentQuantity > 0)
+                setProductBatches(response.data.batches);
+            } else {
+                setProductBatches([]);
+            }
+        } catch (error) {
+            console.error('Failed to fetch product batches:', error);
+            setProductBatches([]);
+        } finally {
+            setLoadingBatches(false);
+        }
+    };
+
     const handleProductSelect = (product) => {
         if (!product || !product._id) return;
 
@@ -121,6 +161,9 @@ const PurchaseOrderForm = () => {
         setItemCostPrice(product.costPrice?.toString() || '');
         setItemSellingPrice(product.sellingPrice?.toString() || '');
         setItemMRP(product.mrp?.toString() || '');
+
+        // Fetch existing batches for this product
+        fetchProductBatches(product._id);
 
         // Auto-focus quantity field after product selection
         // Use setTimeout to ensure the DOM has updated
@@ -239,6 +282,7 @@ const PurchaseOrderForm = () => {
         setItemSellingPrice('');
         setItemExpiryDate('');
         setEditingItemIndex(null);
+        setProductBatches([]);
 
         // Refocus on product search field for next item (after a short delay to allow form reset)
         if (editingItemIndex === null) {
@@ -257,7 +301,9 @@ const PurchaseOrderForm = () => {
         setItemExpiryDate('');
         setEditingItemIndex(null);
         setIsModalOpen(false);
+        setProductBatches([]);
     };
+
 
     const handleAddNewItem = () => {
         setEditingItemIndex(null);
@@ -564,11 +610,11 @@ const PurchaseOrderForm = () => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Form */}
                 <div className="lg:col-span-2 space-y-6">
-                    {/* Supplier and Basic Info */}
+                    {/* Supplier and Basic Info - Compact */}
                     <Card>
-                        <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Details</h2>
-                        <div className="space-y-4">
-                            <div>
+                        <h2 className="text-lg font-semibold text-gray-900 mb-3">Order Details</h2>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div className="col-span-2 lg:col-span-1">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Supplier <span className="text-red-500">*</span>
                                 </label>
@@ -586,52 +632,50 @@ const PurchaseOrderForm = () => {
                                     ))}
                                 </select>
                                 {errors.supplier && (
-                                    <p className="text-red-500 text-sm mt-1">{errors.supplier}</p>
+                                    <p className="text-red-500 text-xs mt-1">{errors.supplier}</p>
                                 )}
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <DateInput
-                                        label="Expected Delivery Date"
-                                        name="expectedDeliveryDate"
-                                        value={formData.expectedDeliveryDate}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, expectedDeliveryDate: e.target.value }))}
-                                        min={new Date().toISOString().split('T')[0]}
-                                        className="mb-0"
-                                        disabled={isReadOnly}
-                                    />
-                                </div>
+                            <div>
+                                <DateInput
+                                    label="Delivery Date"
+                                    name="expectedDeliveryDate"
+                                    value={formData.expectedDeliveryDate}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, expectedDeliveryDate: e.target.value }))}
+                                    min={new Date().toISOString().split('T')[0]}
+                                    className="mb-0"
+                                    disabled={isReadOnly}
+                                />
+                            </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Payment Method
-                                    </label>
-                                    <select
-                                        value={formData.paymentMethod}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, paymentMethod: e.target.value }))}
-                                        className="input"
-                                        disabled={isReadOnly}
-                                    >
-                                        <option value="cash">Cash</option>
-                                        <option value="credit">Credit</option>
-                                        <option value="cheque">Cheque</option>
-                                        <option value="online">Online</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Payment
+                                </label>
+                                <select
+                                    value={formData.paymentMethod}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                                    className="input"
+                                    disabled={isReadOnly}
+                                >
+                                    <option value="cash">Cash</option>
+                                    <option value="credit">Credit</option>
+                                    <option value="cheque">Cheque</option>
+                                    <option value="online">Online</option>
+                                    <option value="other">Other</option>
+                                </select>
                             </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Notes
                                 </label>
-                                <textarea
+                                <input
+                                    type="text"
                                     value={formData.notes}
                                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                                     className="input"
-                                    rows="3"
-                                    placeholder="Enter any additional notes"
+                                    placeholder="Optional notes"
                                     disabled={isReadOnly}
                                 />
                             </div>
@@ -647,6 +691,7 @@ const PurchaseOrderForm = () => {
                             variant="outline"
                             icon={<Plus size={18} />}
                             onClick={handleAddItem}
+                            className="mt-4"
                         >
                             Add Item
                         </Button>
@@ -746,7 +791,7 @@ const PurchaseOrderForm = () => {
                 </div>
 
                 {/* Summary Sidebar */}
-                <div className="lg:col-span-1">
+                <div className="lg:col-span-1 space-y-6">
                     <Card>
                         <h2 className="text-lg font-semibold text-gray-900 mb-4">Summary</h2>
                         <div className="space-y-3 text-sm">
@@ -788,6 +833,106 @@ const PurchaseOrderForm = () => {
                                 {isReadOnly ? 'Back' : 'Cancel'}
                             </Button>
                         </div>
+
+                        {/* Existing Batches Section - Inside Summary Card, parallel to Add Product */}
+                        {!isReadOnly && (
+                        <div className="mt-6 pt-6 border-t border-gray-200">
+                            <h3 className="text-md font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                <Package size={18} className="text-blue-500" />
+                                Existing Inventory
+                            </h3>
+                            
+                            {!selectedProduct ? (
+                                <div className="text-center py-4 text-gray-400">
+                                    <Package size={32} className="mx-auto mb-2 opacity-50" />
+                                    <p className="text-xs">Select a product to view existing batches</p>
+                                </div>
+                            ) : loadingBatches ? (
+                                <div className="text-center py-4 text-gray-500">
+                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                                    <p className="text-xs">Loading...</p>
+                                </div>
+                            ) : productBatches.length === 0 ? (
+                                <div className="text-center py-4 bg-yellow-50 rounded-lg border border-dashed border-yellow-200">
+                                    <AlertCircle size={24} className="mx-auto mb-1 text-yellow-500" />
+                                    <p className="text-xs text-gray-600 font-medium">No existing batches</p>
+                                    <p className="text-xs text-gray-400">First batch for this product</p>
+                                </div>
+                            ) : (
+                                <div className="overflow-hidden rounded-lg border border-gray-200">
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
+                                                <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
+                                                <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500 uppercase">Cost</th>
+                                                <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500 uppercase">Sell</th>
+                                                <th className="px-1 py-1.5 w-6"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-100">
+                                            {productBatches.map((batch, index) => (
+                                                <tr key={batch._id || index} className="hover:bg-gray-50">
+                                                    <td className="px-2 py-1 whitespace-nowrap">
+                                                        <div className="text-xs font-medium text-gray-900">
+                                                            {batch.batchNumber?.slice(-6) || `B${index + 1}`}
+                                                        </div>
+                                                        {batch.expiryDate && (
+                                                            <div className={`text-xs ${
+                                                                new Date(batch.expiryDate) < new Date() 
+                                                                    ? 'text-red-500' 
+                                                                    : new Date(batch.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                                                                        ? 'text-yellow-600'
+                                                                        : 'text-gray-400'
+                                                            }`}>
+                                                                {formatDate(batch.expiryDate)}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-2 py-1 whitespace-nowrap text-right">
+                                                        <span className={`text-xs font-semibold ${
+                                                            batch.currentQuantity <= 5 ? 'text-red-600' : 'text-gray-900'
+                                                        }`}>
+                                                            {batch.currentQuantity}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-2 py-1 whitespace-nowrap text-right text-xs text-gray-600">
+                                                        ₹{batch.costPrice?.toFixed(0) || '0'}
+                                                    </td>
+                                                    <td className="px-2 py-1 whitespace-nowrap text-right text-xs text-green-600 font-medium">
+                                                        ₹{batch.sellingPrice?.toFixed(0) || '0'}
+                                                    </td>
+                                                    <td className="px-1 py-1 whitespace-nowrap">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                batchActions.openActionsModal(batch);
+                                                            }}
+                                                            className="p-1 hover:bg-gray-100 rounded transition-colors"
+                                                            title="Batch actions"
+                                                        >
+                                                            <MoreVertical size={14} className="text-gray-500" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot className="bg-blue-50">
+                                            <tr>
+                                                <td className="px-2 py-1 text-xs font-semibold text-blue-800">
+                                                    {productBatches.length} batch{productBatches.length > 1 ? 'es' : ''}
+                                                </td>
+                                                <td className="px-2 py-1 text-right text-xs font-bold text-blue-800">
+                                                    {productBatches.reduce((sum, b) => sum + (b.currentQuantity || 0), 0)}
+                                                </td>
+                                                <td colSpan="3" className="px-2 py-1"></td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                        )}
                     </Card>
                 </div>
             </div>
@@ -818,6 +963,13 @@ const PurchaseOrderForm = () => {
             >
                 {renderProductForm()}
             </Modal>
+
+            {/* Batch Actions Modals - Shared Component */}
+            <BatchActionsModals 
+                batchActions={batchActions} 
+                productName={selectedProduct?.name}
+                compact={true}
+            />
         </div>
     );
 };
