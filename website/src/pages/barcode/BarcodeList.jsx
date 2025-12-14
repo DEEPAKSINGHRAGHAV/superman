@@ -13,6 +13,7 @@ const BarcodeList = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(false);
     const [selectedProducts, setSelectedProducts] = useState(new Set());
+    const [searchInput, setSearchInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const parentRef = useRef(null);
 
@@ -64,9 +65,16 @@ const BarcodeList = () => {
         overscan: 5,
     });
 
-    const handleSearch = debounce((value) => {
+    const debouncedSetSearchQuery = debounce((value) => {
         setSearchQuery(value);
     }, 300);
+
+    const handleSearch = (value) => {
+        // Remove apostrophes (from Excel copy-paste)
+        const cleanValue = value.replace(/'/g, '');
+        setSearchInput(cleanValue);
+        debouncedSetSearchQuery(cleanValue);
+    };
 
     const handleSelectAll = () => {
         const filteredIds = new Set(filteredProducts.map((p) => p._id));
@@ -108,7 +116,7 @@ const BarcodeList = () => {
                 .map((product) => ({
                     Name: product.name || '',
                     Price: product.sellingPrice || 0,
-                    Barcode: product.barcode || '',
+                    Barcode: product.barcode ? `'${product.barcode}` : '',
                 }));
 
             // Create workbook and worksheet
@@ -168,6 +176,7 @@ const BarcodeList = () => {
                 <Input
                     placeholder="Search by name, barcode, or price..."
                     icon={<Search size={18} />}
+                    value={searchInput}
                     onChange={(e) => handleSearch(e.target.value)}
                     className="mb-0"
                 />

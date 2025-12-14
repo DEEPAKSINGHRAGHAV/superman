@@ -149,3 +149,4 @@ PUT /api/v1/products/:id
 The fix ensures that when updating a product, the generated barcode doesn't conflict with the current product itself, resolving the false positive collision detection.
 
 
+

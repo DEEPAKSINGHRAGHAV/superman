@@ -101,7 +101,8 @@ const ProductSearch = React.forwardRef(({
     };
 
     const handleInputChange = (e) => {
-        const value = e.target.value;
+        // Remove apostrophes (from Excel copy-paste)
+        const value = e.target.value.replace(/'/g, '');
         const now = Date.now();
         const timeSinceLastChar = now - lastTypingTime.current;
 

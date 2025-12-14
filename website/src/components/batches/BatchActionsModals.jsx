@@ -419,3 +419,4 @@ const BatchActionsModals = ({ batchActions, productName = 'Product', compact = f
 
 export default BatchActionsModals;
 
+

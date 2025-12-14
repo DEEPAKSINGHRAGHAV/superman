@@ -13,7 +13,9 @@ import { formatDate, formatNumber, getDaysUntilExpiry, getExpiryStatus, debounce
 const BatchList = () => {
     const [batches, setBatches] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [batchNumberInput, setBatchNumberInput] = useState('');
     const [batchNumberSearch, setBatchNumberSearch] = useState('');
+    const [productInput, setProductInput] = useState('');
     const [productSearch, setProductSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('active');
     const [pagination, setPagination] = useState({
@@ -76,19 +78,35 @@ const BatchList = () => {
     };
 
     // Debounced search handlers
-    const handleBatchNumberSearch = debounce((value) => {
+    const debouncedBatchNumberSearch = debounce((value) => {
         setBatchNumberSearch(value);
         setPagination((prev) => ({ ...prev, page: 1 }));
     }, 500);
 
-    const handleProductSearch = debounce((value) => {
+    const debouncedProductSearch = debounce((value) => {
         setProductSearch(value);
         setPagination((prev) => ({ ...prev, page: 1 }));
     }, 500);
 
+    const handleBatchNumberSearch = (value) => {
+        // Remove apostrophes (from Excel copy-paste)
+        const cleanValue = value.replace(/'/g, '');
+        setBatchNumberInput(cleanValue);
+        debouncedBatchNumberSearch(cleanValue);
+    };
+
+    const handleProductSearch = (value) => {
+        // Remove apostrophes (from Excel copy-paste)
+        const cleanValue = value.replace(/'/g, '');
+        setProductInput(cleanValue);
+        debouncedProductSearch(cleanValue);
+    };
+
     // Clear all filters
     const clearFilters = () => {
+        setBatchNumberInput('');
         setBatchNumberSearch('');
+        setProductInput('');
         setProductSearch('');
         setStatusFilter('active');
         setPagination((prev) => ({ ...prev, page: 1 }));
@@ -231,6 +249,7 @@ const BatchList = () => {
                             <Input
                                 placeholder="e.g., BATCH251108001"
                                 icon={<Search size={18} />}
+                                value={batchNumberInput}
                                 onChange={(e) => handleBatchNumberSearch(e.target.value)}
                             />
                         </div>
@@ -241,6 +260,7 @@ const BatchList = () => {
                             <Input
                                 placeholder="Product name, SKU, or barcode..."
                                 icon={<Search size={18} />}
+                                value={productInput}
                                 onChange={(e) => handleProductSearch(e.target.value)}
                             />
                         </div>

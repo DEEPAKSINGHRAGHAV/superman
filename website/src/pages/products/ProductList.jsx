@@ -77,8 +77,10 @@ const ProductList = () => {
     );
 
     const handleSearchChange = (value) => {
-        setSearchInput(value);
-        debouncedSearch(value);
+        // Remove apostrophes (from Excel copy-paste)
+        const cleanValue = value.replace(/'/g, '');
+        setSearchInput(cleanValue);
+        debouncedSearch(cleanValue);
     };
 
     const handleSort = (column, order) => {

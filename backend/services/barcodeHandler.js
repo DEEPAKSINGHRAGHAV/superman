@@ -56,6 +56,11 @@ class BarcodeHandler {
      * Process barcode for product creation/update
      * Handles auto-generation, validation, and uniqueness checks
      * 
+     * BEHAVIOR:
+     * - Barcode NOT in request → Always auto-generate new barcode
+     * - Barcode is empty/null → Auto-generate new barcode
+     * - Barcode has value → Validate and use provided barcode
+     * 
      * @param {Object} options - Processing options
      * @param {any} options.barcodeValue - Barcode value from request
      * @param {boolean} options.hasBarcodeInRequest - Whether barcode field is in request
@@ -71,21 +76,8 @@ class BarcodeHandler {
         excludeProductId = null,
         session = null
     }) {
-        // Case 1: Barcode field not in request
+        // Case 1: Barcode field not in request - always generate new barcode
         if (!hasBarcodeInRequest) {
-            // For updates: Only generate if product has no barcode
-            if (excludeProductId !== null) {
-                // This is an update - check if product has existing barcode
-                const hasExistingBarcode = existingBarcode && !this.isEmptyBarcode(existingBarcode);
-                if (hasExistingBarcode) {
-                    // Product has barcode, keep it unchanged
-                    return {
-                        barcode: existingBarcode,
-                        generated: false
-                    };
-                }
-            }
-            // Product has no barcode (or this is a create) - generate new one
             const generatedBarcode = await BarcodeService.generateNextBarcode(session, excludeProductId);
             return {
                 barcode: generatedBarcode,
