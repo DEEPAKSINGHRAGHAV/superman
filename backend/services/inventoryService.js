@@ -296,6 +296,7 @@ class InventoryService {
                     sku: '$product.sku',
                     category: '$product.category',
                     currentStock: '$product.currentStock',
+                    costPrice: '$product.costPrice',
                     expiryDate: '$earliestExpiry',
                     expiringQuantity: '$totalExpiringQuantity',
                     expiringBatchCount: '$batchCount'

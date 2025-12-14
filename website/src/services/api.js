@@ -78,6 +78,7 @@ export const productsAPI = {
     getAll: (params) => api.get('/products', { params }),
     getById: (id) => api.get(`/products/${id}`),
     getByBarcode: (barcode) => api.get(`/products/barcode/${barcode}`),
+    getCustomBarcodes: () => api.get('/products/custom-barcodes'),
     search: (query) => api.get('/products/search', { params: { search: query, limit: 20 } }),
     create: (data) => api.post('/products', data),
     update: (id, data) => api.put(`/products/${id}`, data),
@@ -131,8 +132,10 @@ export const batchesAPI = {
     create: (data) => api.post('/batches', data),
     update: (id, data) => api.put(`/batches/${id}`, data),
     adjust: (id, data) => api.patch(`/batches/${id}/adjust`, data),
+    updateStatus: (id, status, reason) => api.patch(`/batches/${id}/status`, { status, reason }),
     getExpiring: (days) => api.get('/batches/expiring', { params: { days } }),
     getHistory: (id) => api.get(`/batches/${id}/history`),
+    getValuation: () => api.get('/batches/valuation'),
 };
 
 // Brands API

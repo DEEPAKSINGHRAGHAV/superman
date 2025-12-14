@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, Save, Eye } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Save, Eye, Edit, MoreVertical } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
+import DateInput from '../../components/common/DateInput';
 import ProductSearch from '../../components/common/ProductSearch';
-import { purchaseOrdersAPI, suppliersAPI, productsAPI } from '../../services/api';
+import Modal from '../../components/common/Modal';
+import { purchaseOrdersAPI, suppliersAPI, batchesAPI } from '../../services/api';
+import useBatchActions from '../../hooks/useBatchActions';
+import BatchActionsModals from '../../components/batches/BatchActionsModals';
 import toast from 'react-hot-toast';
+import { Package, AlertCircle } from 'lucide-react';
 
 const PurchaseOrderForm = () => {
     const navigate = useNavigate();
@@ -29,10 +34,10 @@ const PurchaseOrderForm = () => {
     });
 
     const [suppliers, setSuppliers] = useState([]);
-    const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(false);
     const [fetchLoading, setFetchLoading] = useState(false);
     const [errors, setErrors] = useState({});
+    const [orderStatus, setOrderStatus] = useState(null);
 
     // Item form fields
     const [selectedProduct, setSelectedProduct] = useState(null);
@@ -41,7 +46,22 @@ const PurchaseOrderForm = () => {
     const [itemCostPrice, setItemCostPrice] = useState('');
     const [itemSellingPrice, setItemSellingPrice] = useState('');
     const [itemExpiryDate, setItemExpiryDate] = useState('');
+    const [editingItemIndex, setEditingItemIndex] = useState(null); // Track which item is being edited
     const defaultMarkup = 0.20; // 20% default markup
+
+    // Product batches (existing inventory)
+    const [productBatches, setProductBatches] = useState([]);
+    const [loadingBatches, setLoadingBatches] = useState(false);
+
+    // Batch actions hook - shared logic for adjust/status/deplete actions
+    const batchActions = useBatchActions({
+        onSuccess: () => {
+            // Refresh batches for current product after any action
+            if (selectedProduct?._id) {
+                fetchProductBatches(selectedProduct._id);
+            }
+        },
+    });
 
     // Refs for input fields to enable auto-focus and keyboard navigation
     const productSearchRef = useRef(null);
@@ -60,21 +80,14 @@ const PurchaseOrderForm = () => {
 
     const fetchDropdownData = async () => {
         try {
-            const [suppliersRes, productsRes] = await Promise.all([
-                suppliersAPI.getAll({ limit: 100 }),
-                productsAPI.getAll({ limit: 100, isActive: 'true' }),
-            ]);
+            const suppliersRes = await suppliersAPI.getAll({ limit: 100 });
 
             if (suppliersRes.success) {
                 setSuppliers(suppliersRes.data);
             }
-
-            if (productsRes.success) {
-                setProducts(productsRes.data);
-            }
         } catch (error) {
             console.error('Failed to fetch dropdown data:', error);
-            toast.error('Failed to load suppliers or products');
+            toast.error('Failed to load suppliers');
         }
     };
 
@@ -84,6 +97,7 @@ const PurchaseOrderForm = () => {
             const response = await purchaseOrdersAPI.getById(id);
             if (response.success && response.data) {
                 const order = response.data;
+                setOrderStatus(order.status);
                 setFormData({
                     supplier: typeof order.supplier === 'string' ? order.supplier : order.supplier._id,
                     items: order.items.map(item => {
@@ -95,6 +109,7 @@ const PurchaseOrderForm = () => {
                         return {
                             product: productId,
                             productName: productObject?.name || item.productName || '',
+                            productStock: productObject?.currentStock ?? item.productStock ?? null, // For display
                             quantity: item.quantity,
                             costPrice: item.costPrice,
                             sellingPrice: item.sellingPrice || item.costPrice * 1.2,
@@ -116,6 +131,29 @@ const PurchaseOrderForm = () => {
         }
     };
 
+    const fetchProductBatches = async (productId) => {
+        if (!productId) {
+            setProductBatches([]);
+            return;
+        }
+        try {
+            setLoadingBatches(true);
+            const response = await batchesAPI.getByProduct(productId);
+            // Response structure: { success: true, data: { batches: [...], ... } }
+            if (response?.success && response?.data?.batches) {
+                // Batches are already filtered by backend (active + currentQuantity > 0)
+                setProductBatches(response.data.batches);
+            } else {
+                setProductBatches([]);
+            }
+        } catch (error) {
+            console.error('Failed to fetch product batches:', error);
+            setProductBatches([]);
+        } finally {
+            setLoadingBatches(false);
+        }
+    };
+
     const handleProductSelect = (product) => {
         if (!product || !product._id) return;
 
@@ -123,6 +161,9 @@ const PurchaseOrderForm = () => {
         setItemCostPrice(product.costPrice?.toString() || '');
         setItemSellingPrice(product.sellingPrice?.toString() || '');
         setItemMRP(product.mrp?.toString() || '');
+
+        // Fetch existing batches for this product
+        fetchProductBatches(product._id);
 
         // Auto-focus quantity field after product selection
         // Use setTimeout to ensure the DOM has updated
@@ -145,6 +186,25 @@ const PurchaseOrderForm = () => {
     const calculateMargin = (cost, selling) => {
         if (cost === 0) return 0;
         return ((selling - cost) / cost) * 100;
+    };
+
+    const handleEditItem = (index) => {
+        const item = formData.items[index];
+        
+        // Create product object from item data (no need to look up - all data is stored with item)
+        setSelectedProduct({
+            _id: typeof item.product === 'string' ? item.product : item.product?._id,
+            name: item.productName || item.product?.name || 'Unknown Product',
+            currentStock: item.productStock ?? 0
+        });
+        
+        setItemQuantity(item.quantity.toString());
+        setItemMRP(item.mrp ? item.mrp.toString() : '');
+        setItemCostPrice(item.costPrice.toString());
+        setItemSellingPrice(item.sellingPrice.toString());
+        setItemExpiryDate(item.expiryDate ? item.expiryDate.split('T')[0] : '');
+        setEditingItemIndex(index);
+        setIsModalOpen(true);
     };
 
     const handleAddItem = () => {
@@ -180,6 +240,7 @@ const PurchaseOrderForm = () => {
         const newItem = {
             product: selectedProduct._id,
             productName: selectedProduct.name || '',
+            productStock: selectedProduct.currentStock ?? 0, // For display only, not sent to backend
             quantity: quantity,
             costPrice: parseFloat(costPrice.toFixed(2)),
             sellingPrice: parseFloat(sellingPrice.toFixed(2)),
@@ -194,10 +255,24 @@ const PurchaseOrderForm = () => {
             newItem.expiryDate = new Date(itemExpiryDate + 'T12:00:00.000Z').toISOString();
         }
 
-        setFormData(prev => ({
-            ...prev,
-            items: [...prev.items, newItem],
-        }));
+        // Check if we're editing an existing item
+        if (editingItemIndex !== null) {
+            // Update existing item
+            setFormData(prev => ({
+                ...prev,
+                items: prev.items.map((item, idx) => 
+                    idx === editingItemIndex ? newItem : item
+                ),
+            }));
+            toast.success('Item updated successfully');
+            setIsModalOpen(false);
+        } else {
+            // Add new item
+            setFormData(prev => ({
+                ...prev,
+                items: [...prev.items, newItem],
+            }));
+        }
 
         // Reset item form
         setSelectedProduct(null);
@@ -206,11 +281,33 @@ const PurchaseOrderForm = () => {
         setItemCostPrice('');
         setItemSellingPrice('');
         setItemExpiryDate('');
+        setEditingItemIndex(null);
+        setProductBatches([]);
 
         // Refocus on product search field for next item (after a short delay to allow form reset)
-        setTimeout(() => {
-            productSearchRef.current?.focus();
-        }, 100);
+        if (editingItemIndex === null) {
+            setTimeout(() => {
+                productSearchRef.current?.focus();
+            }, 100);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setSelectedProduct(null);
+        setItemQuantity('');
+        setItemMRP('');
+        setItemCostPrice('');
+        setItemSellingPrice('');
+        setItemExpiryDate('');
+        setEditingItemIndex(null);
+        setIsModalOpen(false);
+        setProductBatches([]);
+    };
+
+
+    const handleAddNewItem = () => {
+        setEditingItemIndex(null);
+        handleCancelEdit();
     };
 
     const handleRemoveItem = (index) => {
@@ -221,13 +318,15 @@ const PurchaseOrderForm = () => {
     };
 
     const getProductName = (item) => {
-        // First check if productName is stored in the item
+        // productName is stored with the item
         if (item.productName) {
             return item.productName;
         }
-        // Fallback to lookup from products array
-        const product = products.find(p => p._id === item.product);
-        return product?.name || item.product;
+        // Fallback for legacy data - use product object if populated
+        if (typeof item.product === 'object' && item.product?.name) {
+            return item.product.name;
+        }
+        return 'Unknown Product';
     };
 
     const validateForm = () => {
@@ -292,11 +391,193 @@ const PurchaseOrderForm = () => {
 
     const formatDate = (dateString) => {
         if (!dateString) return '';
-        const date = new Date(dateString);
-        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        try {
+            // Handle both ISO strings and YYYY-MM-DD format
+            const date = dateString.includes('T') 
+                ? new Date(dateString) 
+                : new Date(dateString + 'T12:00:00.000Z');
+            if (isNaN(date.getTime())) return '';
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch (error) {
+            console.error('Date formatting error:', error);
+            return '';
+        }
     };
 
     const totalAmount = formData.items.reduce((sum, item) => sum + (item.quantity * item.costPrice), 0);
+    const isReadOnly = orderStatus === 'received';
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    // Reusable Product Form Component
+    const renderProductForm = () => (
+        <div className="space-y-4">
+            <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Product
+                </label>
+                {/* Show product search only for new items, not when editing */}
+                {editingItemIndex === null ? (
+                    <>
+                        <ProductSearch
+                            ref={productSearchRef}
+                            onProductSelect={handleProductSelect}
+                            placeholder="Search products by name, SKU, or barcode..."
+                            showStockInfo={true}
+                            showPrice={true}
+                            maxResults={20}
+                            allowOutOfStock={true}
+                        />
+                        {selectedProduct && (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(`/products/${selectedProduct._id}`, '_blank', 'noopener,noreferrer');
+                                }}
+                                className="mt-2 w-full p-2 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors cursor-pointer text-left group"
+                                title="Click to view product details in new tab"
+                            >
+                                <p className="text-sm font-medium text-blue-900 group-hover:text-blue-700 flex items-center gap-2">
+                                    <span>
+                                        Selected: {selectedProduct.name} {selectedProduct.sku && `(${selectedProduct.sku})`}
+                                        {selectedProduct.currentStock !== undefined && (
+                                            <span className="ml-2 text-gray-600 font-normal">
+                                                • Current Stock: {selectedProduct.currentStock}
+                                            </span>
+                                        )}
+                                    </span>
+                                    <Eye
+                                        size={14}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-700"
+                                    />
+                                </p>
+                            </button>
+                        )}
+                    </>
+                ) : (
+                    /* Show fixed product display when editing */
+                    <div className="p-3 bg-gray-100 border border-gray-200 rounded-md">
+                        <p className="text-sm font-medium text-gray-900">
+                            {selectedProduct?.name || 'Unknown Product'}
+                            {selectedProduct?.sku && (
+                                <span className="ml-2 text-gray-500">({selectedProduct.sku})</span>
+                            )}
+                        </p>
+                        {selectedProduct?.currentStock !== undefined && (
+                            <p className="text-sm text-blue-600 font-medium mt-1">
+                                Current Stock: {selectedProduct.currentStock}
+                            </p>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">Product cannot be changed while editing</p>
+                    </div>
+                )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Quantity
+                    </label>
+                    <Input
+                        ref={quantityRef}
+                        type="number"
+                        placeholder="0"
+                        value={itemQuantity}
+                        onChange={(e) => setItemQuantity(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                mrpRef.current?.focus();
+                            }
+                        }}
+                        min="1"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        MRP (₹)
+                    </label>
+                    <Input
+                        ref={mrpRef}
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={itemMRP}
+                        onChange={(e) => setItemMRP(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                costPriceRef.current?.focus();
+                            }
+                        }}
+                    />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Cost Price (₹) <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                        ref={costPriceRef}
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={itemCostPrice}
+                        onChange={(e) => handleCostPriceChange(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                sellingPriceRef.current?.focus();
+                            }
+                        }}
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Selling Price (₹) <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                        ref={sellingPriceRef}
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={itemSellingPrice}
+                        onChange={(e) => setItemSellingPrice(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                e.preventDefault();
+                                expiryDateRef.current?.focus();
+                            }
+                        }}
+                    />
+                    {itemCostPrice && itemSellingPrice && (
+                        <p className={`text-xs mt-1 ${calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)) < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                            Margin: {calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)).toFixed(1)}%
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            <div>
+                <DateInput
+                    ref={expiryDateRef}
+                    label="Expiry Date (Optional)"
+                    name="itemExpiryDate"
+                    value={itemExpiryDate}
+                    onChange={(e) => setItemExpiryDate(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddItem();
+                        }
+                    }}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="mb-0"
+                />
+            </div>
+        </div>
+    );
 
     if (fetchLoading) {
         return (
@@ -318,19 +599,22 @@ const PurchaseOrderForm = () => {
                 </button>
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">
-                        {isEditMode ? 'Edit Purchase Order' : 'Create Purchase Order'}
+                        {isReadOnly ? 'View Purchase Order' : (isEditMode ? 'Edit Purchase Order' : 'Create Purchase Order')}
                     </h1>
+                    {isReadOnly && (
+                        <p className="text-sm text-gray-500 mt-1">This order has been received and is read-only</p>
+                    )}
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Main Form */}
                 <div className="lg:col-span-2 space-y-6">
-                    {/* Supplier and Basic Info */}
+                    {/* Supplier and Basic Info - Compact */}
                     <Card>
-                        <h2 className="text-lg font-semibold text-gray-900 mb-4">Order Details</h2>
-                        <div className="space-y-4">
-                            <div>
+                        <h2 className="text-lg font-semibold text-gray-900 mb-3">Order Details</h2>
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                            <div className="col-span-2 lg:col-span-1">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Supplier <span className="text-red-500">*</span>
                                 </label>
@@ -338,6 +622,7 @@ const PurchaseOrderForm = () => {
                                     value={formData.supplier}
                                     onChange={(e) => setFormData(prev => ({ ...prev, supplier: e.target.value }))}
                                     className="input"
+                                    disabled={isReadOnly}
                                 >
                                     <option value="">Select supplier</option>
                                     {suppliers.map(supplier => (
@@ -347,209 +632,71 @@ const PurchaseOrderForm = () => {
                                     ))}
                                 </select>
                                 {errors.supplier && (
-                                    <p className="text-red-500 text-sm mt-1">{errors.supplier}</p>
+                                    <p className="text-red-500 text-xs mt-1">{errors.supplier}</p>
                                 )}
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Expected Delivery Date
-                                    </label>
-                                    <Input
-                                        type="date"
-                                        value={formData.expectedDeliveryDate}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, expectedDeliveryDate: e.target.value }))}
-                                        min={new Date().toISOString().split('T')[0]}
-                                    />
-                                </div>
+                            <div>
+                                <DateInput
+                                    label="Delivery Date"
+                                    name="expectedDeliveryDate"
+                                    value={formData.expectedDeliveryDate}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, expectedDeliveryDate: e.target.value }))}
+                                    min={new Date().toISOString().split('T')[0]}
+                                    className="mb-0"
+                                    disabled={isReadOnly}
+                                />
+                            </div>
 
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Payment Method
-                                    </label>
-                                    <select
-                                        value={formData.paymentMethod}
-                                        onChange={(e) => setFormData(prev => ({ ...prev, paymentMethod: e.target.value }))}
-                                        className="input"
-                                    >
-                                        <option value="cash">Cash</option>
-                                        <option value="credit">Credit</option>
-                                        <option value="cheque">Cheque</option>
-                                        <option value="online">Online</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Payment
+                                </label>
+                                <select
+                                    value={formData.paymentMethod}
+                                    onChange={(e) => setFormData(prev => ({ ...prev, paymentMethod: e.target.value }))}
+                                    className="input"
+                                    disabled={isReadOnly}
+                                >
+                                    <option value="cash">Cash</option>
+                                    <option value="credit">Credit</option>
+                                    <option value="cheque">Cheque</option>
+                                    <option value="online">Online</option>
+                                    <option value="other">Other</option>
+                                </select>
                             </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
                                     Notes
                                 </label>
-                                <textarea
+                                <input
+                                    type="text"
                                     value={formData.notes}
                                     onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
                                     className="input"
-                                    rows="3"
-                                    placeholder="Enter any additional notes"
+                                    placeholder="Optional notes"
+                                    disabled={isReadOnly}
                                 />
                             </div>
                         </div>
                     </Card>
 
-                    {/* Add Item Form */}
+                    {/* Add Item Form - Hide if read-only */}
+                    {!isReadOnly && (
                     <Card>
                         <h2 className="text-lg font-semibold text-gray-900 mb-4">Add Product</h2>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Product
-                                </label>
-                                <ProductSearch
-                                    ref={productSearchRef}
-                                    onProductSelect={handleProductSelect}
-                                    placeholder="Search products by name, SKU, or barcode..."
-                                    showStockInfo={true}
-                                    showPrice={true}
-                                    maxResults={20}
-                                    allowOutOfStock={true}
-                                />
-                                {selectedProduct && (
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            window.open(`/products/${selectedProduct._id}`, '_blank', 'noopener,noreferrer');
-                                        }}
-                                        className="mt-2 w-full p-2 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors cursor-pointer text-left group"
-                                        title="Click to view product details in new tab"
-                                    >
-                                        <p className="text-sm font-medium text-blue-900 group-hover:text-blue-700 flex items-center gap-2">
-                                            <span>Selected: {selectedProduct.name} {selectedProduct.sku && `(${selectedProduct.sku})`}</span>
-                                            <Eye
-                                                size={14}
-                                                className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-700"
-                                            />
-                                        </p>
-                                    </button>
-                                )}
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Quantity
-                                    </label>
-                                    <Input
-                                        ref={quantityRef}
-                                        type="number"
-                                        placeholder="0"
-                                        value={itemQuantity}
-                                        onChange={(e) => setItemQuantity(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                mrpRef.current?.focus();
-                                            }
-                                        }}
-                                        min="1"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        MRP (₹)
-                                    </label>
-                                    <Input
-                                        ref={mrpRef}
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        value={itemMRP}
-                                        onChange={(e) => setItemMRP(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                costPriceRef.current?.focus();
-                                            }
-                                        }}
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Cost Price (₹) <span className="text-red-500">*</span>
-                                    </label>
-                                    <Input
-                                        ref={costPriceRef}
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        value={itemCostPrice}
-                                        onChange={(e) => handleCostPriceChange(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                sellingPriceRef.current?.focus();
-                                            }
-                                        }}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Selling Price (₹) <span className="text-red-500">*</span>
-                                    </label>
-                                    <Input
-                                        ref={sellingPriceRef}
-                                        type="number"
-                                        step="0.01"
-                                        placeholder="0.00"
-                                        value={itemSellingPrice}
-                                        onChange={(e) => setItemSellingPrice(e.target.value)}
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                expiryDateRef.current?.focus();
-                                            }
-                                        }}
-                                    />
-                                    {itemCostPrice && itemSellingPrice && (
-                                        <p className={`text-xs mt-1 ${calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)) < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                                            Margin: {calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)).toFixed(1)}%
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Expiry Date (Optional)
-                                </label>
-                                <Input
-                                    ref={expiryDateRef}
-                                    type="date"
-                                    value={itemExpiryDate}
-                                    onChange={(e) => setItemExpiryDate(e.target.value)}
-                                    onKeyDown={(e) => {
-                                        if (e.key === 'Enter') {
-                                            e.preventDefault();
-                                            // If Enter is pressed on expiry date, trigger Add Item
-                                            handleAddItem();
-                                        }
-                                    }}
-                                    min={new Date().toISOString().split('T')[0]}
-                                />
-                            </div>
-
-                            <Button
-                                variant="outline"
-                                icon={<Plus size={18} />}
-                                onClick={handleAddItem}
-                            >
-                                Add Item
-                            </Button>
-                        </div>
+                        {renderProductForm()}
+                        <Button
+                            variant="outline"
+                            icon={<Plus size={18} />}
+                            onClick={handleAddItem}
+                            className="mt-4"
+                        >
+                            Add Item
+                        </Button>
                     </Card>
+                    )}
 
                     {/* Items List */}
                     <Card>
@@ -564,20 +711,25 @@ const PurchaseOrderForm = () => {
                                         className="border border-gray-200 rounded-lg p-4 flex justify-between items-start"
                                     >
                                         <div className="flex-1">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    window.open(`/products/${item.product}`, '_blank', 'noopener,noreferrer');
-                                                }}
-                                                className="group flex items-center gap-2 font-semibold text-gray-900 mb-2 hover:text-blue-600 transition-colors cursor-pointer"
-                                                title="View product details in new tab"
-                                            >
-                                                <span>{getProductName(item)}</span>
-                                                <Eye
-                                                    size={16}
-                                                    className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-600"
-                                                />
-                                            </button>
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        window.open(`/products/${item.product}`, '_blank', 'noopener,noreferrer');
+                                                    }}
+                                                    className="group flex items-center gap-2 font-semibold text-gray-900 hover:text-blue-600 transition-colors cursor-pointer"
+                                                    title="View product details in new tab"
+                                                >
+                                                    <span>{getProductName(item)}</span>
+                                                    <Eye
+                                                        size={16}
+                                                        className="opacity-0 group-hover:opacity-100 transition-opacity text-blue-600"
+                                                    />
+                                                </button>
+                                                <span className="text-sm font-medium px-2 py-0.5 rounded text-blue-600 bg-blue-50">
+                                                    Stock: {item.productStock ?? 'N/A'}
+                                                </span>
+                                            </div>
                                             <div className="flex flex-wrap gap-2 text-sm text-gray-600">
                                                 <span>Qty: {item.quantity}</span>
                                                 {item.mrp && <span>• MRP: ₹{item.mrp.toFixed(2)}</span>}
@@ -598,13 +750,24 @@ const PurchaseOrderForm = () => {
                                                 </div>
                                             )}
                                         </div>
-                                        <button
-                                            onClick={() => handleRemoveItem(index)}
-                                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                                            title="Remove item"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
+                                        {!isReadOnly && (
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                onClick={() => handleEditItem(index)}
+                                                className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
+                                                title="Edit item"
+                                            >
+                                                <Edit size={18} />
+                                            </button>
+                                            <button
+                                                onClick={() => handleRemoveItem(index)}
+                                                className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                                                title="Remove item"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
+                                        </div>
+                                        )}
                                     </div>
                                 ))}
                                 <div className="border-t pt-4 mt-4">
@@ -628,7 +791,7 @@ const PurchaseOrderForm = () => {
                 </div>
 
                 {/* Summary Sidebar */}
-                <div className="lg:col-span-1">
+                <div className="lg:col-span-1 space-y-6">
                     <Card>
                         <h2 className="text-lg font-semibold text-gray-900 mb-4">Summary</h2>
                         <div className="space-y-3 text-sm">
@@ -651,26 +814,162 @@ const PurchaseOrderForm = () => {
                         </div>
 
                         <div className="mt-6 space-y-3">
-                            <Button
-                                variant="primary"
-                                icon={<Save size={18} />}
-                                onClick={handleSubmit}
-                                loading={loading}
-                                className="w-full"
-                            >
-                                {isEditMode ? 'Update Order' : 'Create Order'}
-                            </Button>
+                            {!isReadOnly && (
+                                <Button
+                                    variant="primary"
+                                    icon={<Save size={18} />}
+                                    onClick={handleSubmit}
+                                    loading={loading}
+                                    className="w-full"
+                                >
+                                    {isEditMode ? 'Update Order' : 'Create Order'}
+                                </Button>
+                            )}
                             <Button
                                 variant="outline"
                                 onClick={() => navigate('/purchase-orders')}
                                 className="w-full"
                             >
-                                Cancel
+                                {isReadOnly ? 'Back' : 'Cancel'}
                             </Button>
                         </div>
+
+                        {/* Existing Batches Section - Inside Summary Card, parallel to Add Product */}
+                        {!isReadOnly && (
+                        <div className="mt-6 pt-6 border-t border-gray-200">
+                            <h3 className="text-md font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                                <Package size={18} className="text-blue-500" />
+                                Existing Inventory
+                            </h3>
+                            
+                            {!selectedProduct ? (
+                                <div className="text-center py-4 text-gray-400">
+                                    <Package size={32} className="mx-auto mb-2 opacity-50" />
+                                    <p className="text-xs">Select a product to view existing batches</p>
+                                </div>
+                            ) : loadingBatches ? (
+                                <div className="text-center py-4 text-gray-500">
+                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500 mx-auto mb-2"></div>
+                                    <p className="text-xs">Loading...</p>
+                                </div>
+                            ) : productBatches.length === 0 ? (
+                                <div className="text-center py-4 bg-yellow-50 rounded-lg border border-dashed border-yellow-200">
+                                    <AlertCircle size={24} className="mx-auto mb-1 text-yellow-500" />
+                                    <p className="text-xs text-gray-600 font-medium">No existing batches</p>
+                                    <p className="text-xs text-gray-400">First batch for this product</p>
+                                </div>
+                            ) : (
+                                <div className="overflow-hidden rounded-lg border border-gray-200">
+                                    <table className="min-w-full divide-y divide-gray-200">
+                                        <thead className="bg-gray-50">
+                                            <tr>
+                                                <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-500 uppercase">Batch</th>
+                                                <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500 uppercase">Qty</th>
+                                                <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500 uppercase">Cost</th>
+                                                <th className="px-2 py-1.5 text-right text-xs font-medium text-gray-500 uppercase">Sell</th>
+                                                <th className="px-1 py-1.5 w-6"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-100">
+                                            {productBatches.map((batch, index) => (
+                                                <tr key={batch._id || index} className="hover:bg-gray-50">
+                                                    <td className="px-2 py-1 whitespace-nowrap">
+                                                        <div className="text-xs font-medium text-gray-900">
+                                                            {batch.batchNumber?.slice(-6) || `B${index + 1}`}
+                                                        </div>
+                                                        {batch.expiryDate && (
+                                                            <div className={`text-xs ${
+                                                                new Date(batch.expiryDate) < new Date() 
+                                                                    ? 'text-red-500' 
+                                                                    : new Date(batch.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                                                                        ? 'text-yellow-600'
+                                                                        : 'text-gray-400'
+                                                            }`}>
+                                                                {formatDate(batch.expiryDate)}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-2 py-1 whitespace-nowrap text-right">
+                                                        <span className={`text-xs font-semibold ${
+                                                            batch.currentQuantity <= 5 ? 'text-red-600' : 'text-gray-900'
+                                                        }`}>
+                                                            {batch.currentQuantity}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-2 py-1 whitespace-nowrap text-right text-xs text-gray-600">
+                                                        ₹{batch.costPrice?.toFixed(0) || '0'}
+                                                    </td>
+                                                    <td className="px-2 py-1 whitespace-nowrap text-right text-xs text-green-600 font-medium">
+                                                        ₹{batch.sellingPrice?.toFixed(0) || '0'}
+                                                    </td>
+                                                    <td className="px-1 py-1 whitespace-nowrap">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                batchActions.openActionsModal(batch);
+                                                            }}
+                                                            className="p-1 hover:bg-gray-100 rounded transition-colors"
+                                                            title="Batch actions"
+                                                        >
+                                                            <MoreVertical size={14} className="text-gray-500" />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot className="bg-blue-50">
+                                            <tr>
+                                                <td className="px-2 py-1 text-xs font-semibold text-blue-800">
+                                                    {productBatches.length} batch{productBatches.length > 1 ? 'es' : ''}
+                                                </td>
+                                                <td className="px-2 py-1 text-right text-xs font-bold text-blue-800">
+                                                    {productBatches.reduce((sum, b) => sum + (b.currentQuantity || 0), 0)}
+                                                </td>
+                                                <td colSpan="3" className="px-2 py-1"></td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                        )}
                     </Card>
                 </div>
             </div>
+
+            {/* Edit Item Modal */}
+            <Modal
+                isOpen={isModalOpen}
+                onClose={handleCancelEdit}
+                title={editingItemIndex !== null ? 'Edit Product' : 'Add Product'}
+                size="lg"
+                footer={
+                    <div className="flex gap-2">
+                        <Button
+                            variant="outline"
+                            onClick={handleCancelEdit}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="primary"
+                            icon={editingItemIndex !== null ? <Save size={18} /> : <Plus size={18} />}
+                            onClick={handleAddItem}
+                        >
+                            {editingItemIndex !== null ? 'Save' : 'Add Item'}
+                        </Button>
+                    </div>
+                }
+            >
+                {renderProductForm()}
+            </Modal>
+
+            {/* Batch Actions Modals - Shared Component */}
+            <BatchActionsModals 
+                batchActions={batchActions} 
+                productName={selectedProduct?.name}
+                compact={true}
+            />
         </div>
     );
 };

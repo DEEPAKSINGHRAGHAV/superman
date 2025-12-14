@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
     View,
     Text,
@@ -37,6 +37,8 @@ interface CartItem {
         batchNumber: string;
         availableQuantity: number;
     };
+    assignedBatch?: any; // The specific batch assigned to this cart item
+    allBatches?: any[]; // Store all batches for finding next available batch
 }
 
 interface PaymentMethod {
@@ -63,15 +65,95 @@ const BillingScreen: React.FC = () => {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [showReceiptModal, setShowReceiptModal] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
-    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('cash');
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('upi');
     const [amountReceived, setAmountReceived] = useState('');
     const [receiptData, setReceiptData] = useState<any>(null);
+    const [editingPriceValues, setEditingPriceValues] = useState<Record<string, string>>({});
+    const productSearchRef = useRef<any>(null);
+    const amountReceivedRef = useRef<TextInput>(null);
 
     // Calculate totals
     const subtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
     const tax = subtotal * 0; // 0% GST (No tax)
     const total = subtotal + tax;
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+    /**
+     * Find next available batch for a product
+     * Checks existing cart items to see which batches are already used and finds the next available one
+     */
+    const findNextAvailableBatch = (productId: string, allBatches: any[], existingCartItems: CartItem[]): any => {
+        // Get all batches already assigned in cart for this product
+        const usedBatchNumbers = existingCartItems
+            .filter(item => item.product._id === productId && item.assignedBatch)
+            .map(item => item.assignedBatch?.batchNumber);
+
+        // Find the first batch that hasn't been used yet or has remaining quantity
+        for (const batch of allBatches) {
+            const batchNumber = batch.batchNumber;
+            const alreadyUsed = usedBatchNumbers.includes(batchNumber);
+            
+            if (!alreadyUsed) {
+                // New batch, use it
+                return batch;
+            } else {
+                // Batch already in cart, check if it has remaining quantity
+                const existingItem = existingCartItems.find(
+                    item => item.product._id === productId && 
+                    item.assignedBatch?.batchNumber === batchNumber
+                );
+                
+                if (existingItem) {
+                    const usedQuantity = existingItem.quantity;
+                    const availableQuantity = batch.currentQuantity || batch.availableQuantity || 0;
+                    if (usedQuantity < availableQuantity) {
+                        // This batch still has available quantity, reuse it
+                        return batch;
+                    }
+                    // This batch is exhausted, continue to next batch
+                    continue;
+                }
+            }
+        }
+
+        return null; // No available batch found
+    };
+
+    // Auto-open product search modal on initial load when cart is empty
+    useEffect(() => {
+        if (cart.length === 0 && !showProductSearch && !showScanner && !showPaymentModal) {
+            // Auto-open search modal on initial load
+            setShowProductSearch(true);
+        }
+    }, []); // Run only on mount
+
+    // Keep search bar focused when product search modal is open
+    useEffect(() => {
+        if (showProductSearch && productSearchRef.current) {
+            // Focus the search input when modal opens
+            setTimeout(() => {
+                productSearchRef.current?.focus();
+            }, 300);
+        }
+    }, [showProductSearch]);
+
+    // Refocus search after cart changes (new items added, quantity updated)
+    useEffect(() => {
+        if (showProductSearch && productSearchRef.current) {
+            setTimeout(() => {
+                productSearchRef.current?.focus();
+            }, 200);
+        }
+    }, [cart, showProductSearch]);
+
+    // Focus amount received input when cash payment method is selected
+    useEffect(() => {
+        if (selectedPaymentMethod === 'cash' && amountReceivedRef.current && showPaymentModal) {
+            setTimeout(() => {
+                amountReceivedRef.current?.focus();
+            }, 200);
+        }
+    }, [selectedPaymentMethod, showPaymentModal]);
 
 
     // Handle barcode scan
@@ -95,19 +177,122 @@ const BillingScreen: React.FC = () => {
         try {
             const existingItemIndex = cart.findIndex(item => item.product._id === product._id);
 
-            if (existingItemIndex >= 0) {
-                // Update quantity
-                const updatedCart = [...cart];
-                const newQuantity = updatedCart[existingItemIndex].quantity + 1;
+            // Check if product already exists in cart
+            const existingItems = cart.filter(item => item.product._id === product._id);
 
-                // Check stock
-                if (newQuantity > product.currentStock) {
-                    Alert.alert('Insufficient Stock', `Only ${product.currentStock} units available`);
+            if (existingItems.length > 0) {
+                // Product already in cart - check if we can add to existing item or need new item
+                if (product.currentStock === 0) {
+                    Alert.alert('Out of Stock', 'This product is out of stock');
                     return;
                 }
 
-                updatedCart[existingItemIndex].quantity = newQuantity;
-                updatedCart[existingItemIndex].totalPrice = parseFloat((newQuantity * updatedCart[existingItemIndex].unitPrice).toFixed(2));
+                // Calculate total quantity for this product in cart
+                const totalQuantityInCart = existingItems.reduce((sum, item) => sum + item.quantity, 0);
+                
+                // Check if adding 1 more would exceed stock
+                if (totalQuantityInCart + 1 > product.currentStock) {
+                    Alert.alert('Insufficient Stock', `Only ${product.currentStock} units available. Already have ${totalQuantityInCart} in cart.`);
+                    return;
+                }
+
+                let allBatches = undefined;
+                try {
+                    const batchResponse = await apiService.getBatchesByProduct(product._id);
+                    if (batchResponse.success && batchResponse.data?.batches?.length > 0) {
+                        const batches = batchResponse.data.batches;
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+
+                        const validBatches = batches.filter((batch: any) => {
+                            if (!batch.currentQuantity || batch.currentQuantity <= 0) return false;
+                            if (!batch.expiryDate) return true;
+                            const expiryDate = new Date(batch.expiryDate);
+                            expiryDate.setHours(0, 0, 0, 0);
+                            return expiryDate >= today;
+                        });
+
+                        if (validBatches.length === 0) {
+                            Alert.alert('Expired Stock', `All batches for "${product.name}" have expired`);
+                            return;
+                        }
+
+                        allBatches = validBatches;
+
+                        // Find next available batch
+                        const nextBatch = findNextAvailableBatch(product._id, validBatches, cart);
+
+                        if (!nextBatch) {
+                            Alert.alert('Insufficient Stock', `Insufficient stock for "${product.name}"`);
+                            return;
+                        }
+
+                        // Check if we can add to an existing item with the same batch
+                        const existingItemWithBatch = existingItems.find(
+                            item => item.assignedBatch?.batchNumber === nextBatch.batchNumber
+                        );
+
+                        if (existingItemWithBatch) {
+                            // Same batch - increase quantity of existing item
+                            const availableQuantity = nextBatch.currentQuantity || nextBatch.availableQuantity || 0;
+                            const newQuantity = existingItemWithBatch.quantity + 1;
+                            
+                            if (newQuantity > availableQuantity) {
+                                // Current batch exhausted, need new item with next batch
+                                // This will be handled below by creating new item
+                            } else {
+                                // Can add to existing item
+                                const updatedCart = cart.map(item => {
+                                    if (item === existingItemWithBatch) {
+                                        return {
+                                            ...item,
+                                            quantity: newQuantity,
+                                            totalPrice: parseFloat((newQuantity * item.unitPrice).toFixed(2))
+                                        };
+                                    }
+                                    return item;
+                                });
+                                setCart(updatedCart);
+                                return;
+                            }
+                        }
+
+                        // Need to create new cart item with next batch (different price or exhausted batch)
+                        const batchInfo = {
+                            batchNumber: nextBatch.batchNumber,
+                            availableQuantity: nextBatch.currentQuantity || nextBatch.availableQuantity
+                        };
+
+                        const newItem: CartItem = {
+                            product,
+                            quantity: 1,
+                            unitPrice: parseFloat(nextBatch.sellingPrice.toFixed(2)),
+                            costPrice: parseFloat(nextBatch.costPrice.toFixed(2)),
+                            totalPrice: parseFloat(nextBatch.sellingPrice.toFixed(2)),
+                            batchInfo,
+                            assignedBatch: nextBatch,
+                            allBatches,
+                        };
+                        setCart([newItem, ...cart]);
+                        return;
+                    }
+                } catch (error) {
+                    console.log('Could not fetch batch info:', error);
+                }
+
+                // Fallback: no batch info, just increase quantity of first existing item
+                const firstItem = existingItems[0];
+                const updatedCart = cart.map(item => {
+                    if (item === firstItem) {
+                        const newQuantity = item.quantity + 1;
+                        return {
+                            ...item,
+                            quantity: newQuantity,
+                            totalPrice: parseFloat((newQuantity * item.unitPrice).toFixed(2))
+                        };
+                    }
+                    return item;
+                });
                 setCart(updatedCart);
             } else {
                 // Add new item - fetch batch info for accurate FIFO pricing
@@ -119,6 +304,7 @@ const BillingScreen: React.FC = () => {
                 let unitPrice = product.sellingPrice;
                 let costPrice = product.costPrice || 0;
                 let batchInfo = undefined;
+                let allBatches = undefined;
 
                 try {
                     // Fetch batch information to get accurate FIFO price
@@ -155,12 +341,14 @@ const BillingScreen: React.FC = () => {
                             return;
                         }
 
-                        // Get oldest valid (FIFO) batch
-                        const oldestBatch = validBatches[0];
+                        // Store all batches for finding next available batch
+                        allBatches = validBatches;
 
-                        // Extract batch info first
+                        // Use the oldest batch (FIFO - first in first out)
+                        const oldestBatch = validBatches[0];
                         unitPrice = parseFloat(oldestBatch.sellingPrice.toFixed(2));
                         costPrice = parseFloat(oldestBatch.costPrice.toFixed(2));
+                        
                         batchInfo = {
                             batchNumber: oldestBatch.batchNumber,
                             availableQuantity: oldestBatch.currentQuantity || oldestBatch.availableQuantity
@@ -197,9 +385,16 @@ const BillingScreen: React.FC = () => {
                                                         costPrice,
                                                         totalPrice: unitPrice,
                                                         batchInfo,
+                                                        assignedBatch: allBatches ? allBatches[0] : undefined,
+                                                        allBatches,
                                                     };
-                                                    setCart([...cart, newItem]);
-                                                    setShowProductSearch(false);
+                                                    setCart([newItem, ...cart]);
+                                                    // Keep modal open and refocus
+                                                    setTimeout(() => {
+                                                        if (productSearchRef.current) {
+                                                            productSearchRef.current.focus();
+                                                        }
+                                                    }, 100);
                                                     resolve(newItem);
                                                 }
                                             }
@@ -217,8 +412,10 @@ const BillingScreen: React.FC = () => {
                             costPrice,
                             totalPrice: unitPrice,
                             batchInfo,
+                            assignedBatch: allBatches ? allBatches[0] : undefined,
+                            allBatches,
                         };
-                        setCart([...cart, newItem]);
+                        setCart([newItem, ...cart]);
                     } else if (batchResponse.success && batchResponse.data?.batches?.length === 0) {
                         // No non-expired batches available
                         Alert.alert(
@@ -244,11 +441,18 @@ const BillingScreen: React.FC = () => {
                     costPrice,
                     totalPrice: unitPrice,
                     batchInfo,
+                    assignedBatch: allBatches ? allBatches[0] : undefined,
+                    allBatches,
                 };
-                setCart([...cart, newItem]);
+                setCart([newItem, ...cart]);
             }
 
-            setShowProductSearch(false);
+            // Keep search modal open and refocus
+            setTimeout(() => {
+                if (productSearchRef.current) {
+                    productSearchRef.current.focus();
+                }
+            }, 100);
         } catch (error: any) {
             Alert.alert('Error', error.message || 'Failed to add product to cart');
         }
@@ -256,28 +460,93 @@ const BillingScreen: React.FC = () => {
 
     // Update quantity
     const updateQuantity = (productId: string, delta: number) => {
+        const itemToUpdate = cart.find(item => item.product._id === productId);
+        if (!itemToUpdate) return;
+
+        const newQuantity = itemToUpdate.quantity + delta;
+        
+        if (newQuantity <= 0) {
+            // Remove item if quantity becomes 0
+            setCart(cart.filter(item => item !== itemToUpdate));
+            return;
+        }
+
+        // Calculate total quantity for this product across all cart items
+        const allItemsForProduct = cart.filter(item => item.product._id === productId);
+        const currentTotalQuantity = allItemsForProduct.reduce((sum, item) => sum + item.quantity, 0);
+        const newTotalQuantity = currentTotalQuantity - itemToUpdate.quantity + newQuantity;
+
+        // Check if new total quantity exceeds product stock
+        if (newTotalQuantity > itemToUpdate.product.currentStock) {
+            Alert.alert('Insufficient Stock', `Only ${itemToUpdate.product.currentStock} units available. Already have ${currentTotalQuantity - itemToUpdate.quantity} in cart.`);
+            return;
+        }
+
+        // Check if assigned batch has enough quantity
+        if (itemToUpdate.assignedBatch) {
+            const availableInBatch = itemToUpdate.assignedBatch.currentQuantity || 
+                                     itemToUpdate.assignedBatch.availableQuantity || 0;
+            
+            if (newQuantity > availableInBatch) {
+                // Batch exhausted, need to create new item with next batch
+                if (itemToUpdate.allBatches && itemToUpdate.allBatches.length > 0) {
+                    const nextBatch = findNextAvailableBatch(productId, itemToUpdate.allBatches, cart);
+                    
+                    if (nextBatch && nextBatch.batchNumber !== itemToUpdate.assignedBatch.batchNumber) {
+                        // Different batch available - keep current item at max batch quantity, add new item
+                        const maxQuantityForCurrentBatch = availableInBatch;
+                        const remainingQuantity = newQuantity - maxQuantityForCurrentBatch;
+                        
+                        // Check if remaining quantity doesn't exceed stock
+                        const remainingTotal = currentTotalQuantity - itemToUpdate.quantity + maxQuantityForCurrentBatch + remainingQuantity;
+                        if (remainingTotal > itemToUpdate.product.currentStock) {
+                            Alert.alert('Insufficient Stock', `Only ${itemToUpdate.product.currentStock} units available.`);
+                            return;
+                        }
+                        
+                        const updatedCart = cart.map(item => {
+                            if (item === itemToUpdate) {
+                                return {
+                                    ...item,
+                                    quantity: maxQuantityForCurrentBatch,
+                                    totalPrice: parseFloat((maxQuantityForCurrentBatch * item.unitPrice).toFixed(2))
+                                };
+                            }
+                            return item;
+                        });
+
+                        // Add remaining quantity as new item with next batch
+                        const newItem: CartItem = {
+                            product: itemToUpdate.product,
+                            quantity: remainingQuantity,
+                            unitPrice: parseFloat(nextBatch.sellingPrice.toFixed(2)),
+                            costPrice: parseFloat(nextBatch.costPrice.toFixed(2)),
+                            totalPrice: parseFloat((remainingQuantity * nextBatch.sellingPrice).toFixed(2)),
+                            batchInfo: {
+                                batchNumber: nextBatch.batchNumber,
+                                availableQuantity: nextBatch.currentQuantity || nextBatch.availableQuantity
+                            },
+                            assignedBatch: nextBatch,
+                            allBatches: itemToUpdate.allBatches,
+                        };
+                        setCart([newItem, ...updatedCart]);
+                        return;
+                    }
+                }
+            }
+        }
+
+        // Normal case: just update quantity (same batch, same price)
         const updatedCart = cart.map(item => {
-            if (item.product._id === productId) {
-                const newQuantity = item.quantity + delta;
-
-                if (newQuantity <= 0) {
-                    return null;
-                }
-
-                if (newQuantity > item.product.currentStock) {
-                    Alert.alert('Insufficient Stock', `Only ${item.product.currentStock} units available`);
-                    return item;
-                }
-
+            if (item === itemToUpdate) {
                 return {
                     ...item,
                     quantity: newQuantity,
-                    totalPrice: parseFloat((newQuantity * item.unitPrice).toFixed(2)), // Round to 2 decimals
+                    totalPrice: parseFloat((newQuantity * item.unitPrice).toFixed(2)),
                 };
             }
             return item;
-        }).filter(item => item !== null) as CartItem[];
-
+        });
         setCart(updatedCart);
     };
 
@@ -285,6 +554,7 @@ const BillingScreen: React.FC = () => {
     const togglePriceEdit = (productId: string) => {
         const updatedCart = cart.map(item => {
             if (item.product._id === productId) {
+                const isStartingEdit = !item.isEditingPrice;
                 return {
                     ...item,
                     isEditingPrice: !item.isEditingPrice,
@@ -293,6 +563,15 @@ const BillingScreen: React.FC = () => {
             return item;
         });
         setCart(updatedCart);
+        
+        // Initialize editing value when starting to edit
+        const item = cart.find(i => i.product._id === productId);
+        if (item && !item.isEditingPrice) {
+            setEditingPriceValues(prev => ({
+                ...prev,
+                [productId]: item.unitPrice.toString()
+            }));
+        }
     };
 
     // Update selling price
@@ -327,6 +606,20 @@ const BillingScreen: React.FC = () => {
         });
 
         setCart(updatedCart);
+        
+        // Clear editing price value
+        setEditingPriceValues(prev => {
+            const newValues = { ...prev };
+            delete newValues[productId];
+            return newValues;
+        });
+        
+        // Refocus search after price update
+        if (showProductSearch && productSearchRef.current) {
+            setTimeout(() => {
+                productSearchRef.current?.focus();
+            }, 150);
+        }
     };
 
     // Remove item from cart
@@ -379,7 +672,7 @@ const BillingScreen: React.FC = () => {
                 setTimeout(() => {
                     setCart([]);
                     setAmountReceived('');
-                    setSelectedPaymentMethod('cash');
+                    setSelectedPaymentMethod('upi');
                 }, 1000);
             }
         } catch (error: any) {
@@ -473,16 +766,25 @@ const BillingScreen: React.FC = () => {
                                             color: theme.colors.text,
                                             borderColor: theme.colors.primary[500]
                                         }]}
-                                        defaultValue={item.unitPrice.toString()}
+                                        value={editingPriceValues[item.product._id] || item.unitPrice.toString()}
+                                        onChangeText={(text) => {
+                                            setEditingPriceValues(prev => ({
+                                                ...prev,
+                                                [item.product._id]: text
+                                            }));
+                                        }}
                                         keyboardType="decimal-pad"
                                         autoFocus
                                         selectTextOnFocus
                                         onSubmitEditing={(e) => {
                                             updateSellingPrice(item.product._id, e.nativeEvent.text);
+                                            // Refocus search will happen in updateSellingPrice
                                         }}
                                         onBlur={() => {
-                                            // Toggle back if user clicks away without submitting
-                                            togglePriceEdit(item.product._id);
+                                            // Save price on blur (treat as final enter)
+                                            const newPrice = editingPriceValues[item.product._id] || item.unitPrice.toString();
+                                            updateSellingPrice(item.product._id, newPrice);
+                                            // Refocus search will happen in updateSellingPrice
                                         }}
                                         placeholder="0.00"
                                         placeholderTextColor={theme.colors.textSecondary}
@@ -715,6 +1017,7 @@ const BillingScreen: React.FC = () => {
                     </View>
                     <View style={styles.searchContainer}>
                         <ProductSearch
+                            ref={productSearchRef}
                             placeholder="Type product name, SKU, barcode, or brand..."
                             onProductSelect={addToCart}
                             showStockInfo={true}
@@ -788,7 +1091,15 @@ const BillingScreen: React.FC = () => {
                                                             : theme.colors.gray[300],
                                                 },
                                             ]}
-                                            onPress={() => setSelectedPaymentMethod(method.id)}
+                                            onPress={() => {
+                                                setSelectedPaymentMethod(method.id);
+                                                // Focus amount input if cash is selected
+                                                if (method.id === 'cash' && showPaymentModal) {
+                                                    setTimeout(() => {
+                                                        amountReceivedRef.current?.focus();
+                                                    }, 200);
+                                                }
+                                            }}
                                             activeOpacity={0.7}
                                             accessibilityLabel={`Select ${method.name} payment`}
                                             accessibilityRole="button"
@@ -823,10 +1134,18 @@ const BillingScreen: React.FC = () => {
                             {/* Cash Input - SIMPLE and CLEAR */}
                             {selectedPaymentMethod === 'cash' && (
                                 <View style={styles.cashInput}>
-                                    <Text style={[styles.cashInputLabel, { color: theme.colors.text }]}>
-                                        ENTER CASH RECEIVED
-                                    </Text>
+                                    <TouchableOpacity
+                                        onPress={() => {
+                                            amountReceivedRef.current?.focus();
+                                        }}
+                                        activeOpacity={1}
+                                    >
+                                        <Text style={[styles.cashInputLabel, { color: theme.colors.text }]}>
+                                            ENTER CASH RECEIVED
+                                        </Text>
+                                    </TouchableOpacity>
                                     <TextInput
+                                        ref={amountReceivedRef}
                                         style={[styles.cashInputFieldLarge, {
                                             backgroundColor: theme.colors.gray[50],
                                             color: theme.colors.text,
@@ -837,7 +1156,9 @@ const BillingScreen: React.FC = () => {
                                         keyboardType="decimal-pad"
                                         value={amountReceived}
                                         onChangeText={setAmountReceived}
-                                        autoFocus
+                                        onFocus={() => {
+                                            // Input is focused, ensure it stays focused
+                                        }}
                                         accessibilityLabel="Enter cash amount received"
                                     />
                                     {amountReceived && !isNaN(parseFloat(amountReceived)) && (

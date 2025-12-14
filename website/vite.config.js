@@ -10,6 +10,9 @@ export default defineConfig(({ mode }) => {
 
     return {
         plugins: [react()],
+        optimizeDeps: {
+            include: ['react-window'],
+        },
         server: {
             port: 3000,
             // Proxy only in development mode

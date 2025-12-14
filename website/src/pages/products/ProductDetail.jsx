@@ -282,7 +282,7 @@ const ProductDetail = () => {
                 }
             >
                 <p className="text-gray-600">
-                    Are you sure you want to delete <strong>{product.name}</strong>? This action will deactivate the product.
+                    Are you sure you want to delete <strong>{product.name}</strong>? This action                     will deactivate the product.
                 </p>
             </Modal>
         </div>

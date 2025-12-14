@@ -12,6 +12,7 @@ import { useRoute, useNavigation } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useTheme } from '../contexts/ThemeContext';
 import { Button, Input, LoadingSpinner, SearchableDropdown } from '../components/ui';
+import { Modal } from '../components/ui/Modal';
 import { PurchaseOrderFormData, Supplier, Product } from '../types';
 import apiService from '../services/api';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -56,10 +57,18 @@ const PurchaseOrderFormScreen: React.FC = () => {
     const [errors, setErrors] = useState<Partial<PurchaseOrderFormData>>({});
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [showExpiryDatePicker, setShowExpiryDatePicker] = useState(false);
+    const [orderStatus, setOrderStatus] = useState<string | null>(null);
+    const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null); // Track which item is being edited
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    // Product batches (existing inventory)
+    const [productBatches, setProductBatches] = useState<any[]>([]);
+    const [loadingBatches, setLoadingBatches] = useState(false);
+    const [showBatches, setShowBatches] = useState(false);
 
     useEffect(() => {
         loadSuppliers();
-        loadProducts();
+        // Don't load products on init - load lazily when modal opens
         if (orderId) {
             loadOrder();
         }
@@ -100,16 +109,23 @@ const PurchaseOrderFormScreen: React.FC = () => {
 
             if (response.success && response.data) {
                 const order = response.data;
+                setOrderStatus(order.status);
                 setFormData({
                     supplier: typeof order.supplier === 'string' ? order.supplier : order.supplier._id,
-                    items: order.items.map(item => ({
-                        product: typeof item.product === 'string' ? item.product : item.product._id,
-                        quantity: item.quantity,
-                        costPrice: item.costPrice,
-                        sellingPrice: item.sellingPrice || item.costPrice * 1.2, // Use saved or calculate with 20% markup
-                        mrp: item.mrp,
-                        expiryDate: item.expiryDate, // Include expiry date
-                    })),
+                    items: order.items.map(item => {
+                        // Extract product info - handle both populated object and string ID
+                        const productObj = typeof item.product === 'object' ? item.product : null;
+                        return {
+                            product: productObj?._id || item.product,
+                            productName: productObj?.name || 'Unknown Product', // Store name from populated data
+                            productStock: productObj?.currentStock ?? 0, // Store stock from populated data
+                            quantity: item.quantity,
+                            costPrice: item.costPrice,
+                            sellingPrice: item.sellingPrice || item.costPrice * 1.2,
+                            mrp: item.mrp,
+                            expiryDate: item.expiryDate,
+                        };
+                    }),
                     expectedDeliveryDate: order.expectedDeliveryDate ? order.expectedDeliveryDate.split('T')[0] : '',
                     notes: order.notes || '',
                     paymentMethod: order.paymentMethod,
@@ -179,6 +195,30 @@ const PurchaseOrderFormScreen: React.FC = () => {
         return date.toLocaleDateString('en-US', options);
     };
 
+    // Fetch existing batches for a product
+    const fetchProductBatches = async (productId: string) => {
+        if (!productId) {
+            setProductBatches([]);
+            return;
+        }
+        try {
+            setLoadingBatches(true);
+            const response: any = await apiService.getBatchesByProduct(productId);
+            // Response structure: { success: true, data: { batches: [...], ... } }
+            if (response?.success && response?.data?.batches) {
+                // Batches are already filtered by backend (active + currentQuantity > 0)
+                setProductBatches(response.data.batches);
+            } else {
+                setProductBatches([]);
+            }
+        } catch (error) {
+            console.error('Failed to fetch product batches:', error);
+            setProductBatches([]);
+        } finally {
+            setLoadingBatches(false);
+        }
+    };
+
     // Handle product selection - auto-fill prices from product master
     const handleProductSelect = (productId: string) => {
         setSelectedProduct(productId);
@@ -190,6 +230,9 @@ const PurchaseOrderFormScreen: React.FC = () => {
             setItemCostPrice(product.costPrice.toString());
             setItemSellingPrice(product.sellingPrice.toString());
             setItemMRP(product.mrp.toString());
+            
+            // Fetch existing batches for this product
+            fetchProductBatches(productId);
         }
     };
 
@@ -258,8 +301,13 @@ const PurchaseOrderFormScreen: React.FC = () => {
     };
 
     const addItemToList = (productId: string, quantity: number, costPrice: number, sellingPrice: number, mrp?: number, expiryDate?: string) => {
+        // Get product info for display
+        const product = products.find(p => p._id === productId);
+        
         const newItem: any = {
             product: productId,
+            productName: product?.name || 'Unknown Product', // For display only
+            productStock: product?.currentStock ?? 0, // For display only
             quantity: quantity,
             costPrice: parseFloat(costPrice.toFixed(2)), // Round to 2 decimals
             sellingPrice: parseFloat(sellingPrice.toFixed(2)), // Round to 2 decimals
@@ -276,10 +324,24 @@ const PurchaseOrderFormScreen: React.FC = () => {
             newItem.expiryDate = date.toISOString();
         }
 
-        setFormData(prev => ({
-            ...prev,
-            items: [...prev.items, newItem],
-        }));
+        // Check if we're editing an existing item
+        if (editingItemIndex !== null) {
+            // Update existing item
+            setFormData(prev => ({
+                ...prev,
+                items: prev.items.map((item, idx) => 
+                    idx === editingItemIndex ? newItem : item
+                ),
+            }));
+            Alert.alert('Success', 'Item updated successfully');
+            setIsModalOpen(false);
+        } else {
+            // Add new item
+            setFormData(prev => ({
+                ...prev,
+                items: [...prev.items, newItem],
+            }));
+        }
 
         // Reset item form
         setSelectedProduct('');
@@ -288,10 +350,64 @@ const PurchaseOrderFormScreen: React.FC = () => {
         setItemCostPrice('');
         setItemSellingPrice('');
         setItemExpiryDate('');
+        setEditingItemIndex(null);
+        setProductBatches([]);
+        setShowBatches(false);
 
         // Clear items error
         if (errors.items) {
             setErrors(prev => ({ ...prev, items: undefined }));
+        }
+    };
+
+    // Store editing item's name and stock for display in modal
+    const [editingItemName, setEditingItemName] = useState<string>('');
+    const [editingItemStock, setEditingItemStock] = useState<number | null>(null);
+
+    const handleEditItem = (index: number) => {
+        const item = formData.items[index] as any;
+        
+        setSelectedProduct(item.product);
+        setEditingItemName(item.productName || 'Unknown Product');
+        setEditingItemStock(item.productStock ?? null);
+        setItemQuantity(item.quantity.toString());
+        setItemMRP(item.mrp ? item.mrp.toString() : '');
+        setItemCostPrice(item.costPrice.toString());
+        setItemSellingPrice(item.sellingPrice.toString());
+        setItemExpiryDate(item.expiryDate ? (typeof item.expiryDate === 'string' ? item.expiryDate.split('T')[0] : '') : '');
+        setEditingItemIndex(index);
+        setIsModalOpen(true);
+    };
+
+    const handleCancelEdit = () => {
+        setSelectedProduct('');
+        setEditingItemName('');
+        setEditingItemStock(null);
+        setItemQuantity('');
+        setItemMRP('');
+        setItemCostPrice('');
+        setItemSellingPrice('');
+        setItemExpiryDate('');
+        setEditingItemIndex(null);
+        setIsModalOpen(false);
+        setProductBatches([]);
+        setShowBatches(false);
+    };
+
+    const handleAddNewItem = () => {
+        // Reset form and open modal for adding new item
+        setSelectedProduct('');
+        setItemQuantity('');
+        setItemMRP('');
+        setItemCostPrice('');
+        setItemSellingPrice('');
+        setItemExpiryDate('');
+        setEditingItemIndex(null);
+        setIsModalOpen(true);
+        
+        // Load products lazily when modal opens (if not already loaded)
+        if (products.length === 0) {
+            loadProducts();
         }
     };
 
@@ -302,9 +418,16 @@ const PurchaseOrderFormScreen: React.FC = () => {
         }));
     };
 
-    const getProductName = (productId: string) => {
-        const product = products.find(p => p._id === productId);
-        return product?.name || productId;
+    const getProductName = (productIdOrItem: any) => {
+        // If it's an object with productName (newly added item), use that
+        if (typeof productIdOrItem === 'object') {
+            if (productIdOrItem.productName) return productIdOrItem.productName;
+            if (productIdOrItem.name) return productIdOrItem.name;
+            return 'Unknown Product';
+        }
+        // For product ID, try to find in products array (may not be loaded)
+        const product = products.find(p => p._id === productIdOrItem);
+        return product?.name || 'Unknown Product';
     };
 
     const validateForm = () => {
@@ -374,6 +497,298 @@ const PurchaseOrderFormScreen: React.FC = () => {
         backgroundColor: theme.colors.background,
     });
 
+    const isReadOnly = orderStatus === 'received';
+
+    // Reusable Product Form Component
+    const renderProductForm = () => (
+        <ScrollView style={{ maxHeight: 400 }}>
+            {/* Show product search only for new items, not when editing */}
+            {editingItemIndex === null ? (
+                <>
+                    <SearchableDropdown
+                        label="Product"
+                        placeholder="Select product"
+                        value={selectedProduct}
+                        onSelect={(value) => handleProductSelect(value)}
+                        options={products}
+                        optionLabelKey="name"
+                        optionValueKey="_id"
+                        loading={isLoadingProducts}
+                        searchPlaceholder="Search products..."
+                        emptyMessage="No products available"
+                    />
+
+                    {selectedProduct && (() => {
+                        const product = products.find(p => p._id === selectedProduct);
+                        if (product) {
+                            return (
+                                <>
+                                    <View style={[styles.selectedProductContainer, { backgroundColor: theme.colors.primary[50], borderColor: theme.colors.primary[200] }]}>
+                                        <Text style={[styles.selectedProductText, { color: theme.colors.primary[900] }]}>
+                                            Selected: {product.name} {product.sku && `(${product.sku})`}
+                                            {product.currentStock !== undefined && (
+                                                <Text style={[styles.stockText, { color: theme.colors.textSecondary }]}>
+                                                    {' • '}Current Stock: {product.currentStock}
+                                                </Text>
+                                            )}
+                                        </Text>
+                                    </View>
+
+                                    {/* Existing Batches Section */}
+                                    <TouchableOpacity
+                                        onPress={() => setShowBatches(!showBatches)}
+                                        style={[styles.batchesToggle, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
+                                    >
+                                        <View style={styles.batchesToggleContent}>
+                                            <Icon name="inventory" size={18} color={theme.colors.primary['500']} />
+                                            <Text style={[styles.batchesToggleText, { color: theme.colors.text }]}>
+                                                Existing Inventory
+                                                {!loadingBatches && productBatches.length > 0 && (
+                                                    <Text style={{ color: theme.colors.primary['600'] }}>
+                                                        {' '}({productBatches.length} batch{productBatches.length > 1 ? 'es' : ''})
+                                                    </Text>
+                                                )}
+                                            </Text>
+                                        </View>
+                                        <Icon 
+                                            name={showBatches ? "expand-less" : "expand-more"} 
+                                            size={24} 
+                                            color={theme.colors.textSecondary} 
+                                        />
+                                    </TouchableOpacity>
+
+                                    {showBatches && (
+                                        <View style={[styles.batchesContainer, { borderColor: theme.colors.border }]}>
+                                            {loadingBatches ? (
+                                                <View style={styles.batchesLoading}>
+                                                    <Text style={[styles.batchesLoadingText, { color: theme.colors.textSecondary }]}>
+                                                        Loading batches...
+                                                    </Text>
+                                                </View>
+                                            ) : productBatches.length === 0 ? (
+                                                <View style={[styles.noBatches, { backgroundColor: theme.colors.warning['50'] }]}>
+                                                    <Icon name="info-outline" size={20} color={theme.colors.warning['600']} />
+                                                    <Text style={[styles.noBatchesText, { color: theme.colors.warning['700'] }]}>
+                                                        No existing batches. This will be the first batch.
+                                                    </Text>
+                                                </View>
+                                            ) : (
+                                                <>
+                                                    {/* Batches Header */}
+                                                    <View style={[styles.batchHeader, { backgroundColor: theme.colors.gray[100] }]}>
+                                                        <Text style={[styles.batchHeaderCell, styles.batchCellBatch, { color: theme.colors.textSecondary }]}>
+                                                            Batch
+                                                        </Text>
+                                                        <Text style={[styles.batchHeaderCell, styles.batchCellQty, { color: theme.colors.textSecondary }]}>
+                                                            Qty
+                                                        </Text>
+                                                        <Text style={[styles.batchHeaderCell, styles.batchCellPrice, { color: theme.colors.textSecondary }]}>
+                                                            Cost
+                                                        </Text>
+                                                        <Text style={[styles.batchHeaderCell, styles.batchCellPrice, { color: theme.colors.textSecondary }]}>
+                                                            Sell
+                                                        </Text>
+                                                        <Text style={[styles.batchHeaderCell, styles.batchCellPrice, { color: theme.colors.textSecondary }]}>
+                                                            MRP
+                                                        </Text>
+                                                    </View>
+                                                    
+                                                    {/* Batches Rows */}
+                                                    {productBatches.map((batch: any, index: number) => (
+                                                        <View 
+                                                            key={batch._id || index} 
+                                                            style={[
+                                                                styles.batchRow, 
+                                                                { borderBottomColor: theme.colors.border },
+                                                                index === productBatches.length - 1 && { borderBottomWidth: 0 }
+                                                            ]}
+                                                        >
+                                                            <View style={[styles.batchCell, styles.batchCellBatch]}>
+                                                                <Text style={[styles.batchNumber, { color: theme.colors.text }]}>
+                                                                    {batch.batchNumber?.slice(-8) || `B${index + 1}`}
+                                                                </Text>
+                                                                {batch.expiryDate && (
+                                                                    <Text style={[
+                                                                        styles.batchExpiry,
+                                                                        { 
+                                                                            color: new Date(batch.expiryDate) < new Date() 
+                                                                                ? theme.colors.error['500']
+                                                                                : new Date(batch.expiryDate) < new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+                                                                                    ? theme.colors.warning['600']
+                                                                                    : theme.colors.textSecondary
+                                                                        }
+                                                                    ]}>
+                                                                        {formatDisplayDate(batch.expiryDate)}
+                                                                    </Text>
+                                                                )}
+                                                            </View>
+                                                            <Text style={[
+                                                                styles.batchCell, 
+                                                                styles.batchCellQty,
+                                                                { 
+                                                                    color: batch.currentQuantity <= 5 
+                                                                        ? theme.colors.error['600'] 
+                                                                        : theme.colors.text,
+                                                                    fontWeight: '600'
+                                                                }
+                                                            ]}>
+                                                                {batch.currentQuantity}
+                                                            </Text>
+                                                            <Text style={[styles.batchCell, styles.batchCellPrice, { color: theme.colors.textSecondary }]}>
+                                                                ₹{batch.costPrice?.toFixed(0) || '0'}
+                                                            </Text>
+                                                            <Text style={[styles.batchCell, styles.batchCellPrice, { color: theme.colors.success['600'] }]}>
+                                                                ₹{batch.sellingPrice?.toFixed(0) || '0'}
+                                                            </Text>
+                                                            <Text style={[styles.batchCell, styles.batchCellPrice, { color: theme.colors.textSecondary }]}>
+                                                                ₹{batch.mrp?.toFixed(0) || '0'}
+                                                            </Text>
+                                                        </View>
+                                                    ))}
+                                                    
+                                                    {/* Total Row */}
+                                                    <View style={[styles.batchTotalRow, { backgroundColor: theme.colors.primary[50] }]}>
+                                                        <Text style={[styles.batchTotalLabel, { color: theme.colors.primary['800'] }]}>
+                                                            Total
+                                                        </Text>
+                                                        <Text style={[styles.batchTotalQty, { color: theme.colors.primary['800'] }]}>
+                                                            {productBatches.reduce((sum: number, b: any) => sum + (b.currentQuantity || 0), 0)}
+                                                        </Text>
+                                                    </View>
+                                                </>
+                                            )}
+                                        </View>
+                                    )}
+                                </>
+                            );
+                        }
+                        return null;
+                    })()}
+                </>
+            ) : (
+                /* Show fixed product display when editing - use stored name/stock, no lookup needed */
+                <View style={[styles.fixedProductContainer, { backgroundColor: theme.colors.gray[100], borderColor: theme.colors.gray[200] }]}>
+                    <Text style={[styles.fixedProductLabel, { color: theme.colors.textSecondary }]}>Product</Text>
+                    <Text style={[styles.fixedProductName, { color: theme.colors.text }]}>
+                        {editingItemName || 'Unknown Product'}
+                    </Text>
+                    {editingItemStock !== null && (
+                        <Text style={[styles.fixedProductStock, { color: theme.colors.primary['600'] }]}>
+                            Current Stock: {editingItemStock}
+                        </Text>
+                    )}
+                    <Text style={[styles.fixedProductNote, { color: theme.colors.textSecondary }]}>
+                        Product cannot be changed while editing
+                    </Text>
+                </View>
+            )}
+
+            <View style={styles.itemInputRow}>
+                <View style={styles.itemInputHalf}>
+                    <Input
+                        label="Quantity"
+                        placeholder="0"
+                        value={itemQuantity}
+                        onChangeText={setItemQuantity}
+                        keyboardType="numeric"
+                    />
+                </View>
+                <View style={styles.itemInputHalf}>
+                    <Input
+                        label="MRP (₹)"
+                        placeholder="0.00"
+                        value={itemMRP}
+                        onChangeText={setItemMRP}
+                        keyboardType="decimal-pad"
+                    />
+                </View>
+            </View>
+
+            <View style={styles.itemInputRow}>
+                <View style={styles.itemInputHalf}>
+                    <Input
+                        label="Cost Price (₹)"
+                        placeholder="0.00"
+                        value={itemCostPrice}
+                        onChangeText={handleCostPriceChange}
+                        keyboardType="decimal-pad"
+                    />
+                </View>
+                <View style={styles.itemInputHalf}>
+                    <Input
+                        label="Selling Price (₹)"
+                        placeholder="0.00"
+                        value={itemSellingPrice}
+                        onChangeText={setItemSellingPrice}
+                        keyboardType="decimal-pad"
+                    />
+                </View>
+            </View>
+
+            <View style={styles.profitMarginRow}>
+                {itemCostPrice && itemSellingPrice && (
+                    <View style={styles.marginIndicator}>
+                        <Text style={[styles.marginLabel, { color: theme.colors.textSecondary }]}>
+                            Profit Margin
+                        </Text>
+                        <Text style={[
+                            styles.marginValue,
+                            {
+                                color: calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)) < 0
+                                    ? theme.colors.error['500']
+                                    : theme.colors.success['500']
+                            }
+                        ]}>
+                            {calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)).toFixed(1)}%
+                        </Text>
+                    </View>
+                )}
+            </View>
+
+            {/* Expiry Date Picker */}
+            <View style={styles.expiryDateContainer}>
+                <Text style={[styles.expiryDateLabel, { color: theme.colors.text }]}>
+                    Expiry Date (Optional)
+                </Text>
+                <TouchableOpacity
+                    style={[styles.expiryDateButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
+                    onPress={() => setShowExpiryDatePicker(true)}
+                >
+                    <Icon name="event" size={20} color={theme.colors.textSecondary} />
+                    <Text style={[styles.expiryDateText, { color: itemExpiryDate ? theme.colors.text : theme.colors.textSecondary }]}>
+                        {itemExpiryDate ? formatDisplayDate(itemExpiryDate) : 'Select expiry date'}
+                    </Text>
+                    {itemExpiryDate && (
+                        <TouchableOpacity onPress={() => setItemExpiryDate('')} style={styles.clearDateButton}>
+                            <Icon name="close" size={18} color={theme.colors.textSecondary} />
+                        </TouchableOpacity>
+                    )}
+                </TouchableOpacity>
+            </View>
+
+            {showExpiryDatePicker && (
+                <DateTimePicker
+                    value={itemExpiryDate ? new Date(itemExpiryDate + 'T00:00:00') : new Date()}
+                    mode="date"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={handleExpiryDateChange}
+                    minimumDate={new Date()}
+                />
+            )}
+
+            {Platform.OS === 'ios' && showExpiryDatePicker && (
+                <View style={styles.datePickerButtons}>
+                    <Button
+                        title="Done"
+                        onPress={() => setShowExpiryDatePicker(false)}
+                        variant="primary"
+                        size="sm"
+                    />
+                </View>
+            )}
+        </ScrollView>
+    );
+
     if (isLoading && orderId) {
         return <LoadingSpinner overlay text="Loading purchase order..." />;
     }
@@ -382,8 +797,13 @@ const PurchaseOrderFormScreen: React.FC = () => {
         <ScrollView style={getContainerStyle()}>
             <View style={styles.content}>
                 <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
-                    Purchase Order Details
+                    {isReadOnly ? 'View Purchase Order' : 'Purchase Order Details'}
                 </Text>
+                {isReadOnly && (
+                    <Text style={[styles.readOnlyText, { color: theme.colors.textSecondary }]}>
+                        This order has been received and is read-only
+                    </Text>
+                )}
 
                 <SearchableDropdown
                     label="Supplier"
@@ -398,12 +818,14 @@ const PurchaseOrderFormScreen: React.FC = () => {
                     loading={isLoadingSuppliers}
                     searchPlaceholder="Search suppliers..."
                     emptyMessage="No suppliers available"
+                    disabled={isReadOnly}
                 />
 
                 <TouchableOpacity
-                    style={[styles.datePickerContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
-                    onPress={() => setShowDatePicker(true)}
+                    style={[styles.datePickerContainer, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border, opacity: isReadOnly ? 0.6 : 1 }]}
+                    onPress={() => !isReadOnly && setShowDatePicker(true)}
                     activeOpacity={0.7}
+                    disabled={isReadOnly}
                 >
                     <View style={styles.datePickerContent}>
                         <Icon name="calendar-today" size={20} color={theme.colors.primary['500']} />
@@ -453,6 +875,7 @@ const PurchaseOrderFormScreen: React.FC = () => {
                     ]}
                     optionLabelKey="name"
                     optionValueKey="value"
+                    disabled={isReadOnly}
                 />
 
                 <Input
@@ -462,141 +885,23 @@ const PurchaseOrderFormScreen: React.FC = () => {
                     onChangeText={(text) => handleInputChange('notes', text)}
                     multiline
                     numberOfLines={3}
+                    editable={!isReadOnly}
                 />
 
                 <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
                     Order Items ({formData.items.length})
                 </Text>
 
-                {/* Add Item Form */}
-                <View style={[styles.addItemContainer, { backgroundColor: theme.colors.surface }]}>
-                    <Text style={[styles.addItemTitle, { color: theme.colors.text }]}>Add Product</Text>
-
-                    <SearchableDropdown
-                        label="Product"
-                        placeholder="Select product"
-                        value={selectedProduct}
-                        onSelect={(value) => handleProductSelect(value)}
-                        options={products}
-                        optionLabelKey="name"
-                        optionValueKey="_id"
-                        loading={isLoadingProducts}
-                        searchPlaceholder="Search products..."
-                        emptyMessage="No products available"
-                    />
-
-                    <View style={styles.itemInputRow}>
-                        <View style={styles.itemInputHalf}>
-                            <Input
-                                label="Quantity"
-                                placeholder="0"
-                                value={itemQuantity}
-                                onChangeText={setItemQuantity}
-                                keyboardType="numeric"
-                            />
-                        </View>
-                        <View style={styles.itemInputHalf}>
-                            <Input
-                                label="MRP (₹)"
-                                placeholder="0.00"
-                                value={itemMRP}
-                                onChangeText={setItemMRP}
-                                keyboardType="decimal-pad"
-                            />
-                        </View>
-                    </View>
-
-                    <View style={styles.itemInputRow}>
-                        <View style={styles.itemInputHalf}>
-                            <Input
-                                label="Cost Price (₹)"
-                                placeholder="0.00"
-                                value={itemCostPrice}
-                                onChangeText={handleCostPriceChange}
-                                keyboardType="decimal-pad"
-                            />
-                        </View>
-                        <View style={styles.itemInputHalf}>
-                            <Input
-                                label="Selling Price (₹)"
-                                placeholder="0.00"
-                                value={itemSellingPrice}
-                                onChangeText={setItemSellingPrice}
-                                keyboardType="decimal-pad"
-                            />
-                        </View>
-                    </View>
-
-                    <View style={styles.profitMarginRow}>
-                        {itemCostPrice && itemSellingPrice && (
-                            <View style={styles.marginIndicator}>
-                                <Text style={[styles.marginLabel, { color: theme.colors.textSecondary }]}>
-                                    Profit Margin
-                                </Text>
-                                <Text style={[
-                                    styles.marginValue,
-                                    {
-                                        color: calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)) < 0
-                                            ? theme.colors.error['500']
-                                            : theme.colors.success['500']
-                                    }
-                                ]}>
-                                    {calculateMargin(parseFloat(itemCostPrice), parseFloat(itemSellingPrice)).toFixed(1)}%
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-
-                    {/* Expiry Date Picker */}
-                    <View style={styles.expiryDateContainer}>
-                        <Text style={[styles.expiryDateLabel, { color: theme.colors.text }]}>
-                            Expiry Date (Optional)
-                        </Text>
-                        <TouchableOpacity
-                            style={[styles.expiryDateButton, { borderColor: theme.colors.border, backgroundColor: theme.colors.background }]}
-                            onPress={() => setShowExpiryDatePicker(true)}
-                        >
-                            <Icon name="event" size={20} color={theme.colors.textSecondary} />
-                            <Text style={[styles.expiryDateText, { color: itemExpiryDate ? theme.colors.text : theme.colors.textSecondary }]}>
-                                {itemExpiryDate ? formatDisplayDate(itemExpiryDate) : 'Select expiry date'}
-                            </Text>
-                            {itemExpiryDate && (
-                                <TouchableOpacity onPress={() => setItemExpiryDate('')} style={styles.clearDateButton}>
-                                    <Icon name="close" size={18} color={theme.colors.textSecondary} />
-                                </TouchableOpacity>
-                            )}
-                        </TouchableOpacity>
-                    </View>
-
-                    {showExpiryDatePicker && (
-                        <DateTimePicker
-                            value={itemExpiryDate ? new Date(itemExpiryDate + 'T00:00:00') : new Date()}
-                            mode="date"
-                            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                            onChange={handleExpiryDateChange}
-                            minimumDate={new Date()}
-                        />
-                    )}
-
-                    {Platform.OS === 'ios' && showExpiryDatePicker && (
-                        <View style={styles.datePickerButtons}>
-                            <Button
-                                title="Done"
-                                onPress={() => setShowExpiryDatePicker(false)}
-                                variant="primary"
-                                size="sm"
-                            />
-                        </View>
-                    )}
-
+                {/* Add Item Button - Hide if read-only */}
+                {!isReadOnly && (
                     <Button
                         title="Add Item"
-                        onPress={handleAddItem}
+                        onPress={handleAddNewItem}
                         variant="outline"
-                        size="sm"
                         leftIcon={<Icon name="add" size={16} color={theme.colors.primary['500']} />}
+                        style={styles.addItemButton}
                     />
-                </View>
+                )}
 
                 {/* Items List */}
                 {formData.items.length > 0 ? (
@@ -607,9 +912,16 @@ const PurchaseOrderFormScreen: React.FC = () => {
                                 style={[styles.itemCard, { backgroundColor: theme.colors.surface, borderColor: theme.colors.border }]}
                             >
                                 <View style={styles.itemCardContent}>
-                                    <Text style={[styles.itemProductName, { color: theme.colors.text }]}>
-                                        {getProductName(item.product)}
-                                    </Text>
+                                    <View style={styles.itemNameRow}>
+                                        <Text style={[styles.itemProductName, { color: theme.colors.text }]}>
+                                            {(item as any).productName || getProductName(item.product)}
+                                        </Text>
+                                        <View style={[styles.stockBadge, { backgroundColor: theme.colors.primary[50] }]}>
+                                            <Text style={[styles.stockBadgeText, { color: theme.colors.primary['600'] }]}>
+                                                Stock: {(item as any).productStock ?? 'N/A'}
+                                            </Text>
+                                        </View>
+                                    </View>
                                     <View style={styles.itemDetails}>
                                         <Text style={[styles.itemDetailText, { color: theme.colors.textSecondary }]}>
                                             Qty: {item.quantity}
@@ -658,12 +970,22 @@ const PurchaseOrderFormScreen: React.FC = () => {
                                         </View>
                                     )}
                                 </View>
-                                <TouchableOpacity
-                                    onPress={() => handleRemoveItem(index)}
-                                    style={styles.removeButton}
-                                >
-                                    <Icon name="delete" size={20} color={theme.colors.error['500']} />
-                                </TouchableOpacity>
+                                {!isReadOnly && (
+                                <View style={styles.itemActions}>
+                                    <TouchableOpacity
+                                        onPress={() => handleEditItem(index)}
+                                        style={styles.editButton}
+                                    >
+                                        <Icon name="edit" size={20} color={theme.colors.primary['500']} />
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        onPress={() => handleRemoveItem(index)}
+                                        style={styles.removeButton}
+                                    >
+                                        <Icon name="delete" size={20} color={theme.colors.error['500']} />
+                                    </TouchableOpacity>
+                                </View>
+                                )}
                             </View>
                         ))}
                         <View style={[styles.totalCard, { backgroundColor: theme.colors.primary['50'] }]}>
@@ -688,6 +1010,7 @@ const PurchaseOrderFormScreen: React.FC = () => {
                     <Text style={styles.errorText}>{errors.items as string}</Text>
                 )}
 
+                {!isReadOnly && (
                 <Button
                     title={orderId ? 'Update Order' : 'Create Order'}
                     onPress={handleSubmit}
@@ -697,7 +1020,33 @@ const PurchaseOrderFormScreen: React.FC = () => {
                     loading={isLoading}
                     style={styles.submitButton}
                 />
+                )}
             </View>
+
+            {/* Edit Item Modal */}
+            <Modal
+                visible={isModalOpen}
+                onClose={handleCancelEdit}
+                title={editingItemIndex !== null ? 'Edit Product' : 'Add Product'}
+                size="lg"
+            >
+                {renderProductForm()}
+                <View style={styles.modalButtons}>
+                    <Button
+                        title="Cancel"
+                        onPress={handleCancelEdit}
+                        variant="outline"
+                        style={styles.modalButton}
+                    />
+                    <Button
+                        title={editingItemIndex !== null ? 'Save' : 'Add Item'}
+                        onPress={handleAddItem}
+                        variant="primary"
+                        leftIcon={<Icon name={editingItemIndex !== null ? "save" : "add"} size={16} color="white" />}
+                        style={styles.modalButton}
+                    />
+                </View>
+            </Modal>
         </ScrollView>
     );
 };
@@ -713,6 +1062,11 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: '600',
         marginTop: 16,
+        marginBottom: 12,
+    },
+    readOnlyText: {
+        fontSize: 14,
+        fontStyle: 'italic',
         marginBottom: 12,
     },
     datePickerContainer: {
@@ -756,6 +1110,39 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         marginBottom: 12,
+    },
+    editNotice: {
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        marginBottom: 12,
+    },
+    editNoticeText: {
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    addItemButtons: {
+        flexDirection: 'row',
+        gap: 8,
+        marginTop: 8,
+    },
+    addItemButton: {
+        flex: 1,
+    },
+    selectedProductContainer: {
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        marginTop: 8,
+        marginBottom: 12,
+    },
+    selectedProductText: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    stockText: {
+        fontSize: 14,
+        fontWeight: '400',
     },
     itemInputRow: {
         flexDirection: 'row',
@@ -846,10 +1233,25 @@ const styles = StyleSheet.create({
     itemCardContent: {
         flex: 1,
     },
+    itemNameRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 4,
+    },
     itemProductName: {
         fontSize: 16,
         fontWeight: '600',
-        marginBottom: 4,
+    },
+    stockBadge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+        marginLeft: 8,
+    },
+    stockBadgeText: {
+        fontSize: 12,
+        fontWeight: '600',
     },
     itemDetails: {
         flexDirection: 'row',
@@ -859,6 +1261,14 @@ const styles = StyleSheet.create({
     },
     itemDetailText: {
         fontSize: 14,
+    },
+    itemActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
+    },
+    editButton: {
+        padding: 8,
     },
     removeButton: {
         padding: 8,
@@ -898,6 +1308,139 @@ const styles = StyleSheet.create({
     submitButton: {
         marginTop: 24,
         marginBottom: 24,
+    },
+    modalButtons: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 16,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#E5E7EB',
+    },
+    modalButton: {
+        flex: 1,
+    },
+    fixedProductContainer: {
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        marginBottom: 16,
+    },
+    fixedProductLabel: {
+        fontSize: 12,
+        fontWeight: '500',
+        marginBottom: 4,
+    },
+    fixedProductName: {
+        fontSize: 16,
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    fixedProductStock: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    fixedProductNote: {
+        fontSize: 12,
+        fontStyle: 'italic',
+    },
+    // Existing batches styles
+    batchesToggle: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        marginBottom: 8,
+    },
+    batchesToggleContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    batchesToggleText: {
+        fontSize: 14,
+        fontWeight: '500',
+    },
+    batchesContainer: {
+        borderWidth: 1,
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginBottom: 12,
+    },
+    batchesLoading: {
+        padding: 16,
+        alignItems: 'center',
+    },
+    batchesLoadingText: {
+        fontSize: 14,
+    },
+    noBatches: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        gap: 8,
+    },
+    noBatchesText: {
+        flex: 1,
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    batchHeader: {
+        flexDirection: 'row',
+        paddingHorizontal: 8,
+        paddingVertical: 6,
+    },
+    batchHeaderCell: {
+        fontSize: 10,
+        fontWeight: '600',
+        textTransform: 'uppercase',
+    },
+    batchRow: {
+        flexDirection: 'row',
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+        borderBottomWidth: 1,
+    },
+    batchCell: {
+        fontSize: 12,
+    },
+    batchCellBatch: {
+        flex: 2,
+    },
+    batchCellQty: {
+        flex: 1,
+        textAlign: 'right',
+    },
+    batchCellPrice: {
+        flex: 1.2,
+        textAlign: 'right',
+    },
+    batchNumber: {
+        fontSize: 12,
+        fontWeight: '500',
+    },
+    batchExpiry: {
+        fontSize: 10,
+        marginTop: 2,
+    },
+    batchTotalRow: {
+        flexDirection: 'row',
+        paddingHorizontal: 8,
+        paddingVertical: 8,
+    },
+    batchTotalLabel: {
+        flex: 2,
+        fontSize: 12,
+        fontWeight: '700',
+    },
+    batchTotalQty: {
+        flex: 1,
+        textAlign: 'right',
+        fontSize: 12,
+        fontWeight: '700',
     },
 });
 

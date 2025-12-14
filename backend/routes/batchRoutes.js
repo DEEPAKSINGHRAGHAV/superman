@@ -16,6 +16,8 @@ router.get('/', protect, asyncHandler(async (req, res) => {
         status,
         product,
         expiringInDays,
+        batchNumber,      // Search by batch number
+        productSearch,    // Search by product name/sku/barcode
         page = 1,
         limit = 50
     } = req.query;
@@ -40,6 +42,41 @@ router.get('/', protect, asyncHandler(async (req, res) => {
         };
         query.status = 'active';
         query.currentQuantity = { $gt: 0 };
+    }
+
+    // Search by batch number
+    if (batchNumber && batchNumber.trim()) {
+        query.batchNumber = { $regex: batchNumber.trim(), $options: 'i' };
+    }
+
+    // Search by product name/sku/barcode
+    if (productSearch && productSearch.trim()) {
+        const Product = require('../models/Product');
+        const searchTerm = productSearch.trim();
+        
+        const matchingProducts = await Product.find({
+            $or: [
+                { name: { $regex: searchTerm, $options: 'i' } },
+                { sku: { $regex: searchTerm, $options: 'i' } },
+                { barcode: { $regex: searchTerm, $options: 'i' } }
+            ]
+        }).select('_id');
+        
+        const productIds = matchingProducts.map(p => p._id);
+        
+        if (productIds.length > 0) {
+            query.product = { $in: productIds };
+        } else {
+            // No matching products found - return empty result
+            return res.status(200).json({
+                success: true,
+                count: 0,
+                total: 0,
+                page: parseInt(page),
+                pages: 0,
+                data: []
+            });
+        }
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);

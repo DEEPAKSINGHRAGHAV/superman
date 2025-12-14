@@ -15,6 +15,7 @@ import {
     AlertTriangle,
     Clock,
     Receipt,
+    ScanLine,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -99,6 +100,12 @@ const Sidebar = ({ isOpen, onClose }) => {
             href: '/users',
             icon: UserCircle,
             permission: 'manage_users',
+        },
+        {
+            name: 'Barcode',
+            href: '/barcode',
+            icon: ScanLine,
+            permission: 'read_products',
         },
     ];
 

@@ -4,6 +4,8 @@ const router = express.Router();
 const Product = require('../models/Product');
 const InventoryService = require('../services/inventoryService');
 const PricingService = require('../services/pricingService');
+const BarcodeService = require('../services/barcodeService');
+const BarcodeHandler = require('../services/barcodeHandler');
 const asyncHandler = require('../middleware/asyncHandler');
 const { protect, requirePermission, requireAnyPermission } = require('../middleware/auth');
 const { validateRequest, validatePagination, validateDateRange } = require('../middleware/validation');
@@ -396,6 +398,29 @@ router.get('/barcode/:barcode',
     })
 );
 
+// @desc    Get products with barcodes starting with "21"
+// @route   GET /api/v1/products/custom-barcodes
+// @access  Private (requires read_products permission)
+router.get('/custom-barcodes',
+    protect,
+    requirePermission('read_products'),
+    asyncHandler(async (req, res) => {
+        const products = await Product.find({
+            barcode: { $regex: '^21' },
+            isActive: true
+        })
+            .select('name sellingPrice barcode')
+            .sort({ name: 1 })
+            .lean();
+
+        res.status(200).json({
+            success: true,
+            count: products.length,
+            data: products
+        });
+    })
+);
+
 // @desc    Get single product
 // @route   GET /api/v1/products/:id
 // @access  Private (requires read_products permission)
@@ -449,23 +474,115 @@ router.post('/',
     requirePermission('write_products'),
     validateRequest(productValidation.create),
     asyncHandler(async (req, res) => {
+        // Start MongoDB transaction
+        const session = await mongoose.startSession();
+        session.startTransaction();
+
         try {
             console.log('Creating product with data:', JSON.stringify(req.body, null, 2));
 
             // Set createdBy to current user
             req.body.createdBy = req.user._id;
 
-            const product = await Product.create(req.body);
+            // Process barcode (auto-generate, validate, or use provided)
+            try {
+                const barcodeResult = await BarcodeHandler.processBarcode({
+                    barcodeValue: req.body.barcode,
+                    hasBarcodeInRequest: 'barcode' in req.body,
+                    excludeProductId: null,
+                    session
+                });
+                req.body.barcode = barcodeResult.barcode;
+                if (barcodeResult.generated) {
+                    console.log('Auto-generated barcode:', barcodeResult.barcode);
+                }
+            } catch (barcodeError) {
+                await session.abortTransaction();
+                return res.status(400).json({
+                    success: false,
+                    message: barcodeError.message
+                });
+            }
 
-            console.log('Product created successfully:', product._id);
+            // Create product within same transaction
+            // Handle duplicate key errors (barcode already exists) with retry
+            let product;
+            let retryCount = 0;
+            const maxRetries = 3;
+            
+            while (retryCount < maxRetries) {
+                try {
+                    product = await Product.create([req.body], { session });
+                    // Success - break out of retry loop
+                    break;
+                } catch (createError) {
+                    // Check if it's a duplicate key error for barcode
+                    if (createError.message && createError.message.includes('duplicate key') && 
+                        createError.message.includes('barcode') && retryCount < maxRetries - 1) {
+                        retryCount++;
+                        console.warn(`Duplicate barcode error on create, regenerating barcode... (attempt ${retryCount}/${maxRetries})`);
+                        
+                        // Regenerate barcode and retry (only if barcode was auto-generated)
+                        // If user provided barcode, don't regenerate - it's a real duplicate
+                        if (!('barcode' in req.body) || BarcodeHandler.isEmptyBarcode(req.body.barcode)) {
+                            try {
+                                const barcodeResult = await BarcodeHandler.processBarcode({
+                                    barcodeValue: undefined,
+                                    hasBarcodeInRequest: false,
+                                    existingBarcode: null,
+                                    excludeProductId: null,
+                                    session
+                                });
+                                req.body.barcode = barcodeResult.barcode;
+                                continue; // Retry the create
+                            } catch (barcodeError) {
+                                await session.abortTransaction();
+                                return res.status(400).json({
+                                    success: false,
+                                    message: `Failed to generate unique barcode: ${barcodeError.message}`
+                                });
+                            }
+                        } else {
+                            // User provided barcode that already exists - don't retry
+                            await session.abortTransaction();
+                            return res.status(400).json({
+                                success: false,
+                                message: 'Barcode already exists. Please use a different barcode.'
+                            });
+                        }
+                    } else {
+                        // Not a duplicate key error or max retries reached
+                        throw createError;
+                    }
+                }
+            }
+
+            // Commit transaction - all or nothing
+            await session.commitTransaction();
+
+            console.log('Product created successfully:', product[0]._id);
 
             res.status(201).json({
                 success: true,
-                data: product
+                data: product[0]
             });
         } catch (error) {
+            // Rollback transaction on any error
+            await session.abortTransaction();
             console.error('Error creating product:', error);
+            
+            // Handle duplicate key error with better message
+            if (error.message && error.message.includes('duplicate key') && error.message.includes('barcode')) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Barcode already exists. Please try again or contact support if the issue persists.'
+                });
+            }
+            
             throw error;
+        } finally {
+            // Always end session
+            session.endSession();
         }
     })
 );
@@ -517,26 +634,127 @@ router.put('/:id',
             });
         }
 
-        const product = await Product.findByIdAndUpdate(
-            req.params.id,
-            req.body,
-            {
-                new: true,
-                runValidators: true
+        // Start MongoDB transaction
+        const session = await mongoose.startSession();
+        session.startTransaction();
+
+        try {
+            // Check if product exists to get current barcode status
+            const existingProduct = await Product.findById(req.params.id).select('barcode').session(session).lean();
+            if (!existingProduct) {
+                await session.abortTransaction();
+                return res.status(404).json({
+                    success: false,
+                    message: 'Product not found'
+                });
             }
-        );
 
-        if (!product) {
-            return res.status(404).json({
-                success: false,
-                message: 'Product not found'
+            // Process barcode (auto-generate, validate, or use provided)
+            try {
+                const barcodeResult = await BarcodeHandler.processBarcode({
+                    barcodeValue: req.body.barcode,
+                    hasBarcodeInRequest: 'barcode' in req.body,
+                    existingBarcode: existingProduct.barcode, // Pass existing barcode for update logic
+                    excludeProductId: req.params.id, // Exclude current product from uniqueness check
+                    session
+                });
+                req.body.barcode = barcodeResult.barcode;
+                if (barcodeResult.generated) {
+                    console.log('Auto-generated barcode on update:', barcodeResult.barcode);
+                }
+            } catch (barcodeError) {
+                await session.abortTransaction();
+                return res.status(400).json({
+                    success: false,
+                    message: barcodeError.message
+                });
+            }
+
+            // Update product within transaction
+            // Handle duplicate key errors (barcode already exists) with retry
+            let product;
+            let retryCount = 0;
+            const maxRetries = 3;
+            
+            while (retryCount < maxRetries) {
+                try {
+                    product = await Product.findByIdAndUpdate(
+                        req.params.id,
+                        req.body,
+                        {
+                            new: true,
+                            runValidators: true,
+                            session
+                        }
+                    );
+
+                    if (!product) {
+                        await session.abortTransaction();
+                        return res.status(404).json({
+                            success: false,
+                            message: 'Product not found'
+                        });
+                    }
+
+                    // Success - break out of retry loop
+                    break;
+                } catch (updateError) {
+                    // Check if it's a duplicate key error for barcode
+                    if (updateError.message && updateError.message.includes('duplicate key') && 
+                        updateError.message.includes('barcode') && retryCount < maxRetries - 1) {
+                        retryCount++;
+                        console.warn(`Duplicate barcode error on update, regenerating barcode... (attempt ${retryCount}/${maxRetries})`);
+                        
+                        // Regenerate barcode and retry
+                        try {
+                            const barcodeResult = await BarcodeHandler.processBarcode({
+                                barcodeValue: undefined,
+                                hasBarcodeInRequest: false,
+                                existingBarcode: existingProduct.barcode,
+                                excludeProductId: req.params.id,
+                                session
+                            });
+                            req.body.barcode = barcodeResult.barcode;
+                            continue; // Retry the update
+                        } catch (barcodeError) {
+                            await session.abortTransaction();
+                            return res.status(400).json({
+                                success: false,
+                                message: `Failed to generate unique barcode: ${barcodeError.message}`
+                            });
+                        }
+                    } else {
+                        // Not a duplicate key error or max retries reached
+                        throw updateError;
+                    }
+                }
+            }
+
+            // Commit transaction
+            await session.commitTransaction();
+
+            res.status(200).json({
+                success: true,
+                data: product
             });
+        } catch (error) {
+            // Rollback transaction on any error
+            await session.abortTransaction();
+            console.error('Error updating product:', error);
+            
+            // Handle duplicate key error with better message
+            if (error.message && error.message.includes('duplicate key') && error.message.includes('barcode')) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Barcode already exists. Please try again or contact support if the issue persists.'
+                });
+            }
+            
+            throw error;
+        } finally {
+            // Always end session
+            session.endSession();
         }
-
-        res.status(200).json({
-            success: true,
-            data: product
-        });
     })
 );
 
