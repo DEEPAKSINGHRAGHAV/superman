@@ -132,8 +132,10 @@ export const batchesAPI = {
     create: (data) => api.post('/batches', data),
     update: (id, data) => api.put(`/batches/${id}`, data),
     adjust: (id, data) => api.patch(`/batches/${id}/adjust`, data),
+    updateStatus: (id, status, reason) => api.patch(`/batches/${id}/status`, { status, reason }),
     getExpiring: (days) => api.get('/batches/expiring', { params: { days } }),
     getHistory: (id) => api.get(`/batches/${id}/history`),
+    getValuation: () => api.get('/batches/valuation'),
 };
 
 // Brands API
