@@ -137,20 +137,25 @@ const ProductForm = () => {
         if (!formData.name) newErrors.name = 'Product name is required';
         if (!formData.sku) newErrors.sku = 'SKU is required';
         if (!formData.category) newErrors.category = 'Category is required';
-        if (!formData.costPrice) newErrors.costPrice = 'Cost price is required';
-        if (!formData.sellingPrice) newErrors.sellingPrice = 'Selling price is required';
-        if (!formData.mrp) newErrors.mrp = 'MRP is required';
 
-        if (formData.costPrice && parseFloat(formData.costPrice) < 0) {
-            newErrors.costPrice = 'Cost price must be positive';
-        }
+        // Only validate price fields when creating a new product
+        // In edit mode, prices are auto-managed by inventory batches
+        if (!isEditMode) {
+            if (!formData.costPrice) newErrors.costPrice = 'Cost price is required';
+            if (!formData.sellingPrice) newErrors.sellingPrice = 'Selling price is required';
+            if (!formData.mrp) newErrors.mrp = 'MRP is required';
 
-        if (formData.sellingPrice && parseFloat(formData.sellingPrice) < 0) {
-            newErrors.sellingPrice = 'Selling price must be positive';
-        }
+            if (formData.costPrice && parseFloat(formData.costPrice) < 0) {
+                newErrors.costPrice = 'Cost price must be positive';
+            }
 
-        if (formData.mrp && parseFloat(formData.mrp) < 0) {
-            newErrors.mrp = 'MRP must be positive';
+            if (formData.sellingPrice && parseFloat(formData.sellingPrice) < 0) {
+                newErrors.sellingPrice = 'Selling price must be positive';
+            }
+
+            if (formData.mrp && parseFloat(formData.mrp) < 0) {
+                newErrors.mrp = 'MRP must be positive';
+            }
         }
 
         return newErrors;
@@ -176,13 +181,23 @@ const ProductForm = () => {
                 ...formData,
                 sku: formData.sku ? formData.sku.replace(/\s/g, '').toUpperCase() : '',
                 category: formData.category ? formData.category.toLowerCase().trim() : '',
-                costPrice: parseFloat(formData.costPrice),
-                sellingPrice: parseFloat(formData.sellingPrice),
-                mrp: parseFloat(formData.mrp),
                 gstRate: parseFloat(formData.gstRate),
                 minStockLevel: parseInt(formData.minStockLevel),
                 maxStockLevel: parseInt(formData.maxStockLevel),
             };
+
+            // Only include price fields when creating a new product
+            // In edit mode, prices are auto-managed by inventory batches
+            if (!isEditMode) {
+                submitData.costPrice = parseFloat(formData.costPrice);
+                submitData.sellingPrice = parseFloat(formData.sellingPrice);
+                submitData.mrp = parseFloat(formData.mrp);
+            } else {
+                // Remove price fields from update request - they are managed by batches
+                delete submitData.costPrice;
+                delete submitData.sellingPrice;
+                delete submitData.mrp;
+            }
 
             if (cleanedBarcode) {
                 submitData.barcode = cleanedBarcode;
@@ -328,7 +343,13 @@ const ProductForm = () => {
                         </Card>
 
                         {/* Pricing */}
-                        <Card title="Pricing" className="mt-6">
+                        <Card title={isEditMode ? "Pricing (Auto-managed by batches)" : "Pricing"} className="mt-6">
+                            {isEditMode && (
+                                <p className="text-sm text-gray-500 mb-4">
+                                    Prices are automatically updated from inventory batches (FIFO). 
+                                    Update prices through Purchase Orders instead.
+                                </p>
+                            )}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <Input
                                     ref={costPriceRef}
@@ -346,6 +367,7 @@ const ProductForm = () => {
                                     }}
                                     error={errors.costPrice}
                                     required
+                                    disabled={isEditMode}
                                 />
                                 <Input
                                     ref={sellingPriceRef}
@@ -363,6 +385,7 @@ const ProductForm = () => {
                                     }}
                                     error={errors.sellingPrice}
                                     required
+                                    disabled={isEditMode}
                                 />
                                 <Input
                                     ref={mrpRef}
@@ -380,6 +403,7 @@ const ProductForm = () => {
                                     }}
                                     error={errors.mrp}
                                     required
+                                    disabled={isEditMode}
                                 />
                                 <Input
                                     ref={gstRateRef}

@@ -174,6 +174,7 @@ const ProductFormScreen: React.FC = () => {
 
     const validateForm = () => {
         const newErrors: Partial<ProductFormData> = {};
+        const isEditMode = Boolean(productId);
 
         if (!formData.name.trim()) {
             newErrors.name = 'Product name is required';
@@ -185,10 +186,6 @@ const ProductFormScreen: React.FC = () => {
             newErrors.sku = 'SKU can only contain uppercase letters, numbers, hyphens, and underscores';
         }
 
-        if (!formData.mrp || formData.mrp <= 0) {
-            newErrors.mrp = 'MRP must be greater than 0';
-        }
-
         if (formData.barcode && formData.barcode.trim().length > 0) {
             if (formData.barcode.trim().length < 8 || formData.barcode.trim().length > 20) {
                 newErrors.barcode = 'Barcode must be between 8 and 20 characters';
@@ -197,16 +194,24 @@ const ProductFormScreen: React.FC = () => {
             }
         }
 
-        if (!formData.costPrice || formData.costPrice <= 0) {
-            newErrors.costPrice = 'Cost price must be greater than 0';
-        }
+        // Only validate price fields when creating a new product
+        // In edit mode, prices are auto-managed by batches
+        if (!isEditMode) {
+            if (!formData.mrp || formData.mrp <= 0) {
+                newErrors.mrp = 'MRP must be greater than 0';
+            }
 
-        if (!formData.sellingPrice || formData.sellingPrice <= 0) {
-            newErrors.sellingPrice = 'Selling price must be greater than 0';
-        }
+            if (!formData.costPrice || formData.costPrice <= 0) {
+                newErrors.costPrice = 'Cost price must be greater than 0';
+            }
 
-        if (formData.costPrice >= formData.sellingPrice) {
-            newErrors.sellingPrice = 'Selling price must be greater than cost price';
+            if (!formData.sellingPrice || formData.sellingPrice <= 0) {
+                newErrors.sellingPrice = 'Selling price must be greater than 0';
+            }
+
+            if (formData.costPrice >= formData.sellingPrice) {
+                newErrors.sellingPrice = 'Selling price must be greater than cost price';
+            }
         }
 
         if (!formData.category) {
@@ -232,12 +237,8 @@ const ProductFormScreen: React.FC = () => {
             setIsLoading(true);
 
             // Ensure all required fields are properly set
-            const submitData = {
+            const submitData: any = {
                 ...formData,
-                // Ensure numeric fields are properly converted and rounded to 2 decimals
-                mrp: parseFloat(Number(formData.mrp).toFixed(2)),
-                costPrice: parseFloat(Number(formData.costPrice).toFixed(2)),
-                sellingPrice: parseFloat(Number(formData.sellingPrice).toFixed(2)),
                 currentStock: Number(formData.currentStock),
                 minStockLevel: Number(formData.minStockLevel),
                 maxStockLevel: Number(formData.maxStockLevel),
@@ -249,6 +250,19 @@ const ProductFormScreen: React.FC = () => {
                 // Remove empty barcode to avoid validation issues
                 barcode: formData.barcode && formData.barcode.trim() ? formData.barcode.trim() : undefined,
             };
+
+            // Only include price fields when creating a new product
+            // In edit mode, prices are auto-managed by inventory batches
+            if (!productId) {
+                submitData.mrp = parseFloat(Number(formData.mrp).toFixed(2));
+                submitData.costPrice = parseFloat(Number(formData.costPrice).toFixed(2));
+                submitData.sellingPrice = parseFloat(Number(formData.sellingPrice).toFixed(2));
+            } else {
+                // Remove price fields from update request - they are managed by batches
+                delete submitData.mrp;
+                delete submitData.costPrice;
+                delete submitData.sellingPrice;
+            }
 
             // Debug: Log the form data being sent
             console.log('Form data being sent:', JSON.stringify(submitData, null, 2));
@@ -374,7 +388,7 @@ const ProductFormScreen: React.FC = () => {
                     />
 
                     <Input
-                        label="Cost Price"
+                        label={productId ? "Cost Price (Auto-managed by batches)" : "Cost Price"}
                         placeholder="Enter cost price"
                         value={costPriceInput}
                         onChangeText={(text) => {
@@ -385,10 +399,11 @@ const ProductFormScreen: React.FC = () => {
                         keyboardType="decimal-pad"
                         error={errors.costPrice}
                         required
+                        editable={!productId}
                     />
 
                     <Input
-                        label="MRP"
+                        label={productId ? "MRP (Auto-managed by batches)" : "MRP"}
                         placeholder="Enter MRP"
                         value={mrpInput}
                         onChangeText={(text) => {
@@ -399,10 +414,11 @@ const ProductFormScreen: React.FC = () => {
                         keyboardType="decimal-pad"
                         error={errors.mrp}
                         required
+                        editable={!productId}
                     />
 
                     <Input
-                        label="Selling Price"
+                        label={productId ? "Selling Price (Auto-managed by batches)" : "Selling Price"}
                         placeholder="Enter selling price"
                         value={sellingPriceInput}
                         onChangeText={(text) => {
@@ -413,6 +429,7 @@ const ProductFormScreen: React.FC = () => {
                         keyboardType="decimal-pad"
                         error={errors.sellingPrice}
                         required
+                        editable={!productId}
                     />
 
                     <Input

@@ -47,6 +47,18 @@ class BatchService {
             // Generate batch number
             const batchNumber = await InventoryBatch.generateBatchNumber(productId);
 
+            // Check if there are existing active batches with stock (before creating new batch)
+            const existingActiveBatches = await InventoryBatch.countDocuments({
+                product: productId,
+                status: 'active',
+                currentQuantity: { $gt: 0 },
+                $or: [
+                    { expiryDate: { $exists: false } },
+                    { expiryDate: null },
+                    { expiryDate: { $gt: new Date() } }
+                ]
+            }).session(session);
+
             // Create batch
             const batch = await InventoryBatch.create([{
                 product: productId,
@@ -64,17 +76,18 @@ class BatchService {
                 createdBy
             }], { session });
 
-            // Update product's current stock
-            await Product.findByIdAndUpdate(
-                productId,
-                {
-                    $inc: { currentStock: quantity },
-                    // Update product's default prices to latest batch prices
-                    costPrice: costPrice,
-                    sellingPrice: sellingPrice
-                },
-                { session }
-            );
+            // Build update object - always update stock
+            const updateObj = { $inc: { currentStock: quantity } };
+
+            // Only update product's default prices if this is the FIRST batch (no existing active batches)
+            // Otherwise, keep prices from existing FIFO (oldest) batch
+            if (existingActiveBatches === 0) {
+                updateObj.costPrice = costPrice;
+                updateObj.sellingPrice = sellingPrice;
+                updateObj.mrp = mrp || product.mrp;
+            }
+
+            await Product.findByIdAndUpdate(productId, updateObj, { session });
 
             // Create stock movement record
             await StockMovement.create([{
@@ -239,9 +252,11 @@ class BatchService {
             const batchesUsed = [];
             let totalCost = 0;
             let totalRevenue = 0;
+            let oldestBatchDepleted = false;  // Track if the oldest (first) batch depleted
 
             // Process batches in FIFO order
-            for (const batch of batches) {
+            for (let i = 0; i < batches.length; i++) {
+                const batch = batches[i];
                 if (remainingQuantity === 0) break;
 
                 const availableInBatch = batch.currentQuantity - batch.reservedQuantity;
@@ -253,6 +268,10 @@ class BatchService {
                 batch.currentQuantity -= quantityFromBatch;
                 if (batch.currentQuantity === 0) {
                     batch.status = 'depleted';
+                    // Only track if the FIRST (oldest) batch in FIFO order depleted
+                    if (i === 0) {
+                        oldestBatchDepleted = true;
+                    }
                 }
                 await batch.save({ session });
 
@@ -289,11 +308,36 @@ class BatchService {
                 }], { session });
             }
 
-            // Update product's total stock
-            const product = await Product.findById(productId).session(session);
+            // Build update object - always update stock
+            const updateObj = { $inc: { currentStock: -quantityToSell } };
+
+            // Only query for next batch and update prices if the oldest batch depleted
+            // This avoids unnecessary DB operations on every sale
+            if (oldestBatchDepleted) {
+                const nextActiveBatch = await InventoryBatch.findOne({
+                    product: productId,
+                    status: 'active',
+                    currentQuantity: { $gt: 0 },
+                    $or: [
+                        { expiryDate: { $exists: false } },
+                        { expiryDate: null },
+                        { expiryDate: { $gt: new Date() } }
+                    ]
+                })
+                    .sort({ purchaseDate: 1, createdAt: 1 })
+                    .session(session);
+
+                // Update product's default prices to match new FIFO batch
+                if (nextActiveBatch) {
+                    updateObj.costPrice = nextActiveBatch.costPrice;
+                    updateObj.sellingPrice = nextActiveBatch.sellingPrice;
+                    updateObj.mrp = nextActiveBatch.mrp;
+                }
+            }
+
             await Product.findByIdAndUpdate(
                 productId,
-                { $inc: { currentStock: -quantityToSell } },
+                updateObj,
                 { session }
             );
 

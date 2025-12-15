@@ -673,6 +673,12 @@ router.put('/:id',
                 });
             }
 
+            // Remove price fields from update - prices are auto-managed by inventory batches
+            // Prices should only be set during product creation and then managed via PO/batches
+            delete req.body.costPrice;
+            delete req.body.sellingPrice;
+            delete req.body.mrp;
+
             // Process barcode (auto-generate, validate, or use provided)
             try {
                 const barcodeResult = await BarcodeHandler.processBarcode({
