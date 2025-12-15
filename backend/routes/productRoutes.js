@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const router = express.Router();
 const Product = require('../models/Product');
+const InventoryBatch = require('../models/InventoryBatch');
 const InventoryService = require('../services/inventoryService');
 const PricingService = require('../services/pricingService');
 const BarcodeService = require('../services/barcodeService');
@@ -398,7 +399,7 @@ router.get('/barcode/:barcode',
     })
 );
 
-// @desc    Get products with barcodes starting with "21"
+// @desc    Get products with barcodes starting with "21" (returns FIFO batch prices)
 // @route   GET /api/v1/products/custom-barcodes
 // @access  Private (requires read_products permission)
 router.get('/custom-barcodes',
@@ -413,11 +414,34 @@ router.get('/custom-barcodes',
             .sort({ name: 1 })
             .lean();
 
-        res.status(200).json({
-            success: true,
-            count: products.length,
-            data: products
-        });
+        // Get FIFO (oldest active batch) selling price for each product
+        const productIds = products.map(p => p._id);
+        const fifoBatches = await InventoryBatch.aggregate([
+            {
+                $match: {
+                    product: { $in: productIds },
+                    status: 'active',
+                    currentQuantity: { $gt: 0 },
+                    $or: [
+                        { expiryDate: { $exists: false } },
+                        { expiryDate: null },
+                        { expiryDate: { $gt: new Date() } }
+                    ]
+                }
+            },
+            { $sort: { product: 1, purchaseDate: 1 } },
+            { $group: { _id: '$product', sellingPrice: { $first: '$sellingPrice' } } }
+        ]);
+
+        const fifoMap = new Map(fifoBatches.map(b => [b._id.toString(), b.sellingPrice]));
+
+        // Return sellingPrice from FIFO batch (or fallback to product price)
+        const data = products.map(p => ({
+            ...p,
+            sellingPrice: fifoMap.get(p._id.toString()) ?? p.sellingPrice
+        }));
+
+        res.status(200).json({ success: true, count: data.length, data });
     })
 );
 

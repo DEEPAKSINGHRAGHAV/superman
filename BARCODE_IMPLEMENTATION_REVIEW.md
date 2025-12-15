@@ -830,3 +830,4 @@ The current barcode implementation has **critical scalability issues** that must
 
 
 
+
