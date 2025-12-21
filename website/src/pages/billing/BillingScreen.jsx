@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Minus, Plus, Trash2, Edit2, X, Banknote, Smartphone, Printer, CheckCircle, Receipt } from 'lucide-react';
+import { Minus, Plus, Trash2, Edit2, X, Banknote, Smartphone, Printer, CheckCircle, Receipt, Loader2 } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -7,7 +7,7 @@ import Modal from '../../components/common/Modal';
 import Loading from '../../components/common/Loading';
 import ProductSearch from '../../components/common/ProductSearch';
 import ThermalReceipt from '../../components/billing/ThermalReceipt';
-import { batchesAPI, inventoryAPI } from '../../services/api';
+import { batchesAPI, inventoryAPI, customersAPI } from '../../services/api';
 import { formatCurrency } from '../../utils/helpers';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -22,12 +22,17 @@ const BillingScreen = () => {
     const [cart, setCart] = useState([]);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('upi');
     const [amountReceived, setAmountReceived] = useState('');
+    const [customerPhone, setCustomerPhone] = useState('');
+    const [customerName, setCustomerName] = useState('');
+    const [customerInfo, setCustomerInfo] = useState(null);
+    const [isLoadingCustomer, setIsLoadingCustomer] = useState(false);
     const [receiptData, setReceiptData] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [showReceiptModal, setShowReceiptModal] = useState(false);
     const [isPaymentCompleted, setIsPaymentCompleted] = useState(false);
     const productSearchRef = useRef(null);
     const amountReceivedRef = useRef(null);
+    const customerPhoneRef = useRef(null);
     const shouldRefocusRef = useRef(true);
 
     // Helper function to get the actual input element
@@ -684,6 +689,90 @@ const BillingScreen = () => {
     const total = subtotal + tax;
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+    // Lookup or create customer by phone
+    const handleCustomerPhoneLookup = async (phone) => {
+        // Normalize phone number (remove spaces, dashes, etc.)
+        const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
+        
+        // Remove country code prefix if present (+91 or 91)
+        let cleanedPhone = normalizedPhone;
+        if (normalizedPhone.startsWith('+91')) {
+            cleanedPhone = normalizedPhone.substring(3);
+        } else if (normalizedPhone.startsWith('91') && normalizedPhone.length === 12) {
+            cleanedPhone = normalizedPhone.substring(2);
+        }
+        
+        // Only proceed if phone is exactly 10 digits (valid Indian phone number)
+        if (!cleanedPhone || cleanedPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanedPhone)) {
+            setCustomerInfo(null);
+            if (!phone) {
+                setCustomerName('');
+            }
+            return;
+        }
+
+        setIsLoadingCustomer(true);
+        try {
+            const response = await customersAPI.findOrCreate({
+                phone: cleanedPhone,
+                name: (customerName && customerName.trim()) ? customerName.trim() : undefined
+            });
+
+            if (response.success && response.data) {
+                setCustomerInfo(response.data);
+                if (response.data.name && !customerName) {
+                    setCustomerName(response.data.name);
+                }
+                if (response.message === 'New customer created') {
+                    toast.success(`New customer created: ${response.data.customerNumber}`);
+                }
+            }
+        } catch (error) {
+            console.error('Customer lookup error:', error);
+            // Continue without customer if lookup fails
+            setCustomerInfo(null);
+            toast.error(error.message || 'Failed to lookup customer');
+        } finally {
+            setIsLoadingCustomer(false);
+        }
+    };
+
+    // Debounced phone lookup - only fires when phone is exactly 10 digits
+    useEffect(() => {
+        // Normalize phone number for validation
+        const normalizedPhone = customerPhone ? customerPhone.replace(/[\s\-\(\)]/g, '') : '';
+        let cleanedPhone = normalizedPhone;
+        if (normalizedPhone.startsWith('+91')) {
+            cleanedPhone = normalizedPhone.substring(3);
+        } else if (normalizedPhone.startsWith('91') && normalizedPhone.length === 12) {
+            cleanedPhone = normalizedPhone.substring(2);
+        }
+        
+        // Extract only digits to check length
+        const digitsOnly = cleanedPhone ? cleanedPhone.replace(/\D/g, '') : '';
+        
+        // Clear customer info immediately if phone is not exactly 10 digits
+        if (digitsOnly.length !== 10) {
+            setCustomerInfo(null);
+            setIsLoadingCustomer(false);
+            // Clear customer name when phone becomes incomplete
+            if (digitsOnly.length < 10) {
+                setCustomerName('');
+            }
+        }
+        
+        // Only call API if phone is exactly 10 digits (valid Indian number)
+        const isValidPhone = digitsOnly.length === 10 && /^[6-9]\d{9}$/.test(digitsOnly);
+        
+        const timeoutId = setTimeout(() => {
+            if (isValidPhone) {
+                handleCustomerPhoneLookup(customerPhone);
+            }
+        }, 500); // Wait 500ms after user stops typing
+
+        return () => clearTimeout(timeoutId);
+    }, [customerPhone]);
+
     const handlePayment = async () => {
         if (selectedPaymentMethod === 'cash') {
             const received = parseFloat(amountReceived);
@@ -727,6 +816,9 @@ const BillingScreen = () => {
                 amountReceived: selectedPaymentMethod === 'cash' ? parseFloat(amountReceived) : total,
                 change: selectedPaymentMethod === 'cash' ? parseFloat(amountReceived) - total : 0,
                 cashier: user?.name,
+                customerPhone: customerPhone || null,
+                customerName: customerName || customerInfo?.name || null,
+                customerEmail: customerInfo?.email || null,
             };
 
             const response = await inventoryAPI.processSale({
@@ -769,6 +861,9 @@ const BillingScreen = () => {
                                     if (window.confirm('Clear all items from cart?')) {
                                         setCart([]);
                                         setAmountReceived('');
+                                        setCustomerPhone('');
+                                        setCustomerName('');
+                                        setCustomerInfo(null);
                                         setSelectedPaymentMethod('upi');
                                         setReceiptData(null);
                                         setShowReceiptModal(false);
@@ -952,6 +1047,95 @@ const BillingScreen = () => {
                                 </div>
                             </div>
 
+                            {/* Customer Phone Number - Optional */}
+                            {!isPaymentCompleted && (
+                                <div className="mb-4">
+                                    <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase">
+                                        CUSTOMER PHONE (OPTIONAL)
+                                    </label>
+                                    <div className="relative !mb-2">
+                                        <Input
+                                            ref={customerPhoneRef}
+                                            type="tel"
+                                            placeholder="Enter phone number..."
+                                            value={customerPhone}
+                                            onChange={(e) => {
+                                                // Limit to 10 digits (allow spaces/dashes for formatting, but limit actual digits)
+                                                const value = e.target.value;
+                                                // Remove all non-digits to count actual digits
+                                                const digitsOnly = value.replace(/\D/g, '');
+                                                // Allow up to 10 digits
+                                                if (digitsOnly.length <= 10) {
+                                                    setCustomerPhone(value);
+                                                }
+                                            }}
+                                            maxLength={14} // Allow for formatting like +91 98765 43210
+                                            onFocus={(e) => {
+                                                shouldRefocusRef.current = false;
+                                            }}
+                                            onBlur={(e) => {
+                                                setTimeout(() => {
+                                                    shouldRefocusRef.current = true;
+                                                }, 200);
+                                            }}
+                                            className="!mb-0"
+                                            style={{ 
+                                                paddingRight: isLoadingCustomer ? '2.5rem' : undefined 
+                                            }}
+                                        />
+                                        {isLoadingCustomer && (
+                                            <div 
+                                                className="absolute right-3 pointer-events-none flex items-center"
+                                                style={{
+                                                    top: '50%',
+                                                    transform: 'translateY(-50%)',
+                                                    height: '20px'
+                                                }}
+                                            >
+                                                <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                                            </div>
+                                        )}
+                                    </div>
+                                    {customerInfo && (
+                                        <div className="mt-2 p-2 bg-green-50 rounded-lg border border-green-200">
+                                            <p className="text-xs font-semibold text-green-700">
+                                                {customerInfo.customerNumber} - {customerInfo.name}
+                                            </p>
+                                            {customerInfo.phone && (
+                                                <p className="text-xs text-green-600 mt-1">
+                                                    {customerInfo.phone}
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+                                    {(() => {
+                                        // Check if phone is valid (10 digits)
+                                        const normalizedPhone = customerPhone ? customerPhone.replace(/[\s\-\(\)]/g, '') : '';
+                                        let cleanedPhone = normalizedPhone;
+                                        if (normalizedPhone.startsWith('+91')) {
+                                            cleanedPhone = normalizedPhone.substring(3);
+                                        } else if (normalizedPhone.startsWith('91') && normalizedPhone.length === 12) {
+                                            cleanedPhone = normalizedPhone.substring(2);
+                                        }
+                                        const isValidPhone = cleanedPhone && cleanedPhone.length === 10 && /^[6-9]\d{9}$/.test(cleanedPhone);
+                                        return isValidPhone && !customerInfo && isLoadingCustomer;
+                                    })() && (
+                                        <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-200">
+                                            <p className="text-xs text-blue-600">Looking up customer...</p>
+                                        </div>
+                                    )}
+                                    {(customerInfo || customerPhone) && (
+                                        <Input
+                                            type="text"
+                                            placeholder="Customer name (optional)"
+                                            value={customerName}
+                                            onChange={(e) => setCustomerName(e.target.value)}
+                                            className="!mb-0 mt-2"
+                                        />
+                                    )}
+                                </div>
+                            )}
+
                             {/* Payment Method Selection */}
                             {!isPaymentCompleted && (
                                 <div className="mb-4">
@@ -1090,6 +1274,9 @@ const BillingScreen = () => {
                                             setReceiptData(null);
                                             setCart([]);
                                             setAmountReceived('');
+                                            setCustomerPhone('');
+                                            setCustomerName('');
+                                            setCustomerInfo(null);
                                             setSelectedPaymentMethod('upi');
                                             setShowReceiptModal(false);
                                             setIsPaymentCompleted(false); // Re-enable for new sale

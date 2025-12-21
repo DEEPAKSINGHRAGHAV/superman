@@ -20,6 +20,12 @@ export const USER_ROLES = {
 };
 
 // Permissions
+// ⚠️ IMPORTANT: Backend is the SINGLE SOURCE OF TRUTH
+// This file is for TypeScript/IDE autocomplete and type safety only.
+// Actual permission values should be fetched from: GET /api/v1/config/permissions
+// 
+// To keep in sync: Run validation script or fetch from API on app initialization
+// See: backend/config/permissions.js (SOURCE OF TRUTH)
 export const PERMISSIONS = {
     READ_PRODUCTS: 'read_products',
     WRITE_PRODUCTS: 'write_products',
@@ -33,12 +39,57 @@ export const PERMISSIONS = {
     READ_INVENTORY: 'read_inventory',
     WRITE_INVENTORY: 'write_inventory',
     ADJUST_INVENTORY: 'adjust_inventory',
+    READ_CUSTOMERS: 'read_customers',
+    WRITE_CUSTOMERS: 'write_customers',
     READ_REPORTS: 'read_reports',
     WRITE_REPORTS: 'write_reports',
     MANAGE_USERS: 'manage_users',
     MANAGE_SETTINGS: 'manage_settings',
     MANAGE_BRANDS: 'manage_brands',
     MANAGE_CATEGORIES: 'manage_categories',
+    MANAGE_SUBCATEGORIES: 'manage_subcategories',
+};
+
+// Permission Dependencies (matches backend)
+// These define implicit permission grants
+const PERMISSION_DEPENDENCIES = {
+    [PERMISSIONS.WRITE_INVENTORY]: [PERMISSIONS.WRITE_CUSTOMERS],
+    [PERMISSIONS.READ_INVENTORY]: [PERMISSIONS.READ_CUSTOMERS],
+    // Write permissions typically grant read permissions
+    [PERMISSIONS.WRITE_PRODUCTS]: [PERMISSIONS.READ_PRODUCTS],
+    [PERMISSIONS.WRITE_SUPPLIERS]: [PERMISSIONS.READ_SUPPLIERS],
+    [PERMISSIONS.WRITE_PURCHASE_ORDERS]: [PERMISSIONS.READ_PURCHASE_ORDERS],
+    [PERMISSIONS.WRITE_INVENTORY]: [PERMISSIONS.READ_INVENTORY],
+    [PERMISSIONS.WRITE_CUSTOMERS]: [PERMISSIONS.READ_CUSTOMERS],
+    [PERMISSIONS.WRITE_REPORTS]: [PERMISSIONS.READ_REPORTS],
+    [PERMISSIONS.APPROVE_PURCHASE_ORDERS]: [PERMISSIONS.READ_PURCHASE_ORDERS],
+};
+
+/**
+ * Check if user has permission (with dependency resolution)
+ * @param {Object} user - User object with permissions array
+ * @param {string} permission - Permission to check
+ * @returns {boolean}
+ */
+export const hasPermission = (user, permission) => {
+    if (!user) return false;
+    if (user.role === 'admin') return true;
+    
+    // Check direct permission
+    if (user.permissions?.includes(permission)) {
+        return true;
+    }
+    
+    // Check permission dependencies
+    const userPermissions = user.permissions || [];
+    for (const userPerm of userPermissions) {
+        const dependencies = PERMISSION_DEPENDENCIES[userPerm] || [];
+        if (dependencies.includes(permission)) {
+            return true;
+        }
+    }
+    
+    return false;
 };
 
 // Stock Movement Types

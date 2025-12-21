@@ -477,13 +477,14 @@ class ApiService {
         });
     }
 
-    async processSale(
-        saleItems: { productId: string; quantity: number; notes?: string }[],
-        referenceNumber?: string
-    ): Promise<ApiResponse<any>> {
+    async processSale(data: {
+        saleItems: { productId: string; quantity: number; notes?: string }[];
+        referenceNumber?: string;
+        receiptData?: any;
+    }): Promise<ApiResponse<any>> {
         return this.request('/inventory/sales', {
             method: 'POST',
-            body: JSON.stringify({ saleItems, referenceNumber }),
+            body: JSON.stringify(data),
         });
     }
 
@@ -608,6 +609,68 @@ class ApiService {
     async toggleCategoryFeatured(id: string): Promise<ApiResponse<any>> {
         return this.request(`/categories/${id}/toggle-featured`, {
             method: 'PATCH',
+        });
+    }
+
+    // Customer APIs
+    async getCustomers(filters?: {
+        search?: string;
+        phone?: string;
+        isActive?: boolean;
+        page?: number;
+        limit?: number;
+    }): Promise<PaginatedResponse<any>> {
+        const params = new URLSearchParams();
+
+        if (filters) {
+            Object.entries(filters).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    params.append(key, value.toString());
+                }
+            });
+        }
+
+        return this.request(`/customers?${params.toString()}`);
+    }
+
+    async getCustomer(id: string): Promise<ApiResponse<any>> {
+        return this.request(`/customers/${id}`);
+    }
+
+    async getCustomerByPhone(phone: string): Promise<ApiResponse<any>> {
+        return this.request(`/customers/phone/${phone}`);
+    }
+
+    async findOrCreateCustomer(customerData: {
+        phone: string;
+        name?: string;
+        email?: string;
+        address?: any;
+        notes?: string;
+    }): Promise<ApiResponse<any>> {
+        return this.request('/customers/find-or-create', {
+            method: 'POST',
+            body: JSON.stringify(customerData),
+        });
+    }
+
+    async createCustomer(customerData: any): Promise<ApiResponse<any>> {
+        return this.request('/customers', {
+            method: 'POST',
+            body: JSON.stringify(customerData),
+        });
+    }
+
+    async updateCustomer(id: string, customerData: any): Promise<ApiResponse<any>> {
+        return this.request(`/customers/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(customerData),
+        });
+    }
+
+    async deleteCustomer(id: string): Promise<ApiResponse<any>> {
+        return this.request(`/customers/${id}`, {
+            method: 'DELETE',
         });
     }
 

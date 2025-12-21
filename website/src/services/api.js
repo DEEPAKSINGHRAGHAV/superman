@@ -172,3 +172,14 @@ export const usersAPI = {
     updatePermissions: (id, permissions) => api.patch(`/users/${id}/permissions`, { permissions }),
 };
 
+// Customers API
+export const customersAPI = {
+    getAll: (params) => api.get('/customers', { params }),
+    getById: (id) => api.get(`/customers/${id}`),
+    getByPhone: (phone) => api.get(`/customers/phone/${phone}`),
+    findOrCreate: (data) => api.post('/customers/find-or-create', data),
+    create: (data) => api.post('/customers', data),
+    update: (id, data) => api.put(`/customers/${id}`, data),
+    delete: (id) => api.delete(`/customers/${id}`),
+};
+

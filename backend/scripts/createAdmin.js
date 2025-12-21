@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
+const { ROLES } = require('../config/permissions');
 require('dotenv').config({ path: './config.env' });
 
 async function createAdminUser() {
@@ -20,20 +21,15 @@ async function createAdminUser() {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash('admin123', salt);
 
+        // Use role definition from permission config
+        const adminRole = ROLES.ADMIN;
+        
         const adminUser = await User.create({
             name: 'Admin User',
             email: 'admin@shivikmart.com',
             password: hashedPassword,
-            role: 'admin',
-            permissions: [
-                'read_products', 'write_products', 'delete_products',
-                'read_suppliers', 'write_suppliers', 'delete_suppliers',
-                'read_purchase_orders', 'write_purchase_orders', 'approve_purchase_orders',
-                'read_inventory', 'write_inventory', 'adjust_inventory',
-                'read_reports', 'write_reports',
-                'manage_users', 'manage_settings',
-                'manage_brands', 'manage_categories', 'manage_subcategories'
-            ],
+            role: adminRole.name,
+            permissions: adminRole.permissions, // Admin has all permissions
             isActive: true
         });
 

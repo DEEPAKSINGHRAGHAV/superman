@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User, LoginRequest, LoginResponse } from '../types';
 import apiService from '../services/api';
+import { hasPermission as checkPermission, hasAnyPermission as checkAnyPermission } from '../config/permissions';
 
 interface AuthContextType {
     user: User | null;
@@ -11,6 +12,8 @@ interface AuthContextType {
     logout: () => Promise<void>;
     refreshUser: () => Promise<void>;
     updateUser: (userData: Partial<User>) => void;
+    hasPermission: (permission: string) => boolean;
+    hasAnyPermission: (permissions: string[]) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -124,6 +127,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     }, [user]);
 
+    const hasPermission = useCallback((permission: string): boolean => {
+        return checkPermission(user, permission);
+    }, [user]);
+
+    const hasAnyPermission = useCallback((permissions: string[]): boolean => {
+        return checkAnyPermission(user, permissions);
+    }, [user]);
+
     const value: AuthContextType = {
         user,
         isAuthenticated: !!user,
@@ -132,6 +143,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         refreshUser,
         updateUser,
+        hasPermission,
+        hasAnyPermission,
     };
 
     return (

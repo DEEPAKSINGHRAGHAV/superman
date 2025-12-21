@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const StockMovement = require('../models/StockMovement');
 const Bill = require('../models/Bill');
+const Customer = require('../models/Customer');
 const InventoryService = require('../services/inventoryService');
 const asyncHandler = require('../middleware/asyncHandler');
 const { protect, requirePermission } = require('../middleware/auth');
@@ -320,6 +321,23 @@ router.post('/sales',
         // Save the complete receipt/bill data as it was shown to the customer
         if (receiptData) {
             try {
+                // Handle customer lookup/creation if phone number provided
+                let customer = null;
+                if (receiptData.customerPhone && receiptData.customerPhone.trim()) {
+                    try {
+                        customer = await Customer.findOrCreateByPhone(
+                            receiptData.customerPhone,
+                            {
+                                name: receiptData.customerName,
+                                email: receiptData.customerEmail
+                            }
+                        );
+                    } catch (customerError) {
+                        console.error('Failed to find/create customer:', customerError);
+                        // Continue without customer if lookup fails - don't fail the entire bill
+                    }
+                }
+
                 // Calculate total cost from sale results (FIFO batch costs)
                 const totalCost = results.reduce((sum, result) => sum + (result.totalCost || 0), 0);
 
@@ -360,6 +378,10 @@ router.post('/sales',
                     paymentMethod: receiptData.paymentMethod || 'Cash',
                     amountReceived: receiptData.amountReceived || receiptData.total || 0,
                     change: receiptData.change || 0,
+                    customer: customer ? customer._id : null,
+                    customerNumber: customer ? customer.customerNumber : null,
+                    customerName: customer ? customer.name : (receiptData.customerName || null),
+                    customerPhone: receiptData.customerPhone || null,
                     cashier: req.user._id,
                     cashierName: req.user.name || 'Unknown',
                     referenceNumber: referenceNumber,

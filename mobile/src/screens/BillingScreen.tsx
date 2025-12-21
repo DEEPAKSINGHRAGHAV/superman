@@ -67,16 +67,105 @@ const BillingScreen: React.FC = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>('upi');
     const [amountReceived, setAmountReceived] = useState('');
+    const [customerPhone, setCustomerPhone] = useState('');
+    const [customerName, setCustomerName] = useState('');
+    const [customerInfo, setCustomerInfo] = useState<any>(null);
+    const [isLoadingCustomer, setIsLoadingCustomer] = useState(false);
     const [receiptData, setReceiptData] = useState<any>(null);
     const [editingPriceValues, setEditingPriceValues] = useState<Record<string, string>>({});
     const productSearchRef = useRef<any>(null);
     const amountReceivedRef = useRef<TextInput>(null);
+    const customerPhoneRef = useRef<TextInput>(null);
 
     // Calculate totals
     const subtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
     const tax = subtotal * 0; // 0% GST (No tax)
     const total = subtotal + tax;
     const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+
+    // Lookup or create customer by phone
+    const handleCustomerPhoneLookup = async (phone: string) => {
+        // Normalize phone number (remove spaces, dashes, etc.)
+        const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '');
+        
+        // Remove country code prefix if present (+91 or 91)
+        let cleanedPhone = normalizedPhone;
+        if (normalizedPhone.startsWith('+91')) {
+            cleanedPhone = normalizedPhone.substring(3);
+        } else if (normalizedPhone.startsWith('91') && normalizedPhone.length === 12) {
+            cleanedPhone = normalizedPhone.substring(2);
+        }
+        
+        // Only proceed if phone is exactly 10 digits (valid Indian phone number)
+        if (!cleanedPhone || cleanedPhone.length !== 10 || !/^[6-9]\d{9}$/.test(cleanedPhone)) {
+            setCustomerInfo(null);
+            if (!phone) {
+                setCustomerName('');
+            }
+            return;
+        }
+
+        setIsLoadingCustomer(true);
+        try {
+            const response = await apiService.findOrCreateCustomer({
+                phone: cleanedPhone,
+                name: (customerName && customerName.trim()) ? customerName.trim() : undefined
+            });
+
+            if (response.success && response.data) {
+                setCustomerInfo(response.data);
+                if (response.data.name && !customerName) {
+                    setCustomerName(response.data.name);
+                }
+                if (response.message === 'New customer created') {
+                    Alert.alert('Success', `New customer created: ${response.data.customerNumber}`);
+                }
+            }
+        } catch (error: any) {
+            console.error('Customer lookup error:', error);
+            // Continue without customer if lookup fails
+            setCustomerInfo(null);
+            Alert.alert('Error', error.message || 'Failed to lookup customer');
+        } finally {
+            setIsLoadingCustomer(false);
+        }
+    };
+
+    // Debounced phone lookup - only fires when phone is exactly 10 digits
+    useEffect(() => {
+        // Normalize phone number for validation
+        const normalizedPhone = customerPhone ? customerPhone.replace(/[\s\-\(\)]/g, '') : '';
+        let cleanedPhone = normalizedPhone;
+        if (normalizedPhone.startsWith('+91')) {
+            cleanedPhone = normalizedPhone.substring(3);
+        } else if (normalizedPhone.startsWith('91') && normalizedPhone.length === 12) {
+            cleanedPhone = normalizedPhone.substring(2);
+        }
+        
+        // Extract only digits to check length
+        const digitsOnly = cleanedPhone ? cleanedPhone.replace(/\D/g, '') : '';
+        
+        // Clear customer info immediately if phone is not exactly 10 digits
+        if (digitsOnly.length !== 10) {
+            setCustomerInfo(null);
+            setIsLoadingCustomer(false);
+            // Clear customer name when phone becomes incomplete
+            if (digitsOnly.length < 10) {
+                setCustomerName('');
+            }
+        }
+        
+        // Only call API if phone is exactly 10 digits (valid Indian number)
+        const isValidPhone = digitsOnly.length === 10 && /^[6-9]\d{9}$/.test(digitsOnly);
+        
+        const timeoutId = setTimeout(() => {
+            if (isValidPhone) {
+                handleCustomerPhoneLookup(customerPhone);
+            }
+        }, 500); // Wait 500ms after user stops typing
+
+        return () => clearTimeout(timeoutId);
+    }, [customerPhone]);
 
     /**
      * Find next available batch for a product
@@ -647,22 +736,44 @@ const BillingScreen: React.FC = () => {
 
             const referenceNumber = `BILL-${Date.now()}`;
 
-            const response = await apiService.processSale(saleItems, referenceNumber);
+            // Prepare complete receipt data as shown to customer
+            const receiptData = {
+                billNumber: referenceNumber,
+                date: new Date().toLocaleString(),
+                items: cart.map(item => ({
+                    product: {
+                        _id: item.product._id,
+                        name: item.product.name,
+                        sku: item.product.sku,
+                        category: item.product.category,
+                        mrp: item.product.mrp
+                    },
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    totalPrice: item.totalPrice,
+                    costPrice: item.costPrice || 0
+                })),
+                subtotal,
+                tax,
+                total,
+                paymentMethod: PAYMENT_METHODS.find(pm => pm.id === selectedPaymentMethod)?.name,
+                amountReceived: selectedPaymentMethod === 'cash' ? parseFloat(amountReceived) : total,
+                change: selectedPaymentMethod === 'cash' ? parseFloat(amountReceived) - total : 0,
+                cashier: user?.name,
+                customerPhone: customerPhone || null,
+                customerName: customerName || customerInfo?.name || null,
+                customerEmail: customerInfo?.email || null,
+            };
+
+            const response = await apiService.processSale({
+                saleItems,
+                referenceNumber,
+                receiptData, // Send complete receipt data to be stored
+            });
 
             if (response.success) {
-                // Generate receipt data
-                const receipt = {
-                    billNumber: referenceNumber,
-                    date: new Date().toLocaleString(),
-                    items: cart,
-                    subtotal,
-                    tax,
-                    total,
-                    paymentMethod: PAYMENT_METHODS.find(pm => pm.id === selectedPaymentMethod)?.name,
-                    amountReceived: selectedPaymentMethod === 'cash' ? parseFloat(amountReceived) : total,
-                    change: selectedPaymentMethod === 'cash' ? parseFloat(amountReceived) - total : 0,
-                    cashier: user?.name,
-                };
+                // Use the receipt data we prepared
+                const receipt = receiptData;
 
                 setReceiptData(receipt);
                 setShowPaymentModal(false);
@@ -672,6 +783,9 @@ const BillingScreen: React.FC = () => {
                 setTimeout(() => {
                     setCart([]);
                     setAmountReceived('');
+                    setCustomerPhone('');
+                    setCustomerName('');
+                    setCustomerInfo(null);
                     setSelectedPaymentMethod('upi');
                 }, 1000);
             }
@@ -1067,6 +1181,94 @@ const BillingScreen: React.FC = () => {
                                 <Text style={[styles.paymentAmountValue, { color: theme.colors.primary[500] }]}>
                                     {formatCurrency(total)}
                                 </Text>
+                            </View>
+
+                            {/* Customer Phone Number - Optional */}
+                            <View style={styles.customerPhoneSection}>
+                                <Text style={[styles.customerPhoneLabel, { color: theme.colors.text }]}>
+                                    CUSTOMER PHONE (OPTIONAL)
+                                </Text>
+                                <View style={{ position: 'relative' }}>
+                                    <TextInput
+                                        ref={customerPhoneRef}
+                                        style={[styles.customerPhoneInput, {
+                                            backgroundColor: theme.colors.gray[50],
+                                            color: theme.colors.text,
+                                            borderColor: theme.colors.gray[300],
+                                            paddingRight: isLoadingCustomer ? 50 : 16
+                                        }]}
+                                        placeholder="Enter phone number..."
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        keyboardType="phone-pad"
+                                        value={customerPhone}
+                                        onChangeText={(text) => {
+                                            // Limit to 10 digits (allow spaces/dashes for formatting, but limit actual digits)
+                                            const digitsOnly = text.replace(/\D/g, '');
+                                            // Allow up to 10 digits
+                                            if (digitsOnly.length <= 10) {
+                                                setCustomerPhone(text);
+                                            }
+                                        }}
+                                        maxLength={14} // Allow for formatting like +91 98765 43210
+                                        accessibilityLabel="Enter customer phone number"
+                                    />
+                                    {isLoadingCustomer && (
+                                        <View style={{
+                                            position: 'absolute',
+                                            right: 12,
+                                            top: 0,
+                                            bottom: 0,
+                                            justifyContent: 'center',
+                                            alignItems: 'center'
+                                        }}>
+                                            <LoadingSpinner size="sm" color={theme.colors.primary[500]} />
+                                        </View>
+                                    )}
+                                </View>
+                                {customerInfo && (
+                                    <View style={[styles.customerInfoDisplay, { backgroundColor: theme.colors.success[50] }]}>
+                                        <Text style={[styles.customerInfoText, { color: theme.colors.success[700] }]}>
+                                            {customerInfo.customerNumber} - {customerInfo.name}
+                                        </Text>
+                                        {customerInfo.phone && (
+                                            <Text style={[styles.customerInfoPhone, { color: theme.colors.success[600] }]}>
+                                                {customerInfo.phone}
+                                            </Text>
+                                        )}
+                                    </View>
+                                )}
+                                {(() => {
+                                    // Check if phone is valid (10 digits)
+                                    const normalizedPhone = customerPhone ? customerPhone.replace(/[\s\-\(\)]/g, '') : '';
+                                    let cleanedPhone = normalizedPhone;
+                                    if (normalizedPhone.startsWith('+91')) {
+                                        cleanedPhone = normalizedPhone.substring(3);
+                                    } else if (normalizedPhone.startsWith('91') && normalizedPhone.length === 12) {
+                                        cleanedPhone = normalizedPhone.substring(2);
+                                    }
+                                    const isValidPhone = cleanedPhone && cleanedPhone.length === 10 && /^[6-9]\d{9}$/.test(cleanedPhone);
+                                    return isValidPhone && !customerInfo && isLoadingCustomer;
+                                })() && (
+                                    <View style={[styles.customerInfoDisplay, { backgroundColor: theme.colors.primary[50] }]}>
+                                        <Text style={[styles.customerInfoText, { color: theme.colors.primary[600] }]}>
+                                            Looking up customer...
+                                        </Text>
+                                    </View>
+                                )}
+                                {(customerInfo || customerPhone) && (
+                                    <TextInput
+                                        style={[styles.customerNameInput, {
+                                            backgroundColor: theme.colors.gray[50],
+                                            color: theme.colors.text,
+                                            borderColor: theme.colors.gray[300]
+                                        }]}
+                                        placeholder="Customer name (optional)"
+                                        placeholderTextColor={theme.colors.textSecondary}
+                                        value={customerName}
+                                        onChangeText={setCustomerName}
+                                        accessibilityLabel="Enter customer name"
+                                    />
+                                )}
                             </View>
 
                             {/* Payment Methods - LARGE BUTTONS */}
@@ -1953,6 +2155,45 @@ const styles = StyleSheet.create({
     paymentAmountValue: {
         fontSize: 42,
         fontWeight: '700',
+    },
+    customerPhoneSection: {
+        marginBottom: 32,
+    },
+    customerPhoneLabel: {
+        fontSize: 14,
+        fontWeight: '700',
+        marginBottom: 12,
+        textTransform: 'uppercase',
+        letterSpacing: 1,
+    },
+    customerPhoneInput: {
+        height: 56,
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        borderWidth: 2,
+        marginBottom: 12,
+    },
+    customerNameInput: {
+        height: 56,
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        fontSize: 16,
+        borderWidth: 2,
+        marginTop: 12,
+    },
+    customerInfoDisplay: {
+        padding: 12,
+        borderRadius: 12,
+        marginTop: 8,
+    },
+    customerInfoText: {
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 4,
+    },
+    customerInfoPhone: {
+        fontSize: 12,
     },
     paymentMethods: {
         marginBottom: 32,

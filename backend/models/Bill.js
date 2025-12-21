@@ -105,6 +105,24 @@ const billSchema = new mongoose.Schema({
         min: 0
     },
 
+    // Customer Information
+    customer: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Customer',
+        index: true
+    },
+    customerNumber: {
+        type: String,
+        index: true
+    },
+    customerName: {
+        type: String
+    },
+    customerPhone: {
+        type: String,
+        index: true
+    },
+
     // Metadata
     cashier: {
         type: mongoose.Schema.Types.ObjectId,
@@ -134,6 +152,8 @@ const billSchema = new mongoose.Schema({
 billSchema.index({ billNumber: 1 });
 billSchema.index({ createdAt: -1 });
 billSchema.index({ cashier: 1, createdAt: -1 });
+billSchema.index({ customer: 1, createdAt: -1 });
+billSchema.index({ customerPhone: 1, createdAt: -1 });
 billSchema.index({ referenceNumber: 1 });
 billSchema.index({ 'items.product': 1 });
 billSchema.index({ profit: 1 }); // For profit analytics

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { authAPI } from '../services/api';
-import { TOKEN_KEY, USER_KEY } from '../config/constants';
+import { TOKEN_KEY, USER_KEY, hasPermission as checkPermission } from '../config/constants';
 import toast from 'react-hot-toast';
 
 const AuthContext = createContext(null);
@@ -117,9 +117,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     const hasPermission = (permission) => {
-        if (!user) return false;
-        if (user.role === 'admin') return true;
-        return user.permissions?.includes(permission);
+        return checkPermission(user, permission);
     };
 
     const hasAnyPermission = (permissions) => {

@@ -39,7 +39,8 @@ async function testPurchaseOrderFlow() {
                     'read_products', 'write_products',
                     'read_suppliers', 'write_suppliers',
                     'read_purchase_orders', 'write_purchase_orders', 'approve_purchase_orders',
-                    'read_inventory', 'write_inventory'
+                    'read_inventory', 'write_inventory',
+                    'read_customers', 'write_customers'
                 ]
             });
             console.log(`✅ Created test user: ${testUser.email} (password: Test@123)\n`);

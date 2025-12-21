@@ -1,4 +1,6 @@
 const mongoose = require('mongoose');
+const { ALL_PERMISSIONS } = require('../config/permissions');
+const PermissionService = require('../services/permissionService');
 
 const userSchema = new mongoose.Schema({
     name: {
@@ -41,15 +43,7 @@ const userSchema = new mongoose.Schema({
     },
     permissions: [{
         type: String,
-        enum: [
-            'read_products', 'write_products', 'delete_products',
-            'read_suppliers', 'write_suppliers', 'delete_suppliers',
-            'read_purchase_orders', 'write_purchase_orders', 'approve_purchase_orders',
-            'read_inventory', 'write_inventory', 'adjust_inventory',
-            'read_reports', 'write_reports',
-            'manage_users', 'manage_settings',
-            'manage_brands', 'manage_categories', 'manage_subcategories'
-        ]
+        enum: ALL_PERMISSIONS // Use centralized permission config
     }],
     lastLogin: {
         type: Date
@@ -108,6 +102,13 @@ userSchema.pre('save', function (next) {
         this.loginAttempts = 0;
         this.lockUntil = undefined;
     }
+    
+    // Clear permission cache if permissions or role changed
+    if (this.isModified('permissions') || this.isModified('role')) {
+        const PermissionService = require('../services/permissionService');
+        PermissionService.clearCache(this);
+    }
+    
     next();
 });
 
@@ -138,15 +139,14 @@ userSchema.methods.getSummary = function () {
 };
 
 // Instance method to check if user has permission
+// Uses PermissionService for centralized permission logic
 userSchema.methods.hasPermission = function (permission) {
-    if (this.role === 'admin') return true;
-    return this.permissions.includes(permission);
+    return PermissionService.hasPermission(this, permission);
 };
 
 // Instance method to check if user has any of the permissions
 userSchema.methods.hasAnyPermission = function (permissions) {
-    if (this.role === 'admin') return true;
-    return permissions.some(permission => this.permissions.includes(permission));
+    return PermissionService.hasAnyPermission(this, permissions);
 };
 
 // Instance method to increment login attempts

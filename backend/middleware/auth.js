@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const asyncHandler = require('./asyncHandler');
+const PermissionService = require('../services/permissionService');
 
 // Protect routes - verify JWT token
 const protect = asyncHandler(async (req, res, next) => {
@@ -72,6 +73,7 @@ const authorize = (...roles) => {
 };
 
 // Grant access to users with specific permissions
+// Uses PermissionService for centralized permission checking with dependency resolution
 const requirePermission = (permission) => {
     return (req, res, next) => {
         if (!req.user) {
@@ -81,14 +83,14 @@ const requirePermission = (permission) => {
             });
         }
 
-        if (!req.user.hasPermission(permission)) {
-            return res.status(403).json({
-                success: false,
-                message: `User does not have permission: ${permission}`
-            });
+        if (PermissionService.hasPermission(req.user, permission)) {
+            return next();
         }
 
-        next();
+        return res.status(403).json({
+            success: false,
+            message: `User does not have permission: ${permission}`
+        });
     };
 };
 
@@ -102,7 +104,7 @@ const requireAnyPermission = (...permissions) => {
             });
         }
 
-        if (!req.user.hasAnyPermission(permissions)) {
+        if (!PermissionService.hasAnyPermission(req.user, permissions)) {
             return res.status(403).json({
                 success: false,
                 message: `User does not have any of the required permissions: ${permissions.join(', ')}`
