@@ -117,6 +117,125 @@ export interface Supplier {
     summary?: Partial<Supplier>;
 }
 
+// Customer Types
+export interface Customer {
+    _id: string;
+    customerNumber: string;
+    name: string;
+    phone?: string;
+    email?: string;
+    address?: {
+        street?: string;
+        city?: string;
+        state?: string;
+        pincode?: string;
+        country?: string;
+    };
+    notes?: string;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+    formattedAddress?: string;
+}
+
+export interface CustomerAnalytics {
+    totalBills: number;
+    totalRevenue: number;
+    totalCost: number;
+    totalProfit: number;
+    totalItems: number;
+    averageBillValue: number;
+    averageProfitMargin: number;
+    profitMargin: number;
+    firstPurchaseDate: string | null;
+    lastPurchaseDate: string | null;
+}
+
+export interface CustomerTopItem {
+    product: string;
+    productName: string;
+    productSku: string;
+    totalQuantity: number;
+    totalRevenue: number;
+    totalCost: number;
+    totalProfit: number;
+    timesPurchased: number;
+}
+
+export interface CustomerPaymentMethod {
+    paymentMethod: string;
+    count: number;
+    totalAmount: number;
+}
+
+export interface CustomerMonthlyTrend {
+    month: string;
+    revenue: number;
+    profit: number;
+    bills: number;
+}
+
+export interface CustomerDetailData {
+    customer: Customer;
+    analytics: CustomerAnalytics;
+    topItems: CustomerTopItem[];
+    paymentMethodBreakdown: CustomerPaymentMethod[];
+    monthlyTrend: CustomerMonthlyTrend[];
+    bills: {
+        data: Bill[];
+        pagination: {
+            currentPage: number;
+            totalPages: number;
+            totalBills: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+            limit: number;
+        };
+    };
+}
+
+export interface CustomerFilters {
+    search?: string;
+    phone?: string;
+    isActive?: boolean;
+}
+
+export interface Bill {
+    _id: string;
+    billNumber: string;
+    items: Array<{
+        product: string;
+        productName: string;
+        productSku: string;
+        quantity: number;
+        unitPrice: number;
+        totalPrice: number;
+        costPrice: number;
+        batchNumber?: string;
+    }>;
+    subtotal: number;
+    taxAmount: number;
+    discountAmount: number;
+    totalAmount: number;
+    totalCost: number;
+    profit: number;
+    profitMargin: number;
+    paymentMethod: string;
+    amountReceived: number;
+    change: number;
+    customer?: string;
+    customerNumber?: string;
+    customerName?: string;
+    customerPhone?: string;
+    cashier: string | User;
+    cashierName: string;
+    referenceNumber?: string;
+    notes?: string;
+    createdAt: string;
+    updatedAt: string;
+    formattedDate?: string;
+}
+
 // Purchase Order Types
 export interface PurchaseOrderItem {
     product: string | Product;
@@ -358,6 +477,8 @@ export type RootStackParamList = {
     BatchHistory: { productId?: string };
     ExpiringProducts: undefined;
     Billing: undefined;
+    CustomerList: undefined;
+    CustomerDetail: { customerId: string };
     // Admin Screens
     AdminDashboard: undefined;
     BrandList: undefined;

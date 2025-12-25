@@ -26,6 +26,9 @@ import BatchValuationScreen from '../screens/BatchValuationScreen';
 import BillingScreen from '../screens/BillingScreen';
 import BatchHistoryScreen from '../screens/BatchHistoryScreen';
 import ExpiringProductsScreen from '../screens/ExpiringProductsScreen';
+import CustomerListScreen from '../screens/CustomerListScreen';
+import CustomerDetailScreen from '../screens/CustomerDetailScreen';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 // Admin Screens
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
 import BrandListScreen from '../screens/admin/BrandListScreen';
@@ -216,6 +219,26 @@ const AppNavigator = () => {
                             name={SCREEN_NAMES.BILLING}
                             component={BillingScreen}
                             options={{ headerShown: false }}
+                        />
+
+                        {/* Customer Screens */}
+                        <Stack.Screen
+                            name={SCREEN_NAMES.CUSTOMER_LIST}
+                            component={(props) => (
+                                <ErrorBoundary>
+                                    <CustomerListScreen {...props} />
+                                </ErrorBoundary>
+                            )}
+                            options={{ title: 'Customers' }}
+                        />
+                        <Stack.Screen
+                            name={SCREEN_NAMES.CUSTOMER_DETAIL}
+                            component={(props) => (
+                                <ErrorBoundary>
+                                    <CustomerDetailScreen {...props} />
+                                </ErrorBoundary>
+                            )}
+                            options={{ title: 'Customer Details' }}
                         />
 
                         {/* Admin Screens */}

@@ -19,6 +19,9 @@ import {
     SupplierFormData,
     PurchaseOrderFormData,
     StockAdjustmentFormData,
+    Customer,
+    CustomerFilters,
+    CustomerDetailData,
 } from '../types';
 
 import { API_BASE_URL } from '../constants';
@@ -67,19 +70,29 @@ class ApiService {
     ): Promise<T> {
         const url = `${this.baseURL}${endpoint}`;
 
+        // Extract signal from options if provided (for request cancellation)
+        const { signal, ...restOptions } = options;
+
         const config: RequestInit = {
             headers: {
                 'Content-Type': 'application/json',
                 ...(this.token && { Authorization: `Bearer ${this.token}` }),
-                ...options.headers,
+                ...restOptions.headers,
             },
-            ...options,
+            ...restOptions,
+            ...(signal && { signal }), // Add AbortController signal if provided
         };
 
         try {
             console.log('API Request:', { url, method: config.method || 'GET' });
 
             const response = await fetch(url, config);
+            
+            // Check if request was aborted
+            if (signal?.aborted) {
+                throw new Error('Request was cancelled');
+            }
+            
             const data = await response.json();
 
             if (!response.ok) {
@@ -100,6 +113,11 @@ class ApiService {
 
             return data;
         } catch (error: any) {
+            // Don't log aborted requests as errors
+            if (error.name === 'AbortError' || error.message === 'Request was cancelled') {
+                throw error; // Re-throw without logging
+            }
+            
             console.error('API Error:', error);
             console.error('API Error Details:', {
                 url,
@@ -329,6 +347,37 @@ class ApiService {
     async deleteSupplier(id: string): Promise<ApiResponse<any>> {
         return this.request(`/suppliers/${id}`, {
             method: 'DELETE',
+        });
+    }
+
+    // Customers
+    async getCustomers(filters?: CustomerFilters, page = 1, limit = 20, options?: { signal?: AbortSignal }): Promise<PaginatedResponse<Customer>> {
+        const cleanFilters = filters ? Object.fromEntries(
+            Object.entries(filters).filter(([_, value]) => value !== undefined && value !== null && value !== '')
+        ) : {};
+
+        const params = new URLSearchParams({
+            page: page.toString(),
+            limit: limit.toString(),
+            ...cleanFilters,
+        });
+
+        return this.request(`/customers?${params.toString()}`, {
+            ...(options?.signal && { signal: options.signal }),
+        });
+    }
+
+    async getCustomer(id: string): Promise<ApiResponse<Customer>> {
+        return this.request(`/customers/${id}`);
+    }
+
+    async getCustomerAnalytics(id: string, page = 1, limit = 50, options?: { signal?: AbortSignal }): Promise<ApiResponse<CustomerDetailData>> {
+        const params = new URLSearchParams({
+            page: page.toString(),
+            limit: limit.toString(),
+        });
+        return this.request(`/customers/${id}/analytics?${params.toString()}`, {
+            ...(options?.signal && { signal: options.signal }),
         });
     }
 

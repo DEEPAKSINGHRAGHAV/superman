@@ -154,6 +154,20 @@ const webhookLimiter = createRateLimit(
     'Too many webhook requests from this IP, please try again later.'
 );
 
+// Customer analytics rate limiter - Industry standard: 50 requests per 15 minutes
+const customerAnalyticsLimiter = createRateLimit(
+    15 * 60 * 1000, // 15 minutes
+    50, // 50 analytics requests per window
+    'Too many customer analytics requests from this IP, please try again later.'
+);
+
+// Customer operations rate limiter - Industry standard: 200 operations per 15 minutes
+const customerLimiter = createRateLimit(
+    15 * 60 * 1000, // 15 minutes
+    200, // 200 customer operations per window
+    'Too many customer operations from this IP, please try again later.'
+);
+
 module.exports = {
     createRateLimit,
     generalLimiter,
@@ -171,5 +185,7 @@ module.exports = {
     apiKeyLimiter,
     fileUploadLimiter,
     databaseQueryLimiter,
-    webhookLimiter
+    webhookLimiter,
+    customerAnalyticsLimiter,
+    customerLimiter
 };

@@ -152,3 +152,6 @@ The fix ensures that when updating a product, the generated barcode doesn't conf
 
 
 
+
+
+

@@ -131,6 +131,8 @@ export const SCREEN_NAMES = {
     BATCH_HISTORY: 'BatchHistory',
     EXPIRING_PRODUCTS: 'ExpiringProducts',
     BILLING: 'Billing',
+    CUSTOMER_LIST: 'CustomerList',
+    CUSTOMER_DETAIL: 'CustomerDetail',
     // Admin Screens
     ADMIN_DASHBOARD: 'AdminDashboard',
     BRAND_LIST: 'BrandList',

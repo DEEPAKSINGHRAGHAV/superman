@@ -638,6 +638,141 @@ const categoryValidation = {
     ]
 };
 
+// Customer validation rules
+const customerValidation = {
+    create: [
+        body('name')
+            .optional()
+            .trim()
+            .isLength({ min: 2, max: 100 })
+            .withMessage('Customer name must be between 2 and 100 characters'),
+
+        body('phone')
+            .optional({ checkFalsy: true })
+            .trim()
+            .matches(/^[6-9]\d{9}$/)
+            .withMessage('Please enter a valid 10-digit Indian phone number'),
+
+        body('email')
+            .optional({ checkFalsy: true })
+            .isEmail()
+            .normalizeEmail()
+            .withMessage('Please enter a valid email address'),
+
+        body('address.street')
+            .optional()
+            .trim()
+            .isLength({ max: 200 })
+            .withMessage('Street address must be less than 200 characters'),
+
+        body('address.city')
+            .optional()
+            .trim()
+            .isLength({ max: 50 })
+            .withMessage('City must be less than 50 characters'),
+
+        body('address.state')
+            .optional()
+            .trim()
+            .isLength({ max: 50 })
+            .withMessage('State must be less than 50 characters'),
+
+        body('address.pincode')
+            .optional()
+            .trim()
+            .matches(/^\d{6}$/)
+            .withMessage('Pincode must be exactly 6 digits'),
+
+        body('notes')
+            .optional()
+            .trim()
+            .isLength({ max: 500 })
+            .withMessage('Notes must be less than 500 characters'),
+    ],
+
+    update: [
+        body('name')
+            .optional()
+            .trim()
+            .isLength({ min: 2, max: 100 })
+            .withMessage('Customer name must be between 2 and 100 characters'),
+
+        body('email')
+            .optional({ checkFalsy: true })
+            .isEmail()
+            .normalizeEmail()
+            .withMessage('Please enter a valid email address'),
+
+        body('address.street')
+            .optional()
+            .trim()
+            .isLength({ max: 200 })
+            .withMessage('Street address must be less than 200 characters'),
+
+        body('address.city')
+            .optional()
+            .trim()
+            .isLength({ max: 50 })
+            .withMessage('City must be less than 50 characters'),
+
+        body('address.state')
+            .optional()
+            .trim()
+            .isLength({ max: 50 })
+            .withMessage('State must be less than 50 characters'),
+
+        body('address.pincode')
+            .optional()
+            .trim()
+            .matches(/^\d{6}$/)
+            .withMessage('Pincode must be exactly 6 digits'),
+
+        body('notes')
+            .optional()
+            .trim()
+            .isLength({ max: 500 })
+            .withMessage('Notes must be less than 500 characters'),
+
+        body('isActive')
+            .optional()
+            .isBoolean()
+            .withMessage('isActive must be a boolean'),
+    ],
+
+    findOrCreate: [
+        body('phone')
+            .optional({ checkFalsy: true })
+            .trim()
+            .matches(/^[6-9]\d{9}$/)
+            .withMessage('Please enter a valid 10-digit Indian phone number'),
+
+        body('name')
+            .optional()
+            .trim()
+            .isLength({ min: 2, max: 100 })
+            .withMessage('Customer name must be between 2 and 100 characters'),
+
+        body('email')
+            .optional({ checkFalsy: true })
+            .isEmail()
+            .normalizeEmail()
+            .withMessage('Please enter a valid email address'),
+    ],
+
+    id: [
+        param('id')
+            .isMongoId()
+            .withMessage('Invalid customer ID format'),
+    ],
+
+    phone: [
+        param('phone')
+            .trim()
+            .matches(/^[6-9]\d{9}$/)
+            .withMessage('Please enter a valid 10-digit Indian phone number'),
+    ],
+};
+
 module.exports = {
     productValidation,
     supplierValidation,
@@ -646,5 +781,6 @@ module.exports = {
     stockMovementValidation,
     brandValidation,
     categoryValidation,
-    queryValidation
+    queryValidation,
+    customerValidation
 };

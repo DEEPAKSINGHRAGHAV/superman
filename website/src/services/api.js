@@ -176,6 +176,10 @@ export const usersAPI = {
 export const customersAPI = {
     getAll: (params) => api.get('/customers', { params }),
     getById: (id) => api.get(`/customers/${id}`),
+    getAnalytics: (id, params, signal) => api.get(`/customers/${id}/analytics`, { 
+        params,
+        ...(signal && { signal })
+    }),
     getByPhone: (phone) => api.get(`/customers/phone/${phone}`),
     findOrCreate: (data) => api.post('/customers/find-or-create', data),
     create: (data) => api.post('/customers', data),

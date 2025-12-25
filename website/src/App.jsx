@@ -28,6 +28,8 @@ import UserList from './pages/users/UserList';
 import BillingScreen from './pages/billing/BillingScreen';
 import SalesHistory from './pages/billing/SalesHistory';
 import BarcodeList from './pages/barcode/BarcodeList';
+import CustomerList from './pages/customers/CustomerList';
+import CustomerDetail from './pages/customers/CustomerDetail';
 
 function App() {
     return (
@@ -121,6 +123,12 @@ function App() {
 
                     {/* Barcode */}
                     <Route path="barcode" element={<BarcodeList />} />
+
+                    {/* Customers */}
+                    <Route path="customers">
+                        <Route index element={<CustomerList />} />
+                        <Route path=":id" element={<CustomerDetail />} />
+                    </Route>
 
                     {/* Settings */}
                     <Route path="profile" element={<div className="p-6">Profile Coming Soon</div>} />

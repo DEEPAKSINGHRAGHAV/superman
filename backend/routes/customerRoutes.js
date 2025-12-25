@@ -1,9 +1,19 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Customer = require('../models/Customer');
+const Bill = require('../models/Bill');
 const asyncHandler = require('../middleware/asyncHandler');
 const { protect, requirePermission } = require('../middleware/auth');
 const { validateRequest, validatePagination } = require('../middleware/validation');
+const { customerAnalyticsLimiter, customerLimiter } = require('../middleware/rateLimiter');
+const { customerValidation } = require('../middleware/validators');
+const {
+    MAX_PAGE_SIZE,
+    DEFAULT_PAGE_SIZE,
+    DEFAULT_BILLS_PAGE_SIZE,
+    MAX_SEARCH_LENGTH
+} = require('../constants/customerConstants');
 
 // @desc    Get all customers with pagination
 // @route   GET /api/v1/customers
@@ -11,6 +21,7 @@ const { validateRequest, validatePagination } = require('../middleware/validatio
 router.get('/',
     protect,
     requirePermission('read_customers'),
+    customerLimiter,
     validatePagination,
     asyncHandler(async (req, res) => {
         const { page, limit, skip } = req.pagination;
@@ -24,11 +35,18 @@ router.get('/',
         }
 
         // Search by name, phone, or customer number
+        // CRITICAL: Escape regex special characters to prevent ReDoS attacks
         if (search) {
+            // Limit search length to prevent DoS
+            const searchTerm = search.trim().substring(0, MAX_SEARCH_LENGTH);
+            
+            // Escape special regex characters for security
+            const escapedSearch = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            
             filter.$or = [
-                { name: { $regex: search, $options: 'i' } },
-                { phone: { $regex: search, $options: 'i' } },
-                { customerNumber: { $regex: search, $options: 'i' } }
+                { name: { $regex: escapedSearch, $options: 'i' } },
+                { phone: { $regex: escapedSearch, $options: 'i' } },
+                { customerNumber: { $regex: escapedSearch, $options: 'i' } }
             ];
         }
 
@@ -63,12 +81,214 @@ router.get('/',
     })
 );
 
+// @desc    Get customer analytics with bills, revenue, profit, top items
+// @route   GET /api/v1/customers/:id/analytics
+// @access  Private (requires read_customers permission)
+router.get('/:id/analytics',
+    protect,
+    requirePermission('read_customers'),
+    customerAnalyticsLimiter,
+    validateRequest(customerValidation.id),
+    asyncHandler(async (req, res) => {
+
+        const customer = await Customer.findById(req.params.id);
+
+        if (!customer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Customer not found'
+            });
+        }
+
+        // Optimize bill filter - prefer direct customer ID lookup
+        const billFilter = customer.phone
+            ? {
+                $or: [
+                    { customer: customer._id },
+                    { customerPhone: customer.phone }
+                ]
+            }
+            : { customer: customer._id };
+
+        // Validate and sanitize pagination parameters
+        // Use DEFAULT_BILLS_PAGE_SIZE (50) for bills pagination
+        const page = Math.max(1, parseInt(req.query.page) || 1);
+        const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(req.query.limit) || DEFAULT_BILLS_PAGE_SIZE));
+        const skip = (page - 1) * limit;
+
+        // Parallelize all database operations for better performance
+        const [bills, totalBills, analytics, topItems, paymentMethodBreakdown, monthlyTrend] = await Promise.all([
+            // Get paginated bills
+            Bill.find(billFilter)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .populate('cashier', 'name email')
+                .lean(),
+            // Count total bills
+            Bill.countDocuments(billFilter),
+            // Calculate analytics using aggregation
+            Bill.aggregate([
+                { $match: billFilter },
+                {
+                    $group: {
+                        _id: null,
+                        totalBills: { $sum: 1 },
+                        totalRevenue: { $sum: '$totalAmount' },
+                        totalCost: { $sum: '$totalCost' },
+                        totalProfit: { $sum: '$profit' },
+                        totalItems: { $sum: { $sum: '$items.quantity' } },
+                        averageBillValue: { $avg: '$totalAmount' },
+                        averageProfitMargin: { $avg: '$profitMargin' },
+                        firstPurchaseDate: { $min: '$createdAt' },
+                        lastPurchaseDate: { $max: '$createdAt' }
+                    }
+                }
+            ]),
+            // Get top 10 most bought items
+            // OPTIMIZATION: Limit to recent 2000 bills before unwind to improve performance
+            // This prevents processing thousands of old bills for customers with long history
+            Bill.aggregate([
+                { $match: billFilter },
+                { $sort: { createdAt: -1 } },
+                { $limit: 2000 }, // Process only recent 2000 bills for top items
+                { $unwind: '$items' },
+                {
+                    $group: {
+                        _id: {
+                            product: '$items.product',
+                            productName: '$items.productName',
+                            productSku: '$items.productSku'
+                        },
+                        totalQuantity: { $sum: '$items.quantity' },
+                        totalRevenue: { $sum: '$items.totalPrice' },
+                        totalCost: { $sum: { $multiply: ['$items.costPrice', '$items.quantity'] } },
+                        timesPurchased: { $sum: 1 }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        product: '$_id.product',
+                        productName: '$_id.productName',
+                        productSku: '$_id.productSku',
+                        totalQuantity: 1,
+                        totalRevenue: 1,
+                        totalCost: 1,
+                        totalProfit: { $subtract: ['$totalRevenue', '$totalCost'] },
+                        timesPurchased: 1
+                    }
+                },
+                { $sort: { totalQuantity: -1 } },
+                { $limit: 10 }
+            ]),
+            // Get payment method breakdown
+            Bill.aggregate([
+                { $match: billFilter },
+                {
+                    $group: {
+                        _id: '$paymentMethod',
+                        count: { $sum: 1 },
+                        totalAmount: { $sum: '$totalAmount' }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        paymentMethod: '$_id',
+                        count: 1,
+                        totalAmount: 1
+                    }
+                },
+                { $sort: { totalAmount: -1 } }
+            ]),
+            // Get monthly revenue trend (last 12 months)
+            Bill.aggregate([
+                { $match: billFilter },
+                {
+                    $group: {
+                        _id: {
+                            year: { $year: '$createdAt' },
+                            month: { $month: '$createdAt' }
+                        },
+                        revenue: { $sum: '$totalAmount' },
+                        profit: { $sum: '$profit' },
+                        bills: { $sum: 1 }
+                    }
+                },
+                { $sort: { '_id.year': 1, '_id.month': 1 } },
+                { $limit: 12 }
+            ])
+        ]);
+
+        const analyticsData = analytics[0] || {
+            totalBills: 0,
+            totalRevenue: 0,
+            totalCost: 0,
+            totalProfit: 0,
+            totalItems: 0,
+            averageBillValue: 0,
+            averageProfitMargin: 0,
+            firstPurchaseDate: null,
+            lastPurchaseDate: null
+        };
+
+        // Calculate profit margin
+        const profitMargin = analyticsData.totalRevenue > 0
+            ? ((analyticsData.totalProfit / analyticsData.totalRevenue) * 100).toFixed(2)
+            : 0;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                customer: {
+                    _id: customer._id,
+                    customerNumber: customer.customerNumber,
+                    name: customer.name,
+                    phone: customer.phone,
+                    email: customer.email,
+                    address: customer.address,
+                    notes: customer.notes,
+                    isActive: customer.isActive,
+                    createdAt: customer.createdAt,
+                    updatedAt: customer.updatedAt
+                },
+                analytics: {
+                    ...analyticsData,
+                    profitMargin: parseFloat(profitMargin)
+                },
+                topItems,
+                paymentMethodBreakdown,
+                monthlyTrend: monthlyTrend.map(item => ({
+                    month: `${item._id.year}-${String(item._id.month).padStart(2, '0')}`,
+                    revenue: item.revenue,
+                    profit: item.profit,
+                    bills: item.bills
+                })),
+                bills: {
+                    data: bills,
+                    pagination: {
+                        currentPage: page,
+                        totalPages: Math.ceil(totalBills / limit),
+                        totalBills,
+                        hasNext: skip + bills.length < totalBills,
+                        hasPrev: page > 1,
+                        limit: limit
+                    }
+                }
+            }
+        });
+    })
+);
+
 // @desc    Get customer by ID
 // @route   GET /api/v1/customers/:id
 // @access  Private (requires read_customers permission)
 router.get('/:id',
     protect,
     requirePermission('read_customers'),
+    customerLimiter,
+    validateRequest(customerValidation.id),
     asyncHandler(async (req, res) => {
         const customer = await Customer.findById(req.params.id);
 
@@ -92,6 +312,8 @@ router.get('/:id',
 router.post('/find-or-create',
     protect,
     requirePermission('write_customers'),
+    customerLimiter,
+    validateRequest(customerValidation.findOrCreate),
     asyncHandler(async (req, res) => {
         const { phone, name, email, address, notes } = req.body;
 
@@ -136,6 +358,8 @@ router.post('/find-or-create',
 router.get('/phone/:phone',
     protect,
     requirePermission('read_customers'),
+    customerLimiter,
+    validateRequest(customerValidation.phone),
     asyncHandler(async (req, res) => {
         const { phone } = req.params;
         
@@ -164,6 +388,8 @@ router.get('/phone/:phone',
 router.post('/',
     protect,
     requirePermission('write_customers'),
+    customerLimiter,
+    validateRequest(customerValidation.create),
     asyncHandler(async (req, res) => {
         const { phone, name, email, address, notes } = req.body;
 
@@ -225,6 +451,8 @@ router.post('/',
 router.put('/:id',
     protect,
     requirePermission('write_customers'),
+    customerLimiter,
+    validateRequest([...customerValidation.id, ...customerValidation.update]),
     asyncHandler(async (req, res) => {
         const { name, email, address, notes, isActive } = req.body;
 
@@ -260,6 +488,8 @@ router.put('/:id',
 router.delete('/:id',
     protect,
     requirePermission('write_customers'),
+    customerLimiter,
+    validateRequest(customerValidation.id),
     asyncHandler(async (req, res) => {
         const customer = await Customer.findById(req.params.id);
 

@@ -107,6 +107,12 @@ const Sidebar = ({ isOpen, onClose }) => {
             icon: ScanLine,
             permission: 'read_products',
         },
+        {
+            name: 'Customers',
+            href: '/customers',
+            icon: Users,
+            permission: 'read_customers',
+        },
     ];
 
     const filteredNavigation = navigation.filter(

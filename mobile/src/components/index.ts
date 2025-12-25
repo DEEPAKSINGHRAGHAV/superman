@@ -5,6 +5,7 @@ export * from './ui';
 export { BatchList } from './BatchList';
 export { ProductCard } from './ProductCard';
 export { SupplierCard } from './SupplierCard';
+export { CustomerCard } from './CustomerCard';
 export { PurchaseOrderCard } from './PurchaseOrderCard';
 export { StockMovementCard } from './StockMovementCard';
 export { StatsCard } from './StatsCard';

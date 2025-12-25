@@ -154,6 +154,8 @@ billSchema.index({ createdAt: -1 });
 billSchema.index({ cashier: 1, createdAt: -1 });
 billSchema.index({ customer: 1, createdAt: -1 });
 billSchema.index({ customerPhone: 1, createdAt: -1 });
+// Compound index for optimized customer analytics queries (supports $or queries)
+billSchema.index({ customer: 1, customerPhone: 1, createdAt: -1 });
 billSchema.index({ referenceNumber: 1 });
 billSchema.index({ 'items.product': 1 });
 billSchema.index({ profit: 1 }); // For profit analytics

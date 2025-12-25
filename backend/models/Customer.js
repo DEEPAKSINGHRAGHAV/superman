@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const BarcodeCounter = require('./BarcodeCounter');
 
+// Note: mongoose must be imported at top level for session support
+
 const customerSchema = new mongoose.Schema({
     // Sequential Customer ID (e.g., CUST0001, CUST0002)
     customerNumber: {
@@ -122,7 +124,7 @@ customerSchema.statics.generateCustomerNumber = async function () {
     }
 };
 
-// Static method to find or create customer by phone
+// Static method to find or create customer by phone (ATOMIC - prevents race conditions)
 customerSchema.statics.findOrCreateByPhone = async function (phone, customerData = {}) {
     // If no phone provided, return null
     if (!phone || !phone.trim()) {
@@ -144,42 +146,82 @@ customerSchema.statics.findOrCreateByPhone = async function (phone, customerData
         throw new Error('Please enter a valid 10-digit Indian phone number');
     }
     
-    // Try to find existing customer
-    let customer = await this.findOne({ phone: normalizedPhone });
+    // Use transaction to prevent race conditions
+    // Note: We use a single transaction for the entire operation
+    // generateCustomerNumber uses its own transaction, so we call it first
+    const session = await mongoose.startSession();
+    session.startTransaction();
     
-    if (customer) {
-        // Update customer data if provided
-        if (Object.keys(customerData).length > 0) {
-            if (customerData.name && customerData.name.trim()) {
-                customer.name = customerData.name.trim();
+    try {
+        // First, try to find existing customer within transaction (with read concern)
+        let customer = await this.findOne({ phone: normalizedPhone })
+            .session(session)
+            .lean(false); // Return document, not plain object
+        
+        if (customer) {
+            // Update customer data if provided
+            if (Object.keys(customerData).length > 0) {
+                if (customerData.name && customerData.name.trim()) {
+                    customer.name = customerData.name.trim();
+                }
+                if (customerData.email !== undefined) customer.email = customerData.email;
+                if (customerData.address !== undefined) customer.address = customerData.address;
+                if (customerData.notes !== undefined) customer.notes = customerData.notes;
+                await customer.save({ session });
             }
-            if (customerData.email !== undefined) customer.email = customerData.email;
-            if (customerData.address !== undefined) customer.address = customerData.address;
-            if (customerData.notes !== undefined) customer.notes = customerData.notes;
-            await customer.save();
+            await session.commitTransaction();
+            return customer;
         }
-        return customer;
+        
+        // Customer doesn't exist - create new one atomically
+        // Generate customer number first (it uses its own transaction, but that's okay)
+        // We'll handle the race condition with duplicate key error handling
+        const customerNumber = await this.generateCustomerNumber();
+        
+        // Ensure name is not empty string - use default if empty or undefined
+        const customerName = (customerData.name && customerData.name.trim()) 
+            ? customerData.name.trim() 
+            : 'Walk-in Customer';
+        
+        // Create customer within transaction
+        // Use create with array to support session
+        const newCustomers = await this.create([{
+            customerNumber,
+            phone: normalizedPhone,
+            name: customerName,
+            email: customerData.email,
+            address: customerData.address,
+            notes: customerData.notes,
+            isActive: true
+        }], { session });
+        
+        await session.commitTransaction();
+        return newCustomers[0];
+    } catch (error) {
+        await session.abortTransaction();
+        
+        // Handle duplicate key error (race condition occurred - another request created customer)
+        if (error.code === 11000 && error.keyPattern && error.keyPattern.phone) {
+            // Another request created the customer - retry find operation
+            const customer = await this.findOne({ phone: normalizedPhone });
+            if (customer) {
+                // Update if data provided
+                if (Object.keys(customerData).length > 0) {
+                    if (customerData.name && customerData.name.trim()) {
+                        customer.name = customerData.name.trim();
+                    }
+                    if (customerData.email !== undefined) customer.email = customerData.email;
+                    if (customerData.address !== undefined) customer.address = customerData.address;
+                    if (customerData.notes !== undefined) customer.notes = customerData.notes;
+                    await customer.save();
+                }
+                return customer;
+            }
+        }
+        throw error;
+    } finally {
+        session.endSession();
     }
-    
-    // Create new customer
-    const customerNumber = await this.generateCustomerNumber();
-    
-    // Ensure name is not empty string - use default if empty or undefined
-    const customerName = (customerData.name && customerData.name.trim()) 
-        ? customerData.name.trim() 
-        : 'Walk-in Customer';
-    
-    customer = await this.create({
-        customerNumber,
-        phone: normalizedPhone,
-        name: customerName,
-        email: customerData.email,
-        address: customerData.address,
-        notes: customerData.notes,
-        isActive: true
-    });
-    
-    return customer;
 };
 
 // Virtual for formatted address

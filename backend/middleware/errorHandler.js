@@ -24,10 +24,26 @@ const errorHandler = (err, req, res, next) => {
         error = { message, statusCode: 400 };
     }
 
-    res.status(error.statusCode || 500).json({
+    // Standardize error response format
+    const statusCode = error.statusCode || 500;
+    const errorResponse = {
         success: false,
-        error: error.message || 'Server Error'
-    });
+        error: {
+            code: error.code || 'INTERNAL_SERVER_ERROR',
+            message: error.message || 'Server Error',
+            ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+        }
+    };
+
+    // For validation errors, include details
+    if (error.name === 'ValidationError' && error.errors) {
+        errorResponse.error.details = Object.values(error.errors).map((err: any) => ({
+            field: err.path,
+            message: err.message
+        }));
+    }
+
+    res.status(statusCode).json(errorResponse);
 };
 
 module.exports = errorHandler;

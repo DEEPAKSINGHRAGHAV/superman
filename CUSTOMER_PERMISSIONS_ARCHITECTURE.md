@@ -278,3 +278,6 @@ If separate customer permissions are required in the future:
 **Status:** Current architecture - using inventory permissions
 **Future:** Separate customer app will use independent authentication
 
+
+
+

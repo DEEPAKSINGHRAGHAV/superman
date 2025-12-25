@@ -48,3 +48,6 @@ Exposing the permission configuration publicly would reveal:
 
 **Require authentication** for configuration endpoints that reveal system structure, even if the data itself isn't "sensitive". This follows the principle of **defense in depth** and **information security**.
 
+
+
+
