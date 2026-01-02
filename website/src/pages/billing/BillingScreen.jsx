@@ -787,6 +787,7 @@ const BillingScreen = () => {
             const saleItems = cart.map(item => ({
                 productId: item.product._id,
                 quantity: item.quantity,
+                batchNumber: item.assignedBatch?.batchNumber || item.batchInfo?.batchNumber, // Send batch-specific info
                 notes: `Sold at ${formatCurrency(item.unitPrice)}`,
             }));
 
@@ -919,7 +920,7 @@ const BillingScreen = () => {
                                 </Card>
                             ) : (
                                 cart.map((item) => (
-                                    <Card key={item.product._id} noPadding className="overflow-hidden">
+                                    <Card key={getCartItemId(item)} noPadding className="overflow-hidden">
                                         <div className="flex items-center gap-2 px-3 py-1">
                                             {/* Product Name - Compact */}
                                             <div className="flex-1 min-w-0">

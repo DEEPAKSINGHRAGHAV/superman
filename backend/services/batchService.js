@@ -364,6 +364,112 @@ class BatchService {
     }
 
     /**
+     * Process sale from a specific batch (not FIFO)
+     * Used when frontend explicitly selects which batch to use
+     * @param {string} productId - Product ID
+     * @param {string} batchNumber - Specific batch number to use
+     * @param {number} quantityToSell - Quantity to sell
+     * @param {string} createdBy - User ID
+     * @param {Object} options - Additional options
+     * @returns {Promise<Object>} Sale processing result
+     */
+    static async processSaleFromSpecificBatch(productId, batchNumber, quantityToSell, createdBy, options = {}) {
+        const session = await mongoose.startSession();
+        session.startTransaction();
+
+        try {
+            const { referenceNumber = '', notes = '' } = options;
+
+            // Find the specific batch
+            const batch = await InventoryBatch.findOne({
+                product: productId,
+                batchNumber: batchNumber,
+                status: 'active',
+                currentQuantity: { $gt: 0 },
+                $or: [
+                    { expiryDate: { $exists: false } },
+                    { expiryDate: null },
+                    { expiryDate: { $gt: new Date() } }
+                ]
+            }).session(session);
+
+            if (!batch) {
+                throw new Error(`Batch ${batchNumber} not found or not available for product`);
+            }
+
+            const availableInBatch = batch.currentQuantity - (batch.reservedQuantity || 0);
+            
+            if (availableInBatch < quantityToSell) {
+                throw new Error(
+                    `Insufficient stock in batch ${batchNumber}. Available: ${availableInBatch}, Requested: ${quantityToSell}`
+                );
+            }
+
+            // Reduce batch quantity
+            batch.currentQuantity -= quantityToSell;
+            if (batch.currentQuantity === 0) {
+                batch.status = 'depleted';
+            }
+            await batch.save({ session });
+
+            const totalCost = quantityToSell * batch.costPrice;
+            const totalRevenue = quantityToSell * batch.sellingPrice;
+
+            // Create stock movement
+            await StockMovement.create([{
+                product: productId,
+                movementType: 'sale',
+                quantity: -quantityToSell,
+                previousStock: batch.currentQuantity + quantityToSell,
+                newStock: batch.currentQuantity,
+                referenceNumber: referenceNumber || `SALE-${Date.now()}`,
+                referenceType: 'sale',
+                reason: 'Sale from specific batch',
+                notes: `Batch ${batch.batchNumber}${notes ? ': ' + notes : ''}`,
+                unitCost: batch.costPrice,
+                totalCost: totalCost,
+                batchNumber: batch.batchNumber,
+                createdBy
+            }], { session });
+
+            // Update product stock
+            await Product.findByIdAndUpdate(
+                productId,
+                { $inc: { currentStock: -quantityToSell } },
+                { session }
+            );
+
+            await session.commitTransaction();
+
+            return {
+                success: true,
+                quantitySold: quantityToSell,
+                batchesUsed: [{
+                    batchId: batch._id,
+                    batchNumber: batch.batchNumber,
+                    quantity: quantityToSell,
+                    costPrice: batch.costPrice,
+                    sellingPrice: batch.sellingPrice,
+                    totalCost: totalCost,
+                    totalRevenue: totalRevenue
+                }],
+                totalCost,
+                totalRevenue,
+                profit: totalRevenue - totalCost,
+                profitMargin: ((totalRevenue - totalCost) / totalRevenue * 100).toFixed(2),
+                averageCostPrice: batch.costPrice,
+                averageSellingPrice: batch.sellingPrice
+            };
+
+        } catch (error) {
+            await session.abortTransaction();
+            throw error;
+        } finally {
+            session.endSession();
+        }
+    }
+
+    /**
      * Get batch details by batch number or ID
      * @param {string} identifier - Batch number or ID
      * @returns {Promise<Object>} Batch details

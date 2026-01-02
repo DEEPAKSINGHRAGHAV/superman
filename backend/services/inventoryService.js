@@ -146,8 +146,8 @@ class InventoryService {
     }
 
     /**
-     * Process sale/consumption using FIFO from batches
-     * @param {Array} saleItems - Items sold/consumed
+     * Process sale/consumption using FIFO from batches or specific batch if provided
+     * @param {Array} saleItems - Items sold/consumed (can include batchNumber for batch-specific sales)
      * @param {string} createdBy - User ID
      * @param {string} referenceNumber - Reference number (invoice, etc.)
      * @returns {Promise<Array>} Processing results
@@ -160,21 +160,36 @@ class InventoryService {
                 const {
                     productId,
                     quantity,
+                    batchNumber, // Optional: if provided, use specific batch instead of FIFO
                     notes = ''
                 } = item;
 
-                // Use batch service to process sale with FIFO
-                const result = await BatchService.processSaleFIFO(
-                    productId,
-                    quantity,
-                    createdBy,
-                    {
-                        referenceNumber: referenceNumber || `SALE-${Date.now()}`,
-                        notes
-                    }
-                );
-
-                results.push(result);
+                // If batchNumber is specified, use batch-specific sale
+                if (batchNumber) {
+                    const result = await BatchService.processSaleFromSpecificBatch(
+                        productId,
+                        batchNumber,
+                        quantity,
+                        createdBy,
+                        {
+                            referenceNumber: referenceNumber || `SALE-${Date.now()}`,
+                            notes
+                        }
+                    );
+                    results.push(result);
+                } else {
+                    // Fallback to FIFO for backward compatibility
+                    const result = await BatchService.processSaleFIFO(
+                        productId,
+                        quantity,
+                        createdBy,
+                        {
+                            referenceNumber: referenceNumber || `SALE-${Date.now()}`,
+                            notes
+                        }
+                    );
+                    results.push(result);
+                }
             }
 
             return results;

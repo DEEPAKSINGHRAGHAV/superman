@@ -731,6 +731,7 @@ const BillingScreen: React.FC = () => {
             const saleItems = cart.map(item => ({
                 productId: item.product._id,
                 quantity: item.quantity,
+                batchNumber: item.assignedBatch?.batchNumber || item.batchInfo?.batchNumber, // Send batch-specific info
                 notes: `Sold at ₹${item.unitPrice}`,
             }));
 

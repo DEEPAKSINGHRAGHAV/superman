@@ -309,6 +309,13 @@ router.post('/sales',
                     message: 'Each sale item must have productId and positive quantity'
                 });
             }
+            // batchNumber is optional - if provided, must be a string
+            if (item.batchNumber !== undefined && typeof item.batchNumber !== 'string') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'batchNumber must be a string if provided'
+                });
+            }
         }
 
         // Process the sale (updates inventory)
