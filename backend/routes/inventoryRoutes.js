@@ -311,16 +311,23 @@ router.post('/sales',
             }
         }
 
-        // Process the sale (updates inventory)
-        const results = await InventoryService.processSale(
-            saleItems,
-            req.user._id,
-            referenceNumber
-        );
+        // Start transaction for atomicity (sale + bill + accounting)
+        const mongoose = require('mongoose');
+        const session = await mongoose.startSession();
+        session.startTransaction();
 
-        // Save the complete receipt/bill data as it was shown to the customer
-        if (receiptData) {
-            try {
+        try {
+            // Process the sale (updates inventory) - WITHIN transaction
+            const results = await InventoryService.processSale(
+                saleItems,
+                req.user._id,
+                referenceNumber,
+                { session } // Pass session to maintain transaction
+            );
+
+            // Save the complete receipt/bill data as it was shown to the customer
+            let bill = null;
+            if (receiptData) {
                 // Handle customer lookup/creation if phone number provided
                 let customer = null;
                 if (receiptData.customerPhone && receiptData.customerPhone.trim()) {
@@ -365,7 +372,8 @@ router.post('/sales',
                     };
                 });
 
-                const bill = await Bill.create({
+                // Create bill WITHIN transaction
+                const bills = await Bill.create([{
                     billNumber: receiptData.billNumber || referenceNumber,
                     items: billItems,
                     subtotal: receiptData.subtotal || 0,
@@ -386,31 +394,38 @@ router.post('/sales',
                     cashierName: req.user.name || 'Unknown',
                     referenceNumber: referenceNumber,
                     notes: receiptData.notes || ''
-                });
+                }], { session });
+                bill = bills[0];
 
-                res.status(201).json({
-                    success: true,
-                    message: 'Sales processed successfully',
-                    data: results,
-                    bill: bill
-                });
-            } catch (billError) {
-                // If bill saving fails, still return success for sale processing
-                // but log the error
-                console.error('Failed to save bill:', billError);
-                res.status(201).json({
-                    success: true,
-                    message: 'Sales processed successfully, but bill record failed to save',
-                    data: results,
-                    warning: 'Bill record not saved'
-                });
+                // Create journal entry for the sale - WITHIN transaction
+                const AccountingService = require('../services/accountingService');
+                await AccountingService.createSaleEntry({
+                    billId: bill._id,
+                    billNumber: bill.billNumber,
+                    totalAmount: bill.totalAmount,
+                    totalCost: bill.totalCost,
+                    paymentMethod: bill.paymentMethod,
+                    customerId: customer ? customer._id : null,
+                    createdBy: req.user._id
+                }, { session }); // Pass session - CRITICAL for transaction integrity
             }
-        } else {
+
+            // Commit all operations together
+            await session.commitTransaction();
+
             res.status(201).json({
                 success: true,
                 message: 'Sales processed successfully',
-                data: results
+                data: results,
+                bill: bill
             });
+
+        } catch (error) {
+            // Rollback everything on any error
+            await session.abortTransaction();
+            throw error; // Let asyncHandler handle it
+        } finally {
+            session.endSession();
         }
     })
 );

@@ -292,3 +292,6 @@ If you need something quick:
 
 **Bottom Line:** Your system is great for inventory and sales, but adding accounting will transform it into a complete retail management solution that provides full financial visibility and enables better business decisions.
 
+
+
+

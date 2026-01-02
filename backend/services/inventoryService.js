@@ -150,10 +150,12 @@ class InventoryService {
      * @param {Array} saleItems - Items sold/consumed
      * @param {string} createdBy - User ID
      * @param {string} referenceNumber - Reference number (invoice, etc.)
+     * @param {Object} options - Optional session for transaction
      * @returns {Promise<Array>} Processing results
      */
-    static async processSale(saleItems, createdBy, referenceNumber = '') {
+    static async processSale(saleItems, createdBy, referenceNumber = '', options = {}) {
         try {
+            const { session } = options;
             const results = [];
 
             for (const item of saleItems) {
@@ -170,7 +172,8 @@ class InventoryService {
                     createdBy,
                     {
                         referenceNumber: referenceNumber || `SALE-${Date.now()}`,
-                        notes
+                        notes,
+                        session // Pass session to maintain transaction
                     }
                 );
 

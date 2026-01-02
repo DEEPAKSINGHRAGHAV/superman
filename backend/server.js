@@ -43,6 +43,30 @@ if (process.env.NODE_ENV === 'development') {
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/shivik_mart')
     .then(() => {
         console.log('✅ Connected to MongoDB successfully');
+        
+        // Setup accounting snapshot job (runs daily at 1:00 AM)
+        // Install node-cron: npm install node-cron
+        try {
+            const cron = require('node-cron');
+            const { generateBalanceSnapshots } = require('./jobs/accountingSnapshotJob');
+            
+            // Run daily at 1:00 AM
+            cron.schedule('0 1 * * *', async () => {
+                console.log('[Cron] Running daily balance snapshot job...');
+                try {
+                    const result = await generateBalanceSnapshots();
+                    console.log(`[Cron] Snapshot job completed: ${result.created} created, ${result.skipped} skipped`);
+                } catch (error) {
+                    console.error('[Cron] Error generating balance snapshots:', error);
+                }
+            });
+            
+            console.log('✅ Accounting snapshot job scheduled (daily at 1:00 AM)');
+        } catch (error) {
+            // node-cron not installed - job will need to be run manually or via external scheduler
+            console.log('⚠️  node-cron not installed. Install with: npm install node-cron');
+            console.log('   Accounting snapshot job will need to be run manually or via external scheduler');
+        }
     })
     .catch((error) => {
         console.error('❌ MongoDB connection error:', error);

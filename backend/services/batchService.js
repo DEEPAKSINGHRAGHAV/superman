@@ -212,11 +212,18 @@ class BatchService {
      * @returns {Promise<Object>} Sale processing result
      */
     static async processSaleFIFO(productId, quantityToSell, createdBy, options = {}) {
-        const session = await mongoose.startSession();
-        session.startTransaction();
-
+        const { session: providedSession, referenceNumber = '', notes = '' } = options;
+        
+        let shouldEndSession = false;
+        let session = providedSession;
+        
+        if (!session) {
+            session = await mongoose.startSession();
+            session.startTransaction();
+            shouldEndSession = true;
+        }
+        
         try {
-            const { referenceNumber = '', notes = '' } = options;
 
             // Get active batches in FIFO order (oldest first), excluding expired batches
             const batches = await InventoryBatch.find({
@@ -341,7 +348,10 @@ class BatchService {
                 { session }
             );
 
-            await session.commitTransaction();
+            // Only commit if we created the session
+            if (shouldEndSession) {
+                await session.commitTransaction();
+            }
 
             return {
                 success: true,
@@ -356,10 +366,14 @@ class BatchService {
             };
 
         } catch (error) {
-            await session.abortTransaction();
+            if (shouldEndSession) {
+                await session.abortTransaction();
+            }
             throw error;
         } finally {
-            session.endSession();
+            if (shouldEndSession) {
+                session.endSession();
+            }
         }
     }
 

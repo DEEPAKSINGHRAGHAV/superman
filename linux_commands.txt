@@ -1,0 +1,11 @@
+-----------------------DELETE MONGODB BACKUP------------------
+du -hsc *
+ls -ld mongo_backup_202511*
+find . -name "mongo_backup_202511*"
+find . -name "mongo_backup_202511*" -exec rm -rf {} \;
+
+----------------------Download backup command------------------
+scp -P 5555 -r root@72.60.204.233:/home/backup/mongo_backup_20260101_010001 ~/Downloads/
+
+----------------------backup restore command-------------------
+mongorestore --uri="mongodb+srv://deepak:NAEt9gP4HmELkP0d@cluster0.tgxyuzf.mongodb.net/shivik_mart_uat" /Users/deepaksinghraghav/Downloads/mongo_backup_20260101_010001/shivik_mart --drop

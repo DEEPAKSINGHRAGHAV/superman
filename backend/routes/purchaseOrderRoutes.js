@@ -397,11 +397,28 @@ router.patch('/:id/receive',
             });
         }
 
-        // Now that we have the lock, create batches
-        // If we fail here, the PO is already marked as 'received', so no duplicates possible
+        // Now that we have the lock, create batches and journal entry in a transaction
+        // Start transaction for atomicity (batches + accounting)
+        const mongoose = require('mongoose');
+        const session = await mongoose.startSession();
+        session.startTransaction();
+
         const createdBatches = [];
 
         try {
+            // Update PO status WITHIN transaction
+            await PurchaseOrder.findByIdAndUpdate(
+                req.params.id,
+                {
+                    $set: {
+                        status: 'received',
+                        actualDeliveryDate: new Date(),
+                        receivedBy: req.user._id
+                    }
+                },
+                { session }
+            );
+
             for (const receivedItem of receivedItems) {
                 const { productId, quantity, costPrice, sellingPrice, expiryDate, manufactureDate, notes } = receivedItem;
 
@@ -411,16 +428,15 @@ router.patch('/:id/receive',
                 );
 
                 if (!poItem) {
-                    // Rollback everything if validation fails
-                    await cleanupFailedBatches(purchaseOrder, createdBatches);
-
+                    // Rollback transaction if validation fails
+                    await session.abortTransaction();
                     return res.status(400).json({
                         success: false,
                         message: `Product ${productId} not found in purchase order`
                     });
                 }
 
-                // Create a batch for this received item (no session needed)
+                // Create a batch for this received item - WITHIN transaction
                 const batch = await BatchService.createBatch({
                     productId,
                     quantity,
@@ -432,15 +448,29 @@ router.patch('/:id/receive',
                     manufactureDate,
                     notes: notes || `Received from PO ${purchaseOrder.orderNumber}`,
                     createdBy: req.user._id
-                });
+                }, { session }); // Pass session - CRITICAL
 
                 createdBatches.push(batch);
             }
 
+            // Create journal entry for the purchase - WITHIN transaction
+            const AccountingService = require('../services/accountingService');
+            await AccountingService.createPurchaseEntry({
+                purchaseOrderId: purchaseOrder._id,
+                orderNumber: purchaseOrder.orderNumber,
+                totalAmount: purchaseOrder.totalAmount,
+                supplierId: purchaseOrder.supplier._id || purchaseOrder.supplier,
+                createdBy: req.user._id
+            }, { session }); // Pass session - CRITICAL for transaction integrity
+
+            // Commit all operations together
+            await session.commitTransaction();
+
             // Refetch the purchase order to get the updated version
             const updatedPurchaseOrder = await PurchaseOrder.findById(req.params.id)
                 .populate('createdBy', 'name email')
-                .populate('items.product', 'name sku category');
+                .populate('items.product', 'name sku category')
+                .populate('supplier');
 
             res.status(200).json({
                 success: true,
@@ -453,16 +483,13 @@ router.patch('/:id/receive',
             });
 
         } catch (error) {
-            // If batch creation fails, rollback everything
-            try {
-                await cleanupFailedBatches(purchaseOrder, createdBatches);
-            } catch (rollbackError) {
-                console.error('Error during rollback:', rollbackError);
-                // Continue to throw original error even if rollback fails
-            }
+            // Rollback everything on any error
+            await session.abortTransaction();
             
             // Re-throw the original error to be handled by asyncHandler
             throw error;
+        } finally {
+            session.endSession();
         }
     })
 );
