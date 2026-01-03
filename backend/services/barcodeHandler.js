@@ -35,12 +35,15 @@ class BarcodeHandler {
 
     /**
      * Validate EAN-13 barcode format
+     * Only validates EAN-13 format for auto-generated barcodes (prefix "21")
+     * User-provided barcodes are accepted as-is (only basic format validation)
      * @param {string} barcode - Barcode to validate
      * @returns {Object} { valid: boolean, error?: string }
      */
     static validateBarcodeFormat(barcode) {
-        // Check if it looks like an EAN-13 barcode (13 digits)
-        if (barcode.length === 13 && /^\d{13}$/.test(barcode)) {
+        // Only validate EAN-13 format for auto-generated barcodes (prefix "21")
+        // User-provided barcodes are accepted without strict EAN-13 validation
+        if (barcode.length === 13 && /^\d{13}$/.test(barcode) && barcode.startsWith('21')) {
             const isValidEAN13 = BarcodeService.validateEAN13(barcode);
             if (!isValidEAN13) {
                 return {
