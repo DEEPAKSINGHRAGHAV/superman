@@ -12,9 +12,6 @@ class ExpiryCheckService {
      * This should be run periodically (e.g., daily via cron job)
      */
     static async checkAndUpdateExpiredBatches() {
-        const session = await mongoose.startSession();
-        session.startTransaction();
-
         try {
             // Get today's date at start of day (00:00:00) for accurate comparison
             const today = new Date();
@@ -25,7 +22,7 @@ class ExpiryCheckService {
                 status: 'active',
                 expiryDate: { $lt: today },
                 currentQuantity: { $gt: 0 }
-            }).session(session);
+            });
 
             const results = {
                 totalChecked: expiredBatches.length,
@@ -34,6 +31,9 @@ class ExpiryCheckService {
             };
 
             for (const batch of expiredBatches) {
+                const session = await mongoose.startSession();
+                session.startTransaction();
+
                 try {
                     const quantityToRemove = batch.currentQuantity;
                     const oldStatus = batch.status;
@@ -68,6 +68,8 @@ class ExpiryCheckService {
                         createdBy: batch.createdBy
                     }], { session });
 
+                    await session.commitTransaction();
+
                     results.batchesUpdated.push({
                         batchId: batch._id,
                         batchNumber: batch.batchNumber,
@@ -78,16 +80,17 @@ class ExpiryCheckService {
 
                     console.log(`Batch ${batch.batchNumber} marked as expired. ${quantityToRemove} units removed from inventory.`);
                 } catch (error) {
+                    await session.abortTransaction();
                     console.error(`Error updating batch ${batch.batchNumber}:`, error);
                     results.errors.push({
                         batchId: batch._id,
                         batchNumber: batch.batchNumber,
                         error: error.message
                     });
+                } finally {
+                    session.endSession();
                 }
             }
-
-            await session.commitTransaction();
 
             return {
                 success: true,
@@ -96,15 +99,12 @@ class ExpiryCheckService {
             };
 
         } catch (error) {
-            await session.abortTransaction();
             console.error('Error in expiry check service:', error);
             return {
                 success: false,
                 error: error.message,
                 timestamp: new Date()
             };
-        } finally {
-            session.endSession();
         }
     }
 

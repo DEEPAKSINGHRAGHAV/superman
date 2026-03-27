@@ -182,4 +182,3 @@ export const customersAPI = {
     update: (id, data) => api.put(`/customers/${id}`, data),
     delete: (id) => api.delete(`/customers/${id}`),
 };
-
