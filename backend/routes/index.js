@@ -11,6 +11,7 @@ const brandRoutes = require('./brandRoutes');
 const categoryRoutes = require('./categoryRoutes');
 const customerRoutes = require('./customerRoutes');
 const configRoutes = require('./configRoutes');
+const analyticsRoutes = require('./analyticsRoutes');
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.use(`/api/${apiVersion}/brands`, brandRoutes);
 router.use(`/api/${apiVersion}/categories`, categoryRoutes);
 router.use(`/api/${apiVersion}/customers`, customerRoutes);
 router.use(`/api/${apiVersion}/config`, configRoutes);
+router.use(`/api/${apiVersion}/analytics`, analyticsRoutes);
 
 // Root endpoint
 router.get('/', (req, res) => {

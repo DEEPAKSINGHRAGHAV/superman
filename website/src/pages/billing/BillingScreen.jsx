@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Minus, Plus, Trash2, Edit2, X, Banknote, Smartphone, Printer, CheckCircle, Receipt, Loader2 } from 'lucide-react';
+import { Minus, Plus, Trash2, Edit2, X, Banknote, Smartphone, Printer, CheckCircle, Receipt, Loader2, ArrowDown, TrendingUp } from 'lucide-react';
 import Card from '../../components/common/Card';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -7,14 +7,14 @@ import Modal from '../../components/common/Modal';
 import Loading from '../../components/common/Loading';
 import ProductSearch from '../../components/common/ProductSearch';
 import ThermalReceipt from '../../components/billing/ThermalReceipt';
-import { batchesAPI, inventoryAPI, customersAPI } from '../../services/api';
+import { batchesAPI, inventoryAPI, customersAPI, analyticsAPI } from '../../services/api';
 import { formatCurrency } from '../../utils/helpers';
 import { useAuth } from '../../contexts/AuthContext';
 import toast from 'react-hot-toast';
 
 const PAYMENT_METHODS = [
-    { id: 'cash', name: 'Cash', icon: <Banknote size={32} /> },
-    { id: 'upi', name: 'UPI', icon: <Smartphone size={32} /> },
+    { id: 'cash', name: 'Cash', icon: <Banknote size={24} /> },
+    { id: 'upi', name: 'UPI', icon: <Smartphone size={24} /> },
 ];
 
 const BillingScreen = () => {
@@ -24,12 +24,14 @@ const BillingScreen = () => {
     const [amountReceived, setAmountReceived] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
     const [customerName, setCustomerName] = useState('');
+    const [upsellSuggestions, setUpsellSuggestions] = useState([]);
     const [customerInfo, setCustomerInfo] = useState(null);
     const [isLoadingCustomer, setIsLoadingCustomer] = useState(false);
     const [receiptData, setReceiptData] = useState(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [showReceiptModal, setShowReceiptModal] = useState(false);
     const [isPaymentCompleted, setIsPaymentCompleted] = useState(false);
+    const [showScrollBottom, setShowScrollBottom] = useState(false);
     const productSearchRef = useRef(null);
     const amountReceivedRef = useRef(null);
     const customerPhoneRef = useRef(null);
@@ -166,6 +168,48 @@ const BillingScreen = () => {
             }
         }
     }, [selectedPaymentMethod, isPaymentCompleted]);
+
+    // Fetch AI Market Basket Upsell Suggestions
+    useEffect(() => {
+        if (cart.length === 0 || isPaymentCompleted) {
+            setUpsellSuggestions([]);
+            return;
+        }
+
+        const fetchSuggestions = async () => {
+            try {
+                const productIds = Array.from(new Set(cart.map(item => item.product._id)));
+                const response = await analyticsAPI.getCartSuggestions({ cartProductIds: productIds });
+                if (response.success) {
+                    setUpsellSuggestions(response.data || []);
+                }
+            } catch (error) {
+                console.error('Failed to fetch cart suggestions', error);
+            }
+        };
+
+        const timer = setTimeout(fetchSuggestions, 500); // Debounce API calls
+        return () => clearTimeout(timer);
+    }, [cart, isPaymentCompleted]);
+
+    // Track scrolling on the main container to show/hide the scroll-to-bottom button
+    useEffect(() => {
+        const mainEl = document.querySelector('main');
+        if (!mainEl) return;
+
+        const handleScroll = () => {
+            // Show button if we are more than 100px from the bottom and content is taller than screen
+            const isScrollable = mainEl.scrollHeight > mainEl.clientHeight;
+            const scrolledFromBottom = mainEl.scrollHeight - (mainEl.scrollTop + mainEl.clientHeight);
+            setShowScrollBottom(isScrollable && scrolledFromBottom > 100);
+        };
+
+        mainEl.addEventListener('scroll', handleScroll);
+        // Initial check and check after cart changes
+        setTimeout(handleScroll, 100);
+
+        return () => mainEl.removeEventListener('scroll', handleScroll);
+    }, [cart.length]);
 
     /**
      * Generate unique identifier for a cart item
@@ -843,20 +887,22 @@ const BillingScreen = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Simple Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg">
-                <div className="max-w-7xl mx-auto px-6 py-3">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h1 className="text-xl font-bold mb-1">BILLING / POS</h1>
-                            {cart.length > 0 && (
-                                <p className="text-blue-100 text-sm">
-                                    {totalItems} {totalItems === 1 ? 'item' : 'items'} in cart
-                                </p>
-                            )}
-                        </div>
-                        {cart.length > 0 && !isPaymentCompleted && (
+        <div className="min-h-screen bg-[#F8FAFC] font-sans antialiased">
+            {/* Minimalist Top Bar */}
+            <div className="bg-white border-b border-gray-200 shadow-sm">
+                <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+                    <div>
+                        <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-3">
+                            <span className="text-blue-600">POS</span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-300"></span>
+                            <span className="text-gray-500 font-medium">Checkout</span>
+                        </h1>
+                    </div>
+                    {cart.length > 0 && !isPaymentCompleted && (
+                        <div className="flex items-center gap-4">
+                            <div className="px-4 py-1.5 bg-blue-50 text-blue-700 rounded-full text-sm font-bold border border-blue-100">
+                                {totalItems} {totalItems === 1 ? 'Item' : 'Items'}
+                            </div>
                             <button
                                 onClick={() => {
                                     if (window.confirm('Clear all items from cart?')) {
@@ -868,7 +914,6 @@ const BillingScreen = () => {
                                         setSelectedPaymentMethod('upi');
                                         setReceiptData(null);
                                         setShowReceiptModal(false);
-                                        // Focus the product search input
                                         setTimeout(() => {
                                             if (productSearchRef.current) {
                                                 productSearchRef.current.focus();
@@ -876,25 +921,25 @@ const BillingScreen = () => {
                                         }, 100);
                                     }
                                 }}
-                                className="px-4 py-1.5 bg-red-500 hover:bg-red-600 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2"
+                                className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-xl text-sm font-bold transition-all flex items-center gap-2"
                             >
                                 <Trash2 size={16} />
                                 Clear Cart
                             </button>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-6 py-4">
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Left Panel - Search & Cart */}
-                    <div className={`lg:col-span-2 space-y-4 ${isPaymentCompleted ? 'opacity-50 pointer-events-none' : ''}`}>
-                        {/* Product Search - ALWAYS VISIBLE, AUTO-FOCUSED */}
-                        <Card className="p-4">
+            <div className="max-w-7xl mx-auto px-6 py-6">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    {/* Left Panel - Search & Cart (Takes 8 columns) */}
+                    <div className={`lg:col-span-8 space-y-6 ${isPaymentCompleted ? 'opacity-50 pointer-events-none' : ''}`}>
+                        {/* Huge Product Search */}
+                        <div className="relative">
                             <ProductSearch
                                 ref={productSearchRef}
-                                placeholder="Scan barcode or type product name..."
+                                placeholder="Scan barcode or type to search..."
                                 onProductSelect={addToCart}
                                 showStockInfo={true}
                                 showPrice={true}
@@ -904,149 +949,167 @@ const BillingScreen = () => {
                                 autoFocus={!isPaymentCompleted}
                                 disabled={isPaymentCompleted}
                             />
-                            <p className="text-xs text-gray-500 mt-2 text-center">
-                                {isPaymentCompleted ? 'Payment completed. Click "New Sale" to start a new transaction.' : 'Scan barcode or type to search • Press Enter to add'}
+                            <p className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 tracking-wider uppercase pointer-events-none">
+                                {isPaymentCompleted ? 'Completed' : 'Ready to Scan'}
                             </p>
-                        </Card>
+                        </div>
+
+                        {/* Upsell Suggestions */}
+                        {upsellSuggestions.length > 0 && !isPaymentCompleted && (
+                            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                                <h3 className="text-sm font-bold text-indigo-900 mb-3 flex items-center gap-2">
+                                    <TrendingUp size={16} /> Customers also bought...
+                                </h3>
+                                <div className="flex flex-wrap gap-2">
+                                    {upsellSuggestions.map((suggestion, idx) => (
+                                        <button
+                                            key={idx}
+                                            onClick={() => addToCart(suggestion.product)}
+                                            className="bg-white hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-3 py-1.5 rounded-xl text-sm font-semibold transition-all flex items-center gap-2 shadow-sm"
+                                        >
+                                            <Plus size={14} />
+                                            {suggestion.product.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Cart Items */}
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                             {cart.length === 0 ? (
-                                <Card className="p-12">
-                                    <div className="flex flex-col items-center justify-center text-center">
-                                        <p className="text-2xl font-bold text-gray-400 mb-2">Cart is Empty</p>
-                                        <p className="text-gray-500">Scan or search products to start billing</p>
+                                <div className="bg-white rounded-[2rem] border border-dashed border-gray-300 p-16 flex flex-col items-center justify-center text-center">
+                                    <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                                        <Banknote size={32} className="text-gray-300" />
                                     </div>
-                                </Card>
+                                    <p className="text-xl font-bold text-gray-400 mb-1">Cart is Empty</p>
+                                    <p className="text-sm text-gray-400">Scan or search products to start billing</p>
+                                </div>
                             ) : (
                                 cart.map((item) => (
-                                    <Card key={getCartItemId(item)} noPadding className="overflow-hidden">
-                                        <div className="flex items-center gap-2 px-3 py-1">
-                                            {/* Product Name - Compact */}
-                                            <div className="flex-1 min-w-0">
-                                                <h3 className="text-base font-bold text-gray-900 truncate">{item.product.name}</h3>
-                                                <p className="text-xs text-gray-500">#{item.product.sku}</p>
-                                            </div>
+                                    <div key={getCartItemId(item)} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 hover:shadow-md transition-all flex items-center gap-4 group">
+                                        {/* Product Details */}
+                                        <div className="flex-1 min-w-0">
+                                            <h3 className="text-lg font-bold text-gray-900 truncate tracking-tight">{item.product.name}</h3>
+                                            <p className="text-sm text-gray-500 font-medium tracking-wide">#{item.product.sku}</p>
+                                        </div>
 
-                                            {/* Quantity Controls - Inline */}
-                                            <div className="flex items-center gap-1">
-                                                <button
-                                                    onClick={() => !isPaymentCompleted && updateQuantity(getCartItemId(item), -1)}
-                                                    disabled={isPaymentCompleted}
-                                                    className={`w-8 h-8 bg-red-100 hover:bg-red-200 text-red-600 rounded flex items-center justify-center transition-colors ${isPaymentCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                    aria-label="Decrease"
-                                                >
-                                                    <Minus size={16} />
-                                                </button>
-                                                <div className="bg-gray-50 px-3 py-1 rounded min-w-[40px] text-center">
-                                                    <span className="text-base font-bold text-gray-900">{item.quantity}</span>
-                                                </div>
-                                                <button
-                                                    onClick={() => !isPaymentCompleted && updateQuantity(getCartItemId(item), 1)}
-                                                    disabled={isPaymentCompleted}
-                                                    className={`w-8 h-8 bg-green-100 hover:bg-green-200 text-green-600 rounded flex items-center justify-center transition-colors ${isPaymentCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                    aria-label="Increase"
-                                                >
-                                                    <Plus size={16} />
-                                                </button>
-                                            </div>
-
-                                            {/* Price - Inline */}
-                                            <div className="flex items-center gap-2 min-w-[100px]">
-                                                {item.isEditingPrice ? (
-                                                    <div className="flex items-center gap-1" data-price-edit-container>
-                                                        <Input
-                                                            type="number"
-                                                            defaultValue={item.unitPrice}
-                                                            onFocus={(e) => {
-                                                                // Ensure focus is maintained and select text
-                                                                shouldRefocusRef.current = false;
-                                                                e.target.select();
-                                                            }}
-                                                            onBlur={(e) => {
+                                        {/* Cost Info */}
+                                        <div className="hidden sm:block text-right pr-4 border-r border-gray-200">
+                                            {item.isEditingPrice ? (
+                                                <div className="flex items-center gap-1" data-price-edit-container>
+                                                    <Input
+                                                        type="number"
+                                                        defaultValue={item.unitPrice}
+                                                        onFocus={(e) => {
+                                                            shouldRefocusRef.current = false;
+                                                            e.target.select();
+                                                        }}
+                                                        onBlur={(e) => {
+                                                            updateSellingPrice(getCartItemId(item), e.target.value);
+                                                            shouldRefocusRef.current = true;
+                                                            setTimeout(refocusSearch, 100);
+                                                        }}
+                                                        onKeyPress={(e) => {
+                                                            if (e.key === 'Enter') {
                                                                 updateSellingPrice(getCartItemId(item), e.target.value);
-                                                                // Re-enable search refocus and focus immediately
                                                                 shouldRefocusRef.current = true;
-                                                                setTimeout(() => {
-                                                                    refocusSearch();
-                                                                }, 100);
-                                                            }}
-                                                            onKeyPress={(e) => {
-                                                                if (e.key === 'Enter') {
-                                                                    updateSellingPrice(getCartItemId(item), e.target.value);
-                                                                    // Re-enable search refocus and focus immediately
-                                                                    shouldRefocusRef.current = true;
-                                                                    setTimeout(() => {
-                                                                        refocusSearch();
-                                                                    }, 100);
-                                                                }
-                                                            }}
-                                                            className="w-20 text-sm font-bold text-center py-1"
-                                                            autoFocus
-                                                        />
-                                                        <button
-                                                            onClick={() => togglePriceEdit(getCartItemId(item))}
-                                                            className="p-1 text-gray-600 hover:bg-gray-100 rounded"
-                                                        >
-                                                            <X size={14} />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => !isPaymentCompleted && togglePriceEdit(getCartItemId(item))}
-                                                        disabled={isPaymentCompleted}
-                                                        className={`flex items-center gap-1 px-2 py-1 hover:bg-blue-50 rounded transition-colors ${isPaymentCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                    >
-                                                        <span className="text-sm font-bold text-gray-900">
-                                                            {formatCurrency(item.unitPrice)}
-                                                        </span>
-                                                        <Edit2 size={14} className="text-blue-600" />
+                                                                setTimeout(refocusSearch, 100);
+                                                            }
+                                                        }}
+                                                        className="w-20 text-sm font-bold text-center !py-1 !px-2 !mb-0 border-blue-500 ring-2 ring-blue-100"
+                                                        autoFocus
+                                                    />
+                                                    <button onClick={() => togglePriceEdit(getCartItemId(item))} className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors">
+                                                        <X size={16} />
                                                     </button>
-                                                )}
-                                            </div>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => !isPaymentCompleted && togglePriceEdit(getCartItemId(item))}
+                                                    disabled={isPaymentCompleted}
+                                                    className="hover:bg-blue-50 px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-2 border border-transparent hover:border-blue-100"
+                                                >
+                                                    <span className="text-sm font-bold text-gray-700">
+                                                        {formatCurrency(item.unitPrice)}
+                                                    </span>
+                                                    <Edit2 size={14} className="text-blue-500 opacity-60 group-hover:opacity-100" />
+                                                </button>
+                                            )}
+                                        </div>
 
-                                            {/* Item Total */}
-                                            <div className="text-right min-w-[100px]">
-                                                <span className="text-base font-bold text-blue-600">
-                                                    {formatCurrency(item.totalPrice)}
-                                                </span>
-                                            </div>
-
-                                            {/* Remove Button */}
+                                        {/* Quantity Pill Controls */}
+                                        <div className="flex items-center bg-white rounded-xl border border-gray-300 overflow-hidden shadow-sm">
                                             <button
-                                                onClick={() => !isPaymentCompleted && removeFromCart(getCartItemId(item))}
+                                                onClick={() => !isPaymentCompleted && updateQuantity(getCartItemId(item), -1)}
                                                 disabled={isPaymentCompleted}
-                                                className={`p-2 bg-red-50 hover:bg-red-100 text-red-600 rounded transition-colors flex-shrink-0 ${isPaymentCompleted ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                aria-label="Remove"
+                                                className="w-10 h-10 flex items-center justify-center text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors disabled:opacity-50"
+                                                aria-label="Decrease"
                                             >
-                                                <Trash2 size={18} />
+                                                <Minus size={18} strokeWidth={2.5} />
+                                            </button>
+                                            <div className="w-12 text-center font-bold text-lg text-gray-900 bg-gray-50 border-x border-gray-300 py-1.5">
+                                                {item.quantity}
+                                            </div>
+                                            <button
+                                                onClick={() => !isPaymentCompleted && updateQuantity(getCartItemId(item), 1)}
+                                                disabled={isPaymentCompleted}
+                                                className="w-10 h-10 flex items-center justify-center text-blue-600 hover:bg-blue-50 hover:text-blue-700 transition-colors disabled:opacity-50"
+                                                aria-label="Increase"
+                                            >
+                                                <Plus size={18} strokeWidth={3} />
                                             </button>
                                         </div>
-                                    </Card>
+
+                                        {/* Item Total (Large) */}
+                                        <div className="text-right min-w-[100px] flex flex-col items-end">
+                                            <span className="text-xl font-black text-gray-900 tracking-tight">
+                                                {formatCurrency(item.totalPrice)}
+                                            </span>
+                                        </div>
+
+                                        {/* Remove Button */}
+                                        <button
+                                            onClick={() => !isPaymentCompleted && removeFromCart(getCartItemId(item))}
+                                            disabled={isPaymentCompleted}
+                                            className="ml-2 w-10 h-10 rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white flex items-center justify-center transition-all disabled:opacity-50 shadow-sm"
+                                            aria-label="Remove"
+                                        >
+                                            <Trash2 size={18} strokeWidth={2.5} />
+                                        </button>
+                                    </div>
                                 ))
                             )}
                         </div>
                     </div>
 
-                    {/* Right Panel - Bill Summary & Payment */}
-                    <div className="lg:col-span-1">
-                        <Card className="sticky top-6 p-4">
-                            <h2 className="text-lg font-bold text-gray-900 mb-3 uppercase">BILL SUMMARY</h2>
-
-                            <div className="space-y-2 mb-4">
-                                <div className="flex items-center justify-between text-base">
-                                    <span className="text-gray-600">Items ({totalItems})</span>
-                                    <span className="font-semibold">{formatCurrency(subtotal)}</span>
-                                </div>
-                                <div className="flex items-center justify-between text-base">
-                                    <span className="text-gray-600">Tax (0%)</span>
-                                    <span className="font-semibold">{formatCurrency(tax)}</span>
-                                </div>
-                                <div className="pt-2 border-t-2 border-gray-300 flex items-center justify-between">
-                                    <span className="text-lg font-bold text-gray-900 uppercase">TOTAL</span>
-                                    <span className="text-2xl font-bold text-blue-600">{formatCurrency(total)}</span>
+                    {/* Right Panel - Bill Summary & Payment (Takes 4 columns) */}
+                    <div className="lg:col-span-4">
+                        <div className="sticky top-24 bg-white rounded-[1.5rem] shadow-xl border border-gray-100 overflow-hidden flex flex-col">
+                            {/* Receipt Header Style */}
+                            <div className="bg-slate-50 border-b border-gray-100 p-4 pb-3 relative overflow-hidden">
+                                <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-blue-400 to-indigo-500"></div>
+                                <h2 className="text-xs font-bold text-gray-400 tracking-[0.2em] uppercase mb-2 text-center">Receipt Summary</h2>
+                                
+                                <div className="space-y-2 relative z-10">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-gray-500 font-medium">Items ({totalItems})</span>
+                                        <span className="font-bold text-gray-700">{formatCurrency(subtotal)}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-sm border-b border-dashed border-gray-300 pb-3">
+                                        <span className="text-gray-500 font-medium">Tax (0%)</span>
+                                        <span className="font-bold text-gray-700">{formatCurrency(tax)}</span>
+                                    </div>
+                                    <div className="pt-2 flex flex-col items-center">
+                                        <span className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Total to Pay</span>
+                                        <span className="text-[2rem] leading-none font-black text-blue-600 tracking-tighter">
+                                            {formatCurrency(total)}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
+                            
+                            <div className="p-4 space-y-4">
 
                             {/* Customer Phone Number - Optional */}
                             {!isPaymentCompleted && (
@@ -1139,27 +1202,27 @@ const BillingScreen = () => {
 
                             {/* Payment Method Selection */}
                             {!isPaymentCompleted && (
-                                <div className="mb-4">
-                                    <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">PAYMENT METHOD</label>
+                                <div className="mb-2">
+                                    <label className="block text-xs font-bold text-gray-400 tracking-widest uppercase mb-2 text-center">Payment Method</label>
                                     <div className="grid grid-cols-2 gap-2">
                                         {PAYMENT_METHODS.map((method) => (
                                             <button
-                                                key={method.id}
-                                                onClick={() => {
-                                                    setSelectedPaymentMethod(method.id);
-                                                    if (method.id !== 'cash') {
-                                                        setAmountReceived('');
-                                                        // Refocus search when switching away from cash
-                                                        setTimeout(refocusSearch, 100);
-                                                    }
-                                                }}
-                                                className={`p-2 border-2 rounded-lg flex flex-col items-center gap-1 transition-all ${selectedPaymentMethod === method.id
-                                                    ? 'border-blue-500 bg-blue-50 text-blue-600 shadow-md'
-                                                    : 'border-gray-300 hover:border-gray-400 bg-white'
+                                                    key={method.id}
+                                                    onClick={() => {
+                                                        setSelectedPaymentMethod(method.id);
+                                                        if (method.id !== 'cash') {
+                                                            setAmountReceived('');
+                                                            setTimeout(refocusSearch, 100);
+                                                        }
+                                                    }}
+                                                    className={`relative p-3 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all overflow-hidden ${
+                                                        selectedPaymentMethod === method.id
+                                                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 ring-2 ring-blue-600 ring-offset-2'
+                                                            : 'bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-600 border border-gray-100'
                                                     }`}
                                             >
-                                                <div className="text-blue-600 scale-90">{method.icon}</div>
-                                                <span className="font-bold text-xs">{method.name}</span>
+                                                <div className={`transition-transform duration-200 ${selectedPaymentMethod === method.id ? 'scale-110' : 'scale-100'}`}>{method.icon}</div>
+                                                <span className="font-bold text-sm tracking-wide">{method.name}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -1231,16 +1294,16 @@ const BillingScreen = () => {
                                         isProcessing ||
                                         (selectedPaymentMethod === 'cash' && (!amountReceived || parseFloat(amountReceived) < total))
                                     }
-                                    className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-xl p-3 font-bold text-base transition-colors flex items-center justify-center gap-2 shadow-lg mb-2"
+                                    className="relative overflow-hidden w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white rounded-xl p-3 font-bold text-base tracking-wide transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25 active:scale-[0.98] mb-1"
                                 >
                                     {isProcessing ? (
                                         <>
                                             <Loading />
-                                            <span>Processing...</span>
+                                            <span>PROCESSING...</span>
                                         </>
                                     ) : (
                                         <>
-                                            <CheckCircle size={20} />
+                                            <CheckCircle size={24} className="opacity-90" />
                                             <span>COMPLETE PAYMENT</span>
                                         </>
                                     )}
@@ -1288,13 +1351,14 @@ const BillingScreen = () => {
                                                 }
                                             }, 100);
                                         }}
-                                        className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-xl p-2 font-semibold text-sm transition-colors"
+                                        className="w-full bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-2xl p-4 font-bold tracking-wide text-sm transition-colors mt-2"
                                     >
-                                        New Sale
+                                        NEW SALE
                                     </button>
                                 </>
                             )}
-                        </Card>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1332,6 +1396,25 @@ const BillingScreen = () => {
                         showControls={false}
                     />
                 </div>
+            )}
+
+            {/* Scroll to bottom floating button */}
+            {showScrollBottom && (
+                <button
+                    onClick={() => {
+                        const mainEl = document.querySelector('main');
+                        if (mainEl) {
+                            mainEl.scrollTo({
+                                top: mainEl.scrollHeight,
+                                behavior: 'smooth'
+                            });
+                        }
+                    }}
+                    className="fixed bottom-6 right-6 z-[9999] w-12 h-12 bg-white text-blue-600 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 flex items-center justify-center hover:bg-blue-50 transition-all hover:-translate-y-1 hover:shadow-[0_8px_30px_rgb(59,130,246,0.2)] group"
+                    aria-label="Scroll to bottom"
+                >
+                    <ArrowDown size={24} strokeWidth={2.5} className="group-hover:animate-bounce" />
+                </button>
             )}
         </div>
     );

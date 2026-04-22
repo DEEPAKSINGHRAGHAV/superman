@@ -1,17 +1,38 @@
 import axios from 'axios';
+import axiosRetry from 'axios-retry';
 import { API_URL, TOKEN_KEY } from '../config/constants';
 
 // Create axios instance
 const api = axios.create({
     baseURL: API_URL,
+    timeout: 10000,
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
+// Automatically retry failed requests 3 times
+axiosRetry(api, { 
+    retries: 3, 
+    retryDelay: (retryCount) => {
+        return retryCount * 1000; // Will wait 1s, then 2s, then 3s between retries
+    },
+    retryCondition: (error) => {
+        // Retry only on network errors or 5xx server errors
+        return axiosRetry.isNetworkOrIdempotentRequestError(error) || error.code === 'ECONNABORTED';
+    }
+});
+
 // Request interceptor
 api.interceptors.request.use(
     (config) => {
+        // Stop the request immediately if the browser knows it has no internet
+        if (!navigator.onLine) {
+            return Promise.reject({
+                message: 'Network error. Please check your connection.',
+            });
+        }
+
         const token = localStorage.getItem(TOKEN_KEY);
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
@@ -181,4 +202,10 @@ export const customersAPI = {
     create: (data) => api.post('/customers', data),
     update: (id, data) => api.put(`/customers/${id}`, data),
     delete: (id) => api.delete(`/customers/${id}`),
+};
+
+// Analytics API
+export const analyticsAPI = {
+    getBasketPatterns: (params) => api.get('/analytics/basket-patterns', { params }),
+    getCartSuggestions: (data) => api.post('/analytics/cart-suggestions', data),
 };
