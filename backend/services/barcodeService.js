@@ -211,7 +211,8 @@ class BarcodeService {
             return false;
         }
         
-        const query = { barcode: barcode.trim() };
+        // Barcodes are stored uppercase (see Product pre-save hook), so normalize before matching
+        const query = { barcode: barcode.trim().toUpperCase() };
         if (excludeProductId) {
             // Convert to ObjectId if it's a valid ObjectId string
             if (mongoose.Types.ObjectId.isValid(excludeProductId)) {

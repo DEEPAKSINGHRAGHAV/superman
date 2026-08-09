@@ -367,7 +367,8 @@ router.get('/barcode/:barcode',
     requirePermission('read_products'),
     asyncHandler(async (req, res) => {
         const product = await Product.findOne({
-            barcode: req.params.barcode,
+            // Barcodes are stored uppercase (see Product pre-save hook), so normalize lookup input
+            barcode: req.params.barcode.trim().toUpperCase(),
             isActive: true
         })
             .populate('createdBy', 'name email')

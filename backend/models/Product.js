@@ -234,6 +234,11 @@ productSchema.pre('save', function (next) {
         this.sku = this.sku.toUpperCase();
     }
 
+    // Ensure Barcode is uppercase
+    if (this.barcode) {
+        this.barcode = this.barcode.toUpperCase();
+    }
+
     // Ensure selling price is not less than cost price
     if (this.sellingPrice < this.costPrice) {
         return next(new Error('Selling price cannot be less than cost price'));

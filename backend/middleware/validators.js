@@ -22,10 +22,10 @@ const productValidation = {
         body('barcode')
             .optional({ checkFalsy: true })
             .trim()
-            .isLength({ min: 8, max: 20 })
-            .withMessage('Barcode must be between 8 and 20 characters')
-            .matches(/^[0-9]+$/)
-            .withMessage('Barcode must contain only numbers'),
+            .isLength({ min: 4, max: 20 })
+            .withMessage('Barcode must be between 4 and 20 characters')
+            .matches(/^[a-zA-Z0-9]+$/)
+            .withMessage('Barcode must contain only letters and numbers'),
 
         body('mrp')
             .isFloat({ min: 0 })
@@ -112,10 +112,10 @@ const productValidation = {
         body('barcode')
             .optional({ checkFalsy: true })
             .trim()
-            .isLength({ min: 8, max: 20 })
-            .withMessage('Barcode must be between 8 and 20 characters')
-            .matches(/^[0-9]+$/)
-            .withMessage('Barcode must contain only numbers'),
+            .isLength({ min: 4, max: 20 })
+            .withMessage('Barcode must be between 4 and 20 characters')
+            .matches(/^[a-zA-Z0-9]+$/)
+            .withMessage('Barcode must contain only letters and numbers'),
 
         body('mrp')
             .optional()

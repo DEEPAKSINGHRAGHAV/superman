@@ -141,11 +141,12 @@ const ProductSearch = React.forwardRef(({
             e.preventDefault();
 
             // If it looks like a barcode scan (fast typing + Enter), try direct barcode lookup
-            if (isBarcodeScan.current || searchQuery.trim().length >= 8) {
+            if (isBarcodeScan.current || searchQuery.trim().length >= 4) {
                 // Try barcode lookup first
                 try {
                     setIsSearching(true);
-                    const response = await productsAPI.getByBarcode(searchQuery.trim());
+                    // Barcodes are stored uppercase on the backend, so normalize before exact lookup
+                    const response = await productsAPI.getByBarcode(searchQuery.trim().toUpperCase());
 
                     if (response.success && response.data) {
                         // Found product by barcode - add directly

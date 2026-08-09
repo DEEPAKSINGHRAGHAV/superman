@@ -224,3 +224,5 @@ swagger.txt
 
 # Features documentation
 features.txt
+/graphify-out
+.agents/
