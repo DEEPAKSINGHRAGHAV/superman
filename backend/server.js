@@ -12,6 +12,9 @@ const routes = require('./routes');
 const app = express();
 const PORT = process.env.PORT || 8000;
 
+// Behind nginx reverse proxy: trust X-Forwarded-For so req.ip (used by rate limiters) is the real client IP
+app.set('trust proxy', 1);
+
 // Security middleware
 app.use(helmet());
 
@@ -23,7 +26,7 @@ app.use(generalLimiter);
 // CORS configuration
 app.use(cors({
     origin: process.env.NODE_ENV === 'production'
-        ? ['https://yourdomain.com']
+        ? (process.env.CORS_ORIGINS || 'https://sales.shivikmart.com').split(',').map(o => o.trim())
         : true, // Allow all origins in development for React Native
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
