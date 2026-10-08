@@ -1,0 +1,19 @@
+# ShivikMart crontab (root) - copy of what is installed on the server.
+#
+# Install / restore on a new server:
+#   apt install cron mongodb-database-tools   # mongodump: see scripts/mongoBackup.sh
+#   crontab backend/scripts/crontab.txt       # NOTE: replaces root's existing crontab
+#   mkdir -p /var/log/shivikmart
+#
+# Keep this file in sync after any `crontab -e` change:
+#   crontab -l > backend/scripts/crontab.txt   (then re-add this header)
+#
+# ShivikMart scheduled jobs (server clock is UTC; IST = UTC+5:30)
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Mark expired product batches and remove their stock - daily 01:00 IST
+30 19 * * * cd /var/www/superman/backend && npm run check-expired >> /var/log/shivikmart/expiry-check.log 2>&1
+
+# MongoDB backup + delete backups older than 30 days - daily 02:00 IST
+30 20 * * * /var/www/superman/backend/scripts/mongoBackup.sh >> /var/log/shivikmart/mongo-backup-cron.log 2>&1

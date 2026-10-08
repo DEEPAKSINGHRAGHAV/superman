@@ -226,3 +226,6 @@ swagger.txt
 features.txt
 /graphify-out
 .agents/
+# MongoDB backups (contain customer/user data)
+backend/backups/shivik_mart_backup_*
+backend/backups/.backup.lock
