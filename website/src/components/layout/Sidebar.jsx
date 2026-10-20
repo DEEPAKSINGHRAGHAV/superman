@@ -16,6 +16,7 @@ import {
     Clock,
     Receipt,
     ScanLine,
+    Printer,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -63,6 +64,12 @@ const Sidebar = ({ isOpen, onClose }) => {
             name: 'Inventory',
             href: '/inventory',
             icon: Warehouse,
+            permission: 'read_inventory',
+        },
+        {
+            name: 'Stock Count Sheet',
+            href: '/stock-count-sheet',
+            icon: Printer,
             permission: 'read_inventory',
         },
         {

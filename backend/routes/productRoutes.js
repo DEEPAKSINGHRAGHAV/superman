@@ -288,6 +288,57 @@ router.get('/low-stock',
     })
 );
 
+// @desc    Get a printable stock count sheet - products with stock above a
+//          threshold, for a physical count (name, current stock, cost price,
+//          total value). Sorted by database insertion order (_id) rather
+//          than category/brand, since those aren't reliably filled in for
+//          every product.
+// @route   GET /api/v1/products/count-sheet
+// @access  Private (requires read_inventory permission)
+router.get('/count-sheet',
+    protect,
+    requirePermission('read_inventory'),
+    asyncHandler(async (req, res) => {
+        const minStock = Math.max(0, parseInt(req.query.minStock) || 1);
+
+        const filter = {
+            isActive: true,
+            currentStock: { $gt: minStock }
+        };
+
+        // Safety ceiling only - not a real-world catalog size. If this is ever
+        // hit, we tell the caller explicitly rather than silently dropping
+        // products from an audit.
+        const HARD_CAP = 20000;
+
+        const products = await Product.find(filter)
+            .select('name sku unit currentStock costPrice')
+            .sort({ _id: 1 })
+            .limit(HARD_CAP)
+            .lean();
+
+        const items = products.map((product) => ({
+            _id: product._id,
+            name: product.name,
+            sku: product.sku,
+            unit: product.unit,
+            currentStock: product.currentStock || 0,
+            costPrice: product.costPrice || 0,
+            totalValue: (product.currentStock || 0) * (product.costPrice || 0)
+        }));
+
+        const totalValue = items.reduce((sum, item) => sum + item.totalValue, 0);
+
+        res.status(200).json({
+            success: true,
+            count: items.length,
+            totalValue,
+            truncated: items.length === HARD_CAP,
+            data: items
+        });
+    })
+);
+
 // @desc    Get inventory summary
 // @route   GET /api/v1/products/inventory-summary
 // @access  Private (requires read_inventory permission)

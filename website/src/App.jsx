@@ -19,6 +19,7 @@ import SupplierForm from './pages/suppliers/SupplierForm';
 import PurchaseOrderList from './pages/purchase-orders/PurchaseOrderList';
 import PurchaseOrderForm from './pages/purchase-orders/PurchaseOrderForm';
 import InventoryList from './pages/inventory/InventoryList';
+import StockCountSheet from './pages/stock-count/StockCountSheet';
 import BatchList from './pages/batches/BatchList';
 import BatchHistory from './pages/batches/BatchHistory';
 import ExpiringProducts from './pages/batches/ExpiringProducts';
@@ -98,6 +99,9 @@ function App() {
 
                     {/* Inventory */}
                     <Route path="inventory" element={<InventoryList />} />
+
+                    {/* Stock Count Sheet */}
+                    <Route path="stock-count-sheet" element={<StockCountSheet />} />
 
                     {/* Batches */}
                     <Route path="batches">

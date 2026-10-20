@@ -124,6 +124,11 @@ export const inventoryAPI = {
     getExpiringBatches: (days) => api.get('/inventory/expiring', { params: { days } }),
 };
 
+// Stock Count Sheet API (printable list of products to physically count)
+export const stockCountSheetAPI = {
+    get: (params) => api.get('/products/count-sheet', { params }),
+};
+
 // Batches API
 export const batchesAPI = {
     getAll: (params) => api.get('/batches', { params }),

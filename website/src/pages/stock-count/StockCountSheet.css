@@ -1,0 +1,43 @@
+/* The printable receipt-style sheet is only rendered on paper, never on screen.
+   The on-screen view is the normal table above it. */
+.stock-count-print-only {
+    display: none;
+}
+
+/* This is an audit sheet, not a sales receipt: item names must never be cut
+   off, or two differently-named products could look identical once
+   truncated and get miscounted on the floor. Overrides the shared
+   ThermalReceipt.css truncation (including its @media print !important
+   rules) with higher specificity. */
+.stock-count-print-only .receipt-item-name {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    word-break: break-word !important;
+}
+
+.stock-count-print-only .receipt-item-sku {
+    font-size: 9pt;
+    font-weight: 600;
+    color: #000000;
+    margin-bottom: 2px;
+}
+
+@media print {
+    .stock-count-print-only {
+        display: block;
+    }
+
+    .stock-count-print-only .receipt-item-name {
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+        word-break: break-word !important;
+    }
+
+    .stock-count-print-only .receipt-item-sku {
+        font-size: 9pt !important;
+        font-weight: 600 !important;
+        color: #000000 !important;
+    }
+}
